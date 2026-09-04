@@ -1,0 +1,58 @@
+{
+  "_说明": "可选模板：默认即可运行。如需覆盖默认配置，复制本文件为 config.json 后按需修改（写 null/缺省即用内置默认）。",
+  "sources": {
+    "priceai": {
+      "enabled": true,
+      "label": "PriceAI（AI 订阅/中转 API 比价雷达）"
+    },
+    "ldxp-goods": {
+      "enabled": true,
+      "label": "RelayWatch·链动小铺(LDXP) 卡网商品价",
+      "keywords": ["chatgpt plus 代充", "claude pro 代充", "gpt pro 代充", "gemini pro 代充"],
+      "min_interval_minutes": 15
+    }
+  },
+  "watch": {
+    "rules": [
+      {
+        "id": "chatgpt-plus-recharge-below-105",
+        "kind": "min_below",
+        "source": "priceai",
+        "product": "chatgpt-plus-recharge",
+        "threshold": 105
+      },
+      {
+        "id": "ldxp-gpt-pro-below-80",
+        "kind": "min_below",
+        "source": "ldxp-goods",
+        "product": "gpt-pro",
+        "threshold": 80
+      },
+      {
+        "id": "chatgpt-any-drop-8pct",
+        "kind": "drop_pct",
+        "source": "priceai",
+        "product": "*",
+        "window": 24,
+        "pct": 8
+      },
+      {
+        "id": "plus-cheapest-moved",
+        "kind": "cheapest_changed",
+        "source": "priceai",
+        "product": "chatgpt-plus-recharge"
+      },
+      {
+        "id": "plus-cheapest-gone",
+        "kind": "offer_gone",
+        "source": "priceai",
+        "product": "chatgpt-plus-recharge"
+      }
+    ]
+  },
+  "notify": {
+    "console": true,
+    "logFile": true,
+    "webhooks": []
+  }
+}

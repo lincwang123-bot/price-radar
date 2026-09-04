@@ -1,0 +1,24 @@
+# 本地运行数据与通知/访问配置：不得发布到 GitHub。
+data/
+*.log
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+*.sqlite-*
+.env
+.env.*
+!.env.example
+config.json
+config.local.json
+.DS_Store
+node_modules/
+coverage/
+dist/
+build/
+.cache/
+
+# 仅为抓取调试保留的原始网页和前端 chunk；运行时不依赖，避免公开镜像第三方内容。
+docs/_scrape/
+
+# 本地交接说明含本机路径与生产部署细节，不属于公开源码。
+FRONTEND-HANDOFF.md

@@ -1,0 +1,20 @@
+# price-radar 只读 Web 服务（绑 127.0.0.1，公网由 cloudflared tunnel 暴露）
+[Unit]
+Description=Price Radar read-only web page
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=deploy
+Group=deploy
+WorkingDirectory=/opt/linc/apps/price-radar
+EnvironmentFile=-/opt/linc/apps/price-radar/.env
+ExecStart=/usr/bin/node --disable-warning=ExperimentalWarning radar.mjs serve --host 127.0.0.1 --port 18090
+Restart=on-failure
+RestartSec=5s
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

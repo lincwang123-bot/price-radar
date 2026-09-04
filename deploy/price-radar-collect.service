@@ -1,0 +1,20 @@
+# price-radar 采集常驻服务（每 300s 一轮 pull+watch，源内部自带节流）
+[Unit]
+Description=Price Radar collector daemon (multi-source pull + watch)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=deploy
+Group=deploy
+WorkingDirectory=/opt/linc/apps/price-radar
+EnvironmentFile=-/opt/linc/apps/price-radar/.env
+ExecStart=/usr/bin/node --disable-warning=ExperimentalWarning radar.mjs daemon --interval 300
+Restart=on-failure
+RestartSec=8s
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
