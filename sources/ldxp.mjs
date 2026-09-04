@@ -6,6 +6,8 @@
 //           shop_name, shop_url, item_url, category, updated_at, captured_at }
 // 本适配器把「每个配置关键词」映射为一个 product，其 offers = 命中的商品按价格升序。
 
+import { claimSourceAttempt } from "../lib/source-timing.mjs";
+
 const BASE = "https://relaywatch.online";
 const UA =
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36";
@@ -40,17 +42,12 @@ export async function pull(ctx) {
 
   // 礼貌节流：同一源短时间内不重复查询（relaywatch 商品数据不会秒级变化）
   const minIntervalMin = cfg.min_interval_minutes ?? 15;
-  const lastRow = ctx.db
-    ? ctx.db.prepare(
-        "SELECT fetched_at FROM snapshots WHERE source = ? ORDER BY fetched_at DESC, rowid DESC LIMIT 1"
-      ).get(sourceId)
-    : null;
-  if (lastRow?.fetched_at) {
-    const elapsedMin = (Date.now() - Date.parse(lastRow.fetched_at)) / 60000;
-    if (elapsedMin < minIntervalMin) {
-      ctx.log?.(`[ldxp-goods] 距上次抓取仅 ${elapsedMin.toFixed(1)}min（< ${minIntervalMin}min），跳过本轮。`);
-      return { source: sourceId, skipped: true, snapshotId: null };
-    }
+  const timing = ctx.db
+    ? claimSourceAttempt(ctx.db, sourceId, minIntervalMin)
+    : { allowed: true };
+  if (!timing.allowed) {
+    ctx.log?.(`[ldxp-goods] 距上次抓取仅 ${timing.elapsedMinutes.toFixed(1)}min（< ${minIntervalMin}min），跳过本轮。`);
+    return { source: sourceId, skipped: true, snapshotId: null };
   }
 
   // 源侧数据代次时间戳：summary.generated_at 变化代表新一批采集数据

@@ -5,6 +5,8 @@
 //       只取公开 SSR 价格表、不做全量镜像、页面标注来源。
 // DATA_LICENSE 提示：cardnav 禁止高频爬取/镜像全量，本适配器不做这些。
 
+import { claimSourceAttempt } from "../lib/source-timing.mjs";
+
 const BASE = "https://cardnav.xyz";
 const UA =
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36";
@@ -104,17 +106,12 @@ export async function pull(ctx) {
 
   // 礼貌节流：官方区价刷新约每日一次，默认 12h 拉一次即可
   const minIntervalMin = cfg.min_interval_minutes ?? 720;
-  const lastRow = ctx.db
-    ? ctx.db.prepare(
-        "SELECT fetched_at FROM snapshots WHERE source = ? ORDER BY fetched_at DESC, rowid DESC LIMIT 1"
-      ).get(sourceId)
-    : null;
-  if (lastRow?.fetched_at) {
-    const elapsedMin = (Date.now() - Date.parse(lastRow.fetched_at)) / 60000;
-    if (elapsedMin < minIntervalMin) {
-      ctx.log?.(`[${sourceId}] 距上次抓取仅 ${elapsedMin.toFixed(0)}min（< ${minIntervalMin}min），跳过本轮。`);
-      return { source: sourceId, skipped: true, snapshotId: null };
-    }
+  const timing = ctx.db
+    ? claimSourceAttempt(ctx.db, sourceId, minIntervalMin)
+    : { allowed: true };
+  if (!timing.allowed) {
+    ctx.log?.(`[${sourceId}] 距上次抓取仅 ${timing.elapsedMinutes.toFixed(0)}min（< ${minIntervalMin}min），跳过本轮。`);
+    return { source: sourceId, skipped: true, snapshotId: null };
   }
 
   const products = [];

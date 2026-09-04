@@ -6,6 +6,7 @@
   "description": "多源 AI 订阅/API 比价雷达：拉取 → SQLite 历史 → 盯盘提醒",
   "engines": { "node": ">=22.5.0" },
   "scripts": {
+    "test": "node --test",
     "pull": "node radar.mjs pull",
     "watch": "node radar.mjs watch",
     "daemon": "node radar.mjs daemon --interval 300",

@@ -10,6 +10,22 @@
       "label": "RelayWatch·链动小铺(LDXP) 卡网商品价",
       "keywords": ["chatgpt plus 代充", "claude pro 代充", "gpt pro 代充", "gemini pro 代充"],
       "min_interval_minutes": 15
+    },
+    "direct-shops": {
+      "enabled": true,
+      "label": "原始店铺直采",
+      "min_interval_minutes": 30,
+      "request_delay_ms": 500,
+      "targets": [
+        "aisou",
+        "ikunlove",
+        "mooncake",
+        "wzyp-harvey",
+        "wzyp-paimon",
+        "wzyp-ai-choice",
+        "wzyp-direct",
+        "wzyp-lightyear"
+      ]
     }
   },
   "watch": {

@@ -5,6 +5,8 @@
 //           successRate/availability/latency 在 provider.metrics 中为 SSR/API 真实快照）。
 // 合规：个人非商用低频采集（默认 6h/次）；goaihop 含赞助(sponsored)中转站，已在 extra 标注。
 
+import { claimSourceAttempt } from "../lib/source-timing.mjs";
+
 const API = "https://goaihop.com/api/relay-packages";
 const UA =
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36";
@@ -41,17 +43,12 @@ export async function pull(ctx) {
 
   // 节流：可用性指标约几十分钟级刷新，默认 6h 拉一次足够个人参考
   const minIntervalMin = cfg.min_interval_minutes ?? 360;
-  const lastRow = ctx.db
-    ? ctx.db.prepare(
-        "SELECT fetched_at FROM snapshots WHERE source = ? ORDER BY fetched_at DESC, rowid DESC LIMIT 1"
-      ).get(sourceId)
-    : null;
-  if (lastRow?.fetched_at) {
-    const elapsedMin = (Date.now() - Date.parse(lastRow.fetched_at)) / 60000;
-    if (elapsedMin < minIntervalMin) {
-      ctx.log?.(`[${sourceId}] 距上次抓取仅 ${elapsedMin.toFixed(0)}min（< ${minIntervalMin}min），跳过本轮。`);
-      return { source: sourceId, skipped: true, snapshotId: null };
-    }
+  const timing = ctx.db
+    ? claimSourceAttempt(ctx.db, sourceId, minIntervalMin)
+    : { allowed: true };
+  if (!timing.allowed) {
+    ctx.log?.(`[${sourceId}] 距上次抓取仅 ${timing.elapsedMinutes.toFixed(0)}min（< ${minIntervalMin}min），跳过本轮。`);
+    return { source: sourceId, skipped: true, snapshotId: null };
   }
 
   // 分页拿全（page_size=50，总量 ~73）

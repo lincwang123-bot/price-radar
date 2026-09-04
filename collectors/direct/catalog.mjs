@@ -1,0 +1,179 @@
+import { createHash } from "node:crypto";
+
+// 独立维护的小型明确分类表。它只覆盖当前站点实际展示的产品族；规则不确定时
+// 返回 null，避免把低价但不同形态的商品错误混入排行榜。
+const PRODUCTS = {
+  "chatgpt-go": product("chatgpt-go", "ChatGPT Go", "ChatGPT", "订阅/会员"),
+  "chatgpt-plus": product("chatgpt-plus", "ChatGPT Plus 成品号/共享", "ChatGPT", "账号/共享"),
+  "chatgpt-plus-recharge": product("chatgpt-plus-recharge", "ChatGPT Plus 代充/卡密", "ChatGPT", "订阅/会员"),
+  "chatgpt-pro-5x": product("chatgpt-pro-5x", "ChatGPT Pro 5x", "ChatGPT", "订阅/会员"),
+  "chatgpt-pro-20x": product("chatgpt-pro-20x", "ChatGPT Pro 20x", "ChatGPT", "订阅/会员"),
+  "chatgpt-team-business": product("chatgpt-team-business", "ChatGPT Team / Business", "ChatGPT", "团队席位/账号"),
+  "claude-pro-month": product("claude-pro-month", "Claude Pro", "Claude", "订阅/会员"),
+  "claude-max-5x": product("claude-max-5x", "Claude Max 5x", "Claude", "订阅/会员"),
+  "claude-max-20x": product("claude-max-20x", "Claude Max 20x", "Claude", "订阅/会员"),
+  "gemini-pro-recharge": product("gemini-pro-recharge", "Gemini / Google AI Pro", "Gemini", "订阅/会员"),
+  "gemini-ultra": product("gemini-ultra", "Gemini / Google AI Ultra", "Gemini", "订阅/会员"),
+  "super-grok": product("super-grok", "Super Grok", "Grok", "订阅/会员"),
+  "super-grok-heavy": product("super-grok-heavy", "Super Grok Heavy", "Grok", "订阅/会员"),
+  "x-twitter-premium": product("x-twitter-premium", "X Premium", "X", "订阅/会员"),
+  "api-cdk-credits": product("api-cdk-credits", "API / CDK / 额度", "API/CDK", "额度/开发服务"),
+  "verification-service": product("verification-service", "接码 / 验证服务", "接码", "辅助服务"),
+  "email-accounts": product("email-accounts", "邮箱账号", "邮箱", "账号"),
+};
+
+function product(id, name, platform, productType) {
+  return Object.freeze({ id, name, platform, productType, spec: "原始店铺直采" });
+}
+
+function normalized(value) {
+  return String(value ?? "")
+    .normalize("NFKC")
+    .toLowerCase()
+    .replace(/[\u2010-\u2015_\/|【】()[\]（）·:：,，]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function has(text, pattern) {
+  return pattern.test(text);
+}
+
+export function classifyDirectOffer({ title, category = "" }) {
+  const titleText = normalized(title);
+  const categoryText = normalized(category);
+  const text = normalized(`${category} ${title}`);
+  if (!text) return null;
+
+  if (has(text, /接码|接马|验证码|手机号|短信|\bsms\b|phone\s*(?:number|verify)/i)) {
+    return PRODUCTS["verification-service"];
+  }
+  // 邮箱标题经常带有“已注册 OpenAI”等用途说明，需先于订阅关键词判断。
+  if (has(titleText, /gmail|outlook|hotmail|微软邮箱|谷歌邮箱|邮箱账号|邮箱老号|域名邮箱/)) {
+    return PRODUCTS["email-accounts"];
+  }
+  // 纯教程/额度说明不是会员报价，避免把低价资料当成代充最低价。
+  if (has(titleText, /教程|教学|攻略|邀请额度/) && !has(titleText, /直充|代充|卡密|成品|月卡|年卡|会员|账号/)) {
+    return null;
+  }
+
+  // 品牌和套餐必须在商品标题中出现；店铺分类只做辅助信息。
+  // 否则某个“ChatGPT Plus”分类下误放的其他品牌商品会污染最低价。
+  const chatgpt = has(titleText, /chat\s*gpt|openai|\bgpt\b|\bg\s*plus\b|\bgplus\b|codex/i) ||
+    (has(categoryText, /chat\s*gpt|openai/i) && has(titleText, /\bplus\b|\bpro\b|pro(?=\d)|team|business|\bgo\b/i));
+  const claude = has(titleText, /claude|cladue/i);
+  const gemini = has(titleText, /gemini|google\s*ai|反重力|antigravity/i);
+  const grok = has(titleText, /super\s*grok|\bgrok\b|\bgokr\b|\bgork\b/i);
+
+  if (chatgpt && has(titleText, /不含\s*plus|无\s*plus|without\s+plus/i)) return null;
+  if (claude && has(titleText, /\bfree\b|免费版/) && !has(titleText, /\bpro\b|max/i)) return null;
+
+  if (chatgpt && has(titleText, /team|business|团队|席位|母号|车位/)) {
+    return PRODUCTS["chatgpt-team-business"];
+  }
+  if (chatgpt && has(titleText, /\bgo\b/) && !has(titleText, /google|grok/)) {
+    return PRODUCTS["chatgpt-go"];
+  }
+  if (chatgpt && has(titleText, /\bpro\b|pro(?=\d)/)) {
+    if (has(titleText, /20\s*x|200\s*(?:刀|美金|usd|dollar)/)) return PRODUCTS["chatgpt-pro-20x"];
+    if (has(titleText, /5\s*x|100\s*(?:刀|美金|usd|dollar)/)) return PRODUCTS["chatgpt-pro-5x"];
+  }
+  if (chatgpt && has(titleText, /\bplus\b|g\s*\+/)) {
+    return has(titleText, /成品|账号|共享|拼车|日抛|周抛|镜像|普号|体验|试用|trial|free\s*号|独享号/)
+      ? PRODUCTS["chatgpt-plus"]
+      : PRODUCTS["chatgpt-plus-recharge"];
+  }
+
+  if (claude && has(titleText, /\bmax\b/)) {
+    if (has(titleText, /20\s*x/)) return PRODUCTS["claude-max-20x"];
+    if (has(titleText, /5\s*x/)) return PRODUCTS["claude-max-5x"];
+  }
+  if (claude && has(titleText, /\bpro\b|月卡|订阅|直充|代充/)) return PRODUCTS["claude-pro-month"];
+
+  if (gemini && has(titleText, /ultra/)) return PRODUCTS["gemini-ultra"];
+  if (gemini && has(titleText, /\bpro\b|advanced|plus|会员|年卡|月卡|成品|代充|直充/)) {
+    return PRODUCTS["gemini-pro-recharge"];
+  }
+
+  if (grok && has(titleText, /heavy/)) return PRODUCTS["super-grok-heavy"];
+  if (grok && has(titleText, /super|会员|月卡|年卡|成品|代充|直充|premium/)) return PRODUCTS["super-grok"];
+
+  if (has(text, /(?:^|\s)(?:x|twitter)(?:\s|$)/) && has(text, /premium|会员|蓝标|蓝v/)) {
+    return PRODUCTS["x-twitter-premium"];
+  }
+
+  if (has(text, /codex|api|中转|额度|点数|token|余额|兑换码|\bcdk\b/)) {
+    return PRODUCTS["api-cdk-credits"];
+  }
+  if (has(text, /gmail|outlook|hotmail|微软邮箱|谷歌邮箱|邮箱账号|邮箱老号|域名邮箱/)) {
+    return PRODUCTS["email-accounts"];
+  }
+  return null;
+}
+
+export function groupDirectOffers(rawOffers) {
+  const groups = new Map();
+  const seen = new Set();
+  for (const raw of rawOffers ?? []) {
+    const price = Number(raw?.price);
+    if (!raw?.offerId || seen.has(raw.offerId) || !Number.isFinite(price) || price <= 0) continue;
+    if (!isHttpUrl(raw.url)) continue;
+    const canonical = classifyDirectOffer(raw);
+    if (!canonical) continue;
+    seen.add(raw.offerId);
+    const offer = { ...raw, price, currency: raw.currency || "CNY" };
+    if (!groups.has(canonical.id)) groups.set(canonical.id, { canonical, offers: [] });
+    groups.get(canonical.id).offers.push(offer);
+  }
+
+  return [...groups.values()].map(({ canonical, offers }) => {
+    offers.sort(compareOffers);
+    const available = offers.filter((offer) => isAvailable(offer.status));
+    return {
+      productId: canonical.id,
+      name: canonical.name,
+      platform: canonical.platform,
+      productType: canonical.productType,
+      spec: canonical.spec,
+      lowestPrice: available.length ? available[0].price : null,
+      currency: offers[0]?.currency || "CNY",
+      offerCount: offers.length,
+      inStockCount: available.length,
+      offers,
+    };
+  }).sort((a, b) => a.platform.localeCompare(b.platform, "zh-CN") || a.name.localeCompare(b.name, "zh-CN"));
+}
+
+export function stableDirectSnapshotId(offers, staleTargetIds = []) {
+  const rows = (offers ?? []).map((offer) => ({
+    offerId: String(offer.offerId ?? ""),
+    sourceId: String(offer.sourceId ?? ""),
+    title: String(offer.title ?? ""),
+    price: Number.isFinite(Number(offer.price)) ? Number(offer.price) : null,
+    currency: String(offer.currency ?? ""),
+    status: String(offer.status ?? ""),
+    stockCount: offer.stockCount == null ? null : Number(offer.stockCount),
+    url: String(offer.url ?? ""),
+  })).sort((a, b) => a.offerId.localeCompare(b.offerId));
+  const stale = [...new Set(staleTargetIds ?? [])].sort();
+  const digest = createHash("sha256").update(JSON.stringify({ rows, stale })).digest("hex").slice(0, 20);
+  return `direct-${digest}`;
+}
+
+function isAvailable(status) {
+  return ["in_stock", "available", "online"].includes(String(status ?? "").toLowerCase());
+}
+
+function compareOffers(a, b) {
+  const rank = (offer) => isAvailable(offer.status) ? 0 : String(offer.status) === "out_of_stock" ? 2 : 1;
+  return rank(a) - rank(b) || a.price - b.price || String(a.storeName ?? "").localeCompare(String(b.storeName ?? ""), "zh-CN");
+}
+
+function isHttpUrl(value) {
+  try {
+    const url = new URL(String(value));
+    return url.protocol === "http:" || url.protocol === "https:";
+  } catch {
+    return false;
+  }
+}

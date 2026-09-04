@@ -3,6 +3,7 @@ import * as priceai from "./priceai.mjs";
 import * as ldxp from "./ldxp.mjs";
 import * as cardnav from "./cardnav.mjs";
 import * as goaihop from "./goaihop.mjs";
+import * as directShops from "./direct-shops.mjs";
 
 export const registry = {
   [priceai.sourceId]: {
@@ -24,6 +25,11 @@ export const registry = {
     label: goaihop.sourceLabel,
     pull: goaihop.pull,
     sourceId: goaihop.sourceId,
+  },
+  [directShops.sourceId]: {
+    label: directShops.sourceLabel,
+    pull: directShops.pull,
+    sourceId: directShops.sourceId,
   },
 };
 

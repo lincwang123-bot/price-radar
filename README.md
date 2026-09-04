@@ -1,6 +1,6 @@
 # price-radar —— 多源 AI 订阅/API 比价雷达（个人整合站）
 
-把「AI 订阅 / 中转 API / 卡网渠道」这类**比价聚合站**（如 PriceAI、OpenPrice 等）当作数据源，
+把「AI 订阅 / 中转 API / 卡网渠道」的**比价聚合站**（如 PriceAI、OpenPrice 等）与固定登记的原始店铺公开目录当作数据源，
 统一拉取 → 存 SQLite 历史 → 规则化盯盘提醒。零第三方依赖（Node ≥ 22 内置 `fetch` + `node:sqlite`）。
 
 ## 联系方式
@@ -23,12 +23,13 @@
 - **历史可回填**：`radar.mjs import <raw.json>` 可把旧快照灌入，立即形成价格序列。
 - **盯盘去噪**：规则按「事件」触发而非每次轮询都报——跌破阈值只提醒首次与再创新低；
   跌幅只在进入窗口阈值时提醒，回升后解除；换源/下架只在状态翻转时提醒。
-- **合规**：只消费各站公开/页面数据；频率克制（PriceAI 官方要求指针 ≥1min/次）。
+- **合规**：只消费各站公开接口/页面数据；频率克制（PriceAI 官方要求指针 ≥1min/次）。
+  原始店铺直采只访问固定白名单，不绕过登录、验证码或 WAF，也不接受运行时任意 URL。
   报价仅作情报，不自动认定 SKU 等价、不自动采购、不据此直接上架。
 
 ## 快速开始
 
-内置默认配置即可直接运行（priceai + ldxp-goods 双源、一组示例盯盘规则）。要改关键词/规则/通知，复制 `config.example.json` → `config.json` 再改（写 null/缺省即用内置默认）。
+内置默认配置即可直接运行（含 `priceai`、`direct-shops` 等数据源与一组示例盯盘规则）。要改关键词/规则/通知，复制 `config.example.json` → `config.json` 再改（写 null/缺省即用内置默认）。
 
 ```sh
 node radar.mjs pull                  # 拉取所有启用源并入库
@@ -68,6 +69,9 @@ node radar.mjs import <raw.json>                # 历史 raw 快照回填（幂�
 - `sources.<id>.enabled`：启用/停用源。
   - `ldxp-goods.keywords[]`：LDXP 盯价关键词（建议含“代充/月/年/成品”等收敛词）。
   - `ldxp-goods.min_interval_minutes`：该源轮询节流（默认 15）。
+  - `direct-shops.targets[]`：只接受内置固定目标 id，不接受任意域名或 URL。
+  - `direct-shops.min_interval_minutes`：直采源实际请求的最短间隔（默认 30）。
+  - `direct-shops.request_delay_ms`：同一轮分页请求之间的延迟（默认 500ms）。
 - `watch.rules[]`：盯盘规则，`source` 指定数据源，`product` 可写 `"*"` 表示该源下全部产品。
 - `notify.webhooks[]`：通知通道。
 
@@ -88,6 +92,34 @@ node radar.mjs import <raw.json>                # 历史 raw 快照回填（幂�
   - 企业微信机器人：`{ "format": "wecom", "url": "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=..." }`
   - 钉钉/飞书/通用文本：`{ "format": "generic", "url": "..." }`（POST `{"text": ...}`）
   - Server酱：`{ "format": "serverchan", "url": "https://sctapi.ftqq.com/<KEY>.send" }`
+
+## 原始店铺直采（`direct-shops`）
+
+`direct-shops` 是本项目独立实现的原始店铺公开目录采集器，与 `priceai` 的 Top 5 公开快照是两个独立数据源：分别拉取、缓存并生成快照。直采目标不从 PriceAI 的 Top 5 或线上渠道表导入，PriceAI 也不作为直采失败时的回退；跨源商品仍须由业务侧确认是否等价。
+
+首批来源是代码内固定登记的公开 HTTPS 入口：
+
+| 目标 id | 店铺/目录 | 类型与公开入口 | 单目标缓存周期 |
+| --- | --- | --- | --- |
+| `aisou` | AI搜 | Kami：`aisou.pro/user/api/index/commodity` | 30min |
+| `ikunlove` | IkunLove | IkunLove JSON：`ikunlove.best/api/shop/products` | 30min |
+| `mooncake` | Mooncake | Mooncake JS 目录：`fk1.ybkjs.top/mooncake-official-media/catalog.js` | 12h |
+| `wzyp-harvey`、`wzyp-paimon`、`wzyp-ai-choice`、`wzyp-direct`、`wzyp-lightyear` | 派大星、派蒙AI、AI优选站、GPTplus直营、光年AI | ShopApi：固定登记的 `wzyp.cn` 店铺，读取 `/shopApi/Shop/categoryList` 与 `/shopApi/Shop/goodsList` | 60min |
+
+采集边界与失败语义：
+
+- 只请求固定白名单内无需登录即可读取的公开商品目录；不提交账号凭据，不绕过登录、验证码或 WAF，不把采集器当通用代理。ShopApi 路径中的店铺 token 是公开店铺标识，不是登录凭据。
+- 源级最短请求间隔默认 30min；单目标另按上表复用缓存，分页请求默认间隔 500ms，并限制页数/分类数。即使 daemon 运行更频繁，也不会据此提高原站请求频率。
+- 每个目标成功后原子更新本地缓存。某目标首次采集失败且没有可用缓存时，整轮 `direct-shops` 不发布不完整快照；已有缓存时沿用该目标上次的完整结果，并把汇总快照标记为 `stale: true`。请求失败不等同于商品下架或无货。
+- 只发布能可靠归入本项目商品分类的条目；无法确认分类的商品保留在采集统计中，但不进入报价快照。
+
+页面展示的是原站公开商品列表中的**挂牌价**，不等同于最终结算价。优惠券、支付渠道、手续费、汇率、购买数量/规格和结账页变动都可能改变实付金额；ShopApi 采集器也不调用结算询价接口。购买前必须回到原店铺核对商品说明与最终应付金额。
+
+### 与 PriceAI 的许可证边界
+
+PriceAI 官方仓库当前 `main` 使用 [PriceAI Source Available License 1.0](https://github.com/dimthink/PriceAI/blob/main/LICENSE)：这是带用途限制的 source-available 许可，不是 OSI 认可的开源许可证，未经另行许可不能据此开展其许可证禁止的商用、公开托管或竞争性价格聚合等用途。历史 MIT 许可只适用于当时仍以 MIT 授权的旧提交，例如最后一个 MIT 快照 [`15877f09052e3c272b93679f56b99efd2be3c3d2`](https://github.com/dimthink/PriceAI/tree/15877f09052e3c272b93679f56b99efd2be3c3d2)，不能倒推覆盖之后的 `main` 代码。
+
+本项目的 `direct-shops` 按上述原站公开入口独立实现；没有复制 PriceAI 当前 `main` 的采集代码，也没有复制其线上完整渠道表。固定目标白名单由本项目单独登记与维护。
 
 ## 新增一个数据源（同类型比价站）
 
@@ -163,6 +195,7 @@ CLOUDFLARE_WEB_ANALYTICS_TOKEN=你的公开_site_token
 | `ldxp-goods` | RelayWatch 聚合的**链动小铺(LDXP) 卡网商品**：按关键词定向查询，真实 CNY 价格+库存+店铺 | 受 `min_interval_minutes`（默认 15min）节流 | relaywatch 项目 MIT；只做关键词定向轻量查询，不做全量镜像 |
 | `cardnav-official` | CardNav **官方订阅 App Store 区价**：17 产品 × 39-40 地区，本地价+折算 CNY（SSR 表格） | 官方价约每日刷新，默认 12h 拉一次 | 个人非商用低频使用；不镜像全量 |
 | `goaihop-relay` | GoAIHop **中转 API 站套餐+可用性**：12 家中转站 × 73 套餐，全 CNY；含实测 success/availability/P50 延迟快照 | 默认 6h 拉一次 | 同域公开 JSON API（见 `docs/goaihop-relay-packages-parsing-spec.md`）；含赞助站已在 extra 标注 |
+| `direct-shops` | 固定白名单内原始店铺的公开 JSON/JS/ShopApi 商品目录 | 源级 ≥30min；单目标 30min / 60min / 12h 缓存 | 独立实现；失败可沿用旧缓存并标记 `stale`；展示挂牌价而非最终结算价 |
 
 ### 候选源评估结论（未接入的理由）
 
@@ -173,6 +206,6 @@ CLOUDFLARE_WEB_ANALYTICS_TOKEN=你的公开_site_token
 
 ### 跨源差异提醒
 
-- 两源的产品 id 体系不同（priceai 用 `chatgpt-plus-recharge` 等品类 id；ldxp-goods 用关键词 slug 如 `gpt-pro`），跨源对比请自行在业务侧映射，工具不臆断 SKU 等价。
+- 各源的产品 id 与商品规格体系不同（priceai 用 `chatgpt-plus-recharge` 等品类 id；ldxp-goods 用关键词 slug 如 `gpt-pro`；direct-shops 只发布可可靠分类的原店条目），跨源对比请自行在业务侧映射，工具不臆断 SKU 等价。
 - ldxp-goods 的搜索为商品名 `contains` 匹配，同词可能混入成品号/额度/会员等形态，盯盘阈值请按需收敛关键词。
 - 快照含灰产形态报价（成品号/共享/无售后等），仅作情报参考；不据此自动采购、不据此直接上架。
