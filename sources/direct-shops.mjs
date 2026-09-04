@@ -1,7 +1,11 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
-import { groupDirectOffers, stableDirectSnapshotId } from "../collectors/direct/catalog.mjs";
+import {
+  directOfferExclusionReason,
+  groupDirectOffers,
+  stableDirectSnapshotId,
+} from "../collectors/direct/catalog.mjs";
 import { collectorFor, directTargets } from "../collectors/direct/registry.mjs";
 import { claimSourceAttempt } from "../lib/source-timing.mjs";
 
@@ -61,8 +65,18 @@ export async function pull(ctx) {
   if (!products.length) throw new Error("原始店铺未产出可确认分类的有效报价");
   const publishedOfferCount = products.reduce((count, product) => count + product.offers.length, 0);
   const snapshotId = stableDirectSnapshotId(products.flatMap((product) => product.offers), staleTargets);
-  const unclassifiedCount = allOffers.length - publishedOfferCount;
-  ctx.log?.(`[${sourceId}] 汇总 ${allOffers.length} 条，发布 ${publishedOfferCount} 条，未可靠分类 ${Math.max(0, unclassifiedCount)} 条。`);
+  const excludedCounts = allOffers.reduce((counts, offer) => {
+    const reason = directOfferExclusionReason(offer);
+    if (reason) counts[reason] += 1;
+    return counts;
+  }, { out_of_stock: 0, no_warranty: 0 });
+  const excludedCount = excludedCounts.out_of_stock + excludedCounts.no_warranty;
+  const unclassifiedCount = allOffers.length - publishedOfferCount - excludedCount;
+  ctx.log?.(
+    `[${sourceId}] 汇总 ${allOffers.length} 条，发布 ${publishedOfferCount} 条，` +
+    `过滤售罄 ${excludedCounts.out_of_stock} 条、明确无质保/无售后 ${excludedCounts.no_warranty} 条，` +
+    `未可靠分类 ${Math.max(0, unclassifiedCount)} 条。`,
+  );
 
   return {
     source: sourceId,

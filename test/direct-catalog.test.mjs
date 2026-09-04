@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 
 import {
   classifyDirectOffer,
+  directOfferExclusionReason,
   groupDirectOffers,
   stableDirectSnapshotId,
 } from "../collectors/direct/catalog.mjs";
@@ -58,7 +59,7 @@ test("邮箱和试用号不被冒充为 Plus 代充", () => {
   );
 });
 
-test("聚合仅用确认有货报价计算最低价", () => {
+test("售罄报价不进入公开聚合", () => {
   const products = groupDirectOffers([
     offer("a", "GPT PLUS 充值卡密", 120, "in_stock"),
     offer("b", "GPT PLUS 充值卡密", 2, "out_of_stock"),
@@ -66,8 +67,35 @@ test("聚合仅用确认有货报价计算最低价", () => {
   ]);
   assert.equal(products.length, 1);
   assert.equal(products[0].lowestPrice, 110);
-  assert.equal(products[0].offerCount, 3);
+  assert.equal(products[0].offerCount, 2);
   assert.equal(products[0].inStockCount, 2);
+  assert.deepEqual(products[0].offers.map((item) => item.offerId), ["c", "a"]);
+});
+
+test("明确无质保或无售后的报价不进入公开排行", () => {
+  const products = groupDirectOffers([
+    offer("a", "GPT PRO 20X 直冲卡密（无任何质保）", 348, "in_stock"),
+    offer("b", "GPT PRO 20X 菲区代充1个月", 1050, "in_stock"),
+    offer("c", "GPT PRO 20X 囤卡超5天不退", 1060, "in_stock"),
+  ]);
+  assert.equal(products.length, 1);
+  assert.equal(products[0].productId, "chatgpt-pro-20x");
+  assert.equal(products[0].lowestPrice, 1050);
+  assert.deepEqual(products[0].offers.map((item) => item.offerId), ["b", "c"]);
+});
+
+test("过滤规则保留有限封号免责，拒绝明确无保障商品", () => {
+  assert.equal(directOfferExclusionReason(offer("a", "Claude Pro 月卡", 120, "out_of_stock")), "out_of_stock");
+  assert.equal(directOfferExclusionReason(offer("b", "Claude Pro 月卡", 120, "in_stock", undefined, 0)), "out_of_stock");
+  assert.equal(directOfferExclusionReason(offer("b2", "Claude Pro 月卡", 120, "in_stock", undefined, "0")), "out_of_stock");
+  assert.equal(directOfferExclusionReason(offer("c", "Claude Pro 独享月卡 无质保", 120, "in_stock")), "no_warranty");
+  assert.equal(directOfferExclusionReason(offer("d", "Claude Pro 囤货无售后", 120, "in_stock")), "no_warranty");
+  assert.equal(directOfferExclusionReason(offer("e", "Claude Pro no warranty", 120, "in_stock")), "no_warranty");
+  assert.equal(directOfferExclusionReason(offer("e2", "Claude Pro 首登成功后不会有任何售后和补偿", 120, "in_stock")), "no_warranty");
+  assert.equal(directOfferExclusionReason(offer("f", "Claude Pro 质保订阅，不质保封号", 120, "in_stock")), null);
+  assert.equal(directOfferExclusionReason(offer("g", "Claude Pro 囤卡超5天不退", 120, "in_stock")), null);
+  assert.equal(directOfferExclusionReason(offer("h", "Claude Pro 正常使用售后48小时，不看说明不售后", 120, "in_stock")), null);
+  assert.equal(directOfferExclusionReason(offer("i", "Claude Pro 未按说明操作不售后", 120, "in_stock")), null);
 });
 
 test("快照 ID 与输入顺序和抓取时间无关，但价格变化会改变", () => {
@@ -80,7 +108,7 @@ test("快照 ID 与输入顺序和抓取时间无关，但价格变化会改变"
   assert.notEqual(first, changed);
 });
 
-function offer(id, title, price, status, capturedAt = "2026-09-05T00:00:00Z") {
+function offer(id, title, price, status, capturedAt = "2026-09-05T00:00:00Z", stockCount) {
   return {
     offerId: id,
     sourceId: "fixture",
@@ -91,7 +119,7 @@ function offer(id, title, price, status, capturedAt = "2026-09-05T00:00:00Z") {
     price,
     currency: "CNY",
     status,
-    stockCount: status === "in_stock" ? 1 : 0,
+    stockCount: stockCount ?? (status === "in_stock" ? 1 : 0),
     url: `https://example.com/item/${id}`,
     capturedAt,
   };

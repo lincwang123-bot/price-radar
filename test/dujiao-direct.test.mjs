@@ -11,7 +11,7 @@ const burstTarget = {
   origin: "https://burstpro-ai.online",
 };
 
-test("Dujiao 按 SKU 拆分组合商品，标题不拼接父商品的 Plus/Pro 文案", () => {
+test("Dujiao 按 SKU 拆分组合商品，公开聚合排除售罄 SKU", () => {
   const offers = parseDujiaoProducts({
     status_code: 200,
     data: [{
@@ -65,9 +65,7 @@ test("Dujiao 按 SKU 拆分组合商品，标题不拼接父商品的 Plus/Pro �
   assert.equal(offers[0].category, "ChatGPT");
   assert.equal(offers[0].url, "https://burstpro-ai.online/products/ChatGPT-TopUp");
   assert.equal(offers[0].deliveryMode, "manual");
-  assert.deepEqual(groupDirectOffers(offers).map((product) => product.productId).sort(), [
-    "chatgpt-plus-recharge", "chatgpt-pro-5x",
-  ]);
+  assert.deepEqual(groupDirectOffers(offers).map((product) => product.productId), ["chatgpt-plus-recharge"]);
 });
 
 test("Dujiao 多 SKU 只补充父商品的品牌，不混入其他套餐名", () => {

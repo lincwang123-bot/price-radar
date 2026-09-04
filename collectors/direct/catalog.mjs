@@ -125,10 +125,41 @@ export function classifyDirectOffer({ title, category = "" }) {
   return null;
 }
 
+export function directOfferExclusionReason(raw) {
+  const status = String(raw?.status ?? "").trim().toLowerCase().replace(/[\s-]+/g, "_");
+  const stockCount = raw?.stockCount == null ? null : Number(raw.stockCount);
+  if (["out_of_stock", "sold_out", "soldout", "unavailable"].includes(status) || stockCount === 0) {
+    return "out_of_stock";
+  }
+
+  const title = normalized(raw?.title);
+  if (!title) return null;
+
+  // “封号不质保”是对封禁风险的有限免责，并不等于商品完全无质保；仅在
+  // 标题明确声明整个商品无质保/无售后时从公开排行排除。
+  const withoutBanOnlyDisclaimer = title
+    .replace(/不质保\s*封号|封号\s*不质保|不保\s*封号|封号\s*不保/g, "")
+    .trim();
+  const withoutConditionalAfterSales = title
+    .replace(/(?:不看|未看|没看)\s*(?:商品\s*)?说明\s*(?:不予|不做|不提供|无|不)?\s*售后/g, "")
+    .replace(/(?:不按|未按|没按)\s*(?:商品\s*)?说明\s*(?:操作\s*)?(?:不予|不做|不提供|无|不)?\s*售后/g, "")
+    .trim();
+  if (
+    /无\s*(?:任何\s*)?质保|没有\s*质保|不提供\s*质保|不予\s*质保|不包\s*质保|不质保/.test(withoutBanOnlyDisclaimer) ||
+    /无\s*(?:任何\s*)?售后|没有\s*售后|不会\s*有\s*(?:任何\s*)?售后|不提供\s*售后|不支持\s*售后|拒绝\s*售后|不予\s*售后|不包\s*售后|不做\s*售后|不售后|不可\s*售后|售后\s*概不负责/.test(withoutConditionalAfterSales) ||
+    /\b(?:no|without(?:\s+any)?)\s+warrant(?:y|ies)\b|\bwarrant(?:y|ies)\s+(?:is\s+)?not\s+provided\b|\b(?:no|without(?:\s+any)?)\s+after[ -]?sales?(?:\s+(?:service|support))?\b/i.test(title)
+  ) {
+    return "no_warranty";
+  }
+
+  return null;
+}
+
 export function groupDirectOffers(rawOffers) {
   const groups = new Map();
   const seen = new Set();
   for (const raw of rawOffers ?? []) {
+    if (directOfferExclusionReason(raw)) continue;
     const price = Number(raw?.price);
     if (!raw?.offerId || seen.has(raw.offerId) || !Number.isFinite(price) || price <= 0) continue;
     if (!isHttpUrl(raw.url)) continue;
@@ -179,7 +210,7 @@ function isAvailable(status) {
 }
 
 function compareOffers(a, b) {
-  const rank = (offer) => isAvailable(offer.status) ? 0 : String(offer.status) === "out_of_stock" ? 2 : 1;
+  const rank = (offer) => isAvailable(offer.status) ? 0 : 1;
   return rank(a) - rank(b) || a.price - b.price || String(a.storeName ?? "").localeCompare(String(b.storeName ?? ""), "zh-CN");
 }
 
