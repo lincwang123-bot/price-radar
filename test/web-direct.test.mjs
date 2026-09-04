@@ -38,6 +38,41 @@ test("原店直采报价支持翻页，PriceAI Top 5 可跳转完整直采排行
   }
 });
 
+test("原店历史走势重算并排除旧快照中的售罄与无质保低价", async () => {
+  const db = openDb(":memory:");
+  const server = createApp({ db });
+  try {
+    storeSnapshot(db, directHistorySnapshot(
+      "direct-history-old",
+      "2026-09-05T00:00:00.000Z",
+      [
+        historyOffer("bad-warranty", "GPT PRO 20X 直冲卡密（无任何质保）", 348, "in_stock", 5),
+        historyOffer("bad-stock", "GPT PRO 20X 已售罄", 99, "out_of_stock", 0),
+        historyOffer("valid-old", "GPT PRO 20X 菲区代充1个月", 1050, "in_stock", 3),
+      ],
+      99,
+    ));
+    storeSnapshot(db, directHistorySnapshot(
+      "direct-history-new",
+      "2026-09-05T01:00:00.000Z",
+      [historyOffer("valid-new", "GPT PRO 20X 菲区代充1个月", 1060, "in_stock", 2)],
+      1060,
+    ));
+
+    server.listen(0, "127.0.0.1");
+    await once(server, "listening");
+    const { port } = server.address();
+    const html = await fetch(`http://127.0.0.1:${port}/product?source=direct-shops&id=chatgpt-pro-20x`).then((response) => response.text());
+
+    assert.match(html, /最近 2 个快照/);
+    assert.match(html, /从 09\/05 08:00 的 ¥1050 到 09\/05 09:00 的 ¥1060/);
+    assert.doesNotMatch(html, /¥348|¥99/);
+  } finally {
+    if (server.listening) await new Promise((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+    db.close();
+  }
+});
+
 function snapshot(source, snapshotId, capturedAt, reportedCount, visibleCount) {
   return {
     source,
@@ -67,5 +102,41 @@ function snapshot(source, snapshotId, capturedAt, reportedCount, visibleCount) {
         capturedAt,
       })),
     }],
+  };
+}
+
+function directHistorySnapshot(snapshotId, capturedAt, offers, lowestPrice) {
+  return {
+    source: "direct-shops",
+    snapshotId,
+    fetchedAt: capturedAt,
+    stale: false,
+    products: [{
+      productId: "chatgpt-pro-20x",
+      name: "ChatGPT Pro 20x",
+      platform: "ChatGPT",
+      productType: "订阅/会员",
+      lowestPrice,
+      currency: "CNY",
+      offerCount: offers.length,
+      inStockCount: offers.filter((offer) => offer.status === "in_stock").length,
+      offers,
+    }],
+  };
+}
+
+function historyOffer(offerId, title, price, status, stockCount) {
+  return {
+    offerId,
+    sourceId: "fixture-store",
+    sourceName: "Fixture Store",
+    storeName: "Fixture Store",
+    title,
+    price,
+    currency: "CNY",
+    status,
+    stockCount,
+    url: `https://example.com/item/${offerId}`,
+    capturedAt: "2026-09-05T00:00:00.000Z",
   };
 }
