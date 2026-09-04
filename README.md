@@ -118,22 +118,19 @@ export async function pull(ctx) {
 注意：不同站产品 id 体系不同，跨站对比需在业务侧自行做映射（例如
 `chatgpt-plus-recharge` 等价物在各站叫法不一），本工具不臆断跨站 SKU 等价。
 
-## 部署到 VPS（给身边人访问）
+## 部署到 VPS（公网访问）
 
-服务三件套（见 `deploy/`）：`price-radar-collect`（常驻采集+盯盘）、`price-radar-web`（只读 Web，绑 127.0.0.1:18090）、`price-radar-tunnel`（Cloudflare Quick Tunnel 公网入口）。
+生产环境默认使用 Cloudflare **Named Tunnel**。服务三件套（见 `deploy/`）为：`price-radar-collect`（常驻采集+盯盘）、`price-radar-web`（只读 Web，绑 `127.0.0.1:18090`）和 `price-radar-named-tunnel`（稳定的公网入口）。
+
+Named Tunnel 的配置必须仅保存在 VPS：`/etc/price-radar/cloudflared/config.yml` 与仅限该 Tunnel 的 `/etc/price-radar/cloudflared/credentials.json`。后者应为 `root:root`、`0600`，由 systemd `LoadCredential=` 只在运行时交给服务；两者都不可提交到 Git、README、聊天记录或截图。
 
 ```sh
 bash deploy/deploy.sh   # 本地执行：rsync 代码 → 装 systemd → 启动三服务
 ```
 
+- 脚本只有在 VPS 同时具备上述 `config.yml` 和 `credentials.json` 时才会启用 Named Tunnel；其健康状态确认后，脚本只会停用本项目旧的 `price-radar-tunnel.service`，不会影响主机上的其他 `cloudflared` 服务。
 - `.env` 仅用于部署环境变量，已被 Git 忽略；当前 Web 页面不内置访问口令校验，如需限制访问应在反向代理或 WAF 层配置。
-- 当前公网地址（Quick Tunnel 重启会变）：
-
-```sh
-ssh <ssh-host> "sudo journalctl -u price-radar-tunnel --no-pager -n 60 | grep -oE 'https://[-a-z0-9]+\.trycloudflare\.com' | tail -1"
-```
-
-- 正式长期入口建议后续换 Cloudflare Named Tunnel（同 16688-ops 的做法），Quick Tunnel 只适合亲友小范围。
+- **Quick Tunnel 仅作本地验证或首次临时回退**：若尚未配置 Named Tunnel 的两个 VPS 文件，脚本才会使用 `price-radar-tunnel.service`，其 `trycloudflare.com` 地址会随重启改变，不应用作正式域名入口。
 
 ## 数据库
 
