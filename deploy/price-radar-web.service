@@ -1,6 +1,6 @@
-# price-radar 只读 Web 服务（绑 127.0.0.1，公网由 cloudflared tunnel 暴露）
+# price-radar Web 与公开投稿服务（绑 127.0.0.1，公网由 cloudflared tunnel 暴露）
 [Unit]
-Description=Price Radar read-only web page
+Description=Price Radar web page and submission endpoint
 After=network-online.target
 Wants=network-online.target
 
@@ -15,6 +15,10 @@ Restart=on-failure
 RestartSec=5s
 NoNewPrivileges=true
 PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/linc/apps/price-radar/submissions
+UMask=0077
 
 [Install]
 WantedBy=multi-user.target

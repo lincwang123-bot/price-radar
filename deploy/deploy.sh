@@ -20,14 +20,15 @@ fi
 echo "==> rsync code -> ${REMOTE}:${APP_DIR} (exclude data/, .env, .git)"
 rsync -az --delete \
   --exclude 'data/' \
+  --exclude 'submissions/' \
   --exclude '.env' \
   --exclude '.git' \
   --exclude 'config.json' \
   --exclude 'docs/_scrape/' \
   -e ssh "$LOCAL_DIR/" "${REMOTE}:${APP_DIR}/"
 
-echo "==> ensure data dir + ownership deploy:deploy"
-ssh "$REMOTE" "sudo mkdir -p ${APP_DIR}/data && sudo chown -R deploy:deploy ${APP_DIR} && echo chown-ok"
+echo "==> ensure data and submissions dirs + ownership deploy:deploy"
+ssh "$REMOTE" "sudo mkdir -p ${APP_DIR}/data ${APP_DIR}/submissions && sudo chown -R deploy:deploy ${APP_DIR} && echo chown-ok"
 
 echo "==> install systemd units"
 for u in price-radar-collect price-radar-web "$TUNNEL_UNIT"; do
@@ -37,6 +38,9 @@ done
 
 echo "==> runtime env file; create if missing"
 ssh "$REMOTE" "test -f ${APP_DIR}/.env || { umask 077; sudo -u deploy touch ${APP_DIR}/.env; echo env-created; }"
+ssh "$REMOTE" "sudo -u deploy grep -q '^PUBLIC_ORIGIN=' ${APP_DIR}/.env || { sudo -u deploy sh -c 'printf \"%s\\n\" \"PUBLIC_ORIGIN=https://airadar.vip\" >> ${APP_DIR}/.env'; echo public-origin-added; }"
+ssh "$REMOTE" "sudo -u deploy grep -q '^SUBMISSIONS_DB_PATH=' ${APP_DIR}/.env || { sudo -u deploy sh -c 'printf \"%s\\n\" \"SUBMISSIONS_DB_PATH=${APP_DIR}/submissions/submissions.sqlite\" >> ${APP_DIR}/.env'; echo submissions-path-added; }"
+ssh "$REMOTE" "sudo -u deploy grep -q '^SUBMISSION_HASH_SECRET=' ${APP_DIR}/.env || { sudo -u deploy sh -c 'printf \"SUBMISSION_HASH_SECRET=\" >> ${APP_DIR}/.env; /usr/bin/openssl rand -hex 32 >> ${APP_DIR}/.env'; echo submission-secret-added; }"
 
 echo "==> daemon-reload + enable + start"
 ssh "$REMOTE" "sudo systemctl daemon-reload && sudo systemctl enable price-radar-collect price-radar-web ${TUNNEL_UNIT} && sudo systemctl restart price-radar-collect price-radar-web ${TUNNEL_UNIT} && echo started"

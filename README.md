@@ -163,7 +163,7 @@ export async function pull(ctx) {
 
 ## 部署到 VPS（公网访问）
 
-生产环境默认使用 Cloudflare **Named Tunnel**。服务三件套（见 `deploy/`）为：`price-radar-collect`（常驻采集+盯盘）、`price-radar-web`（只读 Web，绑 `127.0.0.1:18090`）和 `price-radar-named-tunnel`（稳定的公网入口）。
+生产环境默认使用 Cloudflare **Named Tunnel**。服务三件套（见 `deploy/`）为：`price-radar-collect`（常驻采集+盯盘）、`price-radar-web`（公开页面与投稿接口，绑 `127.0.0.1:18090`）和 `price-radar-named-tunnel`（稳定的公网入口）。
 
 Named Tunnel 的配置必须仅保存在 VPS：`/etc/price-radar/cloudflared/config.yml` 与仅限该 Tunnel 的 `/etc/price-radar/cloudflared/credentials.json`。后者应为 `root:root`、`0600`，由 systemd `LoadCredential=` 只在运行时交给服务；两者都不可提交到 Git、README、聊天记录或截图。
 
@@ -173,6 +173,8 @@ bash deploy/deploy.sh   # 本地执行：rsync 代码 → 装 systemd → 启动
 
 - 脚本只有在 VPS 同时具备上述 `config.yml` 和 `credentials.json` 时才会启用 Named Tunnel；其健康状态确认后，脚本只会停用本项目旧的 `price-radar-tunnel.service`，不会影响主机上的其他 `cloudflared` 服务。
 - `.env` 仅用于部署环境变量，已被 Git 忽略；当前 Web 页面不内置访问口令校验，如需限制访问应在反向代理或 WAF 层配置。
+- `PUBLIC_ORIGIN=https://airadar.vip` 用于校验投稿请求来源。部署脚本只会在缺少该项时补入，不会覆盖现有值。
+- `SUBMISSIONS_DB_PATH` 指向单独的投稿目录，`SUBMISSION_HASH_SECRET` 用于生成短期防滥用摘要；部署脚本会在首次启用时生成随机密钥，不会将密钥输出到终端或仓库。
 - **Quick Tunnel 仅作本地验证或首次临时回退**：若尚未配置 Named Tunnel 的两个 VPS 文件，脚本才会使用 `price-radar-tunnel.service`，其 `trycloudflare.com` 地址会随重启改变，不应用作正式域名入口。
 
 ### 可选：独立访客统计
@@ -195,6 +197,23 @@ CLOUDFLARE_WEB_ANALYTICS_TOKEN=你的公开_site_token
 - `rule_state`（盯盘去重状态）、`alerts`（告警历史）
 
 同一产品的价格序列 = 按 `fetched_at` 排序 join `snapshots + products`（`history` 命令即此查询）。
+
+### 数据反馈与供需提交
+
+页面顶部的“提交”提供两条独立流程：
+
+- **纠正公开数据**：选择价格、库存、质保、分类、链接、缺失数据或页面问题，再补充产品、链接和必要说明。
+- **供需合作**：供给方或采购方选择产品方向、合作规模、保障与结算方式，并填写合作说明和联系方式。
+
+本地和生产环境默认都写入权限隔离的 `submissions/submissions.sqlite`，手工查询命令与 Web 服务使用同一路径，不会与行情采集库混用。Web 进程以 SQLite 只读方式打开行情库，systemd 也只允许它写投稿目录。服务只保存表单内容、联系方式和用于限流的带密钥摘要，不保存原始 IP 或 User-Agent；超过 48 小时的客户端摘要会清除。页面明确禁止提交密码、卡密与 API Key，接口也会拦截常见的敏感凭据格式。接口还包含同源与 CSRF 校验、16 KiB 请求上限、24 小时去重和频率限制。
+
+第一版不开放公网管理后台，可通过 SSH 命令查看和处理：
+
+```sh
+node radar.mjs submissions --kind feedback --status new --limit 50
+node radar.mjs submissions --kind cooperation --status new --limit 50
+node radar.mjs submission-status FB-20260905-ABC234 resolved
+```
 
 ## 现状与已知限制
 

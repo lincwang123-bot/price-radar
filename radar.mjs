@@ -9,7 +9,11 @@
 //   node radar.mjs history <productId> [--n 20] 打印跨快照最低价走势
 //   node radar.mjs alerts [--limit 20]         最近告警
 //   node radar.mjs sources                      源与最近状态
-import { openDb } from "./lib/db.mjs";
+//   node radar.mjs submissions [--kind feedback|cooperation] [--status new]
+//   node radar.mjs submission-status <编号> <状态>
+import path from "node:path";
+
+import { openDb, openDbReadOnly } from "./lib/db.mjs";
 import { loadConfig } from "./lib/config.mjs";
 import { runPull } from "./lib/pull.mjs";
 import { runWatch } from "./lib/watch.mjs";
@@ -18,6 +22,7 @@ import {
   lastSnapshotId, productsOfSnapshot, offersOfProduct, priceSeries,
   recentSnapshots,
 } from "./lib/db.mjs";
+import { listSubmissions, openSubmissionsDb, updateSubmissionStatus } from "./lib/submissions.mjs";
 
 function arg(name, def = null) {
   const i = process.argv.indexOf(name);
@@ -169,15 +174,60 @@ async function cmdImport(config, db, file) {
   return 0;
 }
 
+function submissionsDbPath(config) {
+  return process.env.SUBMISSIONS_DB_PATH || path.join(path.dirname(config.dataDir), "submissions", "submissions.sqlite");
+}
+
+async function cmdSubmissions(config) {
+  const kind = arg("--kind", "feedback");
+  const status = arg("--status", null);
+  const limit = Number(arg("--limit", "50")) || 50;
+  const submissionsDb = openSubmissionsDb(submissionsDbPath(config));
+  try {
+    const rows = listSubmissions(submissionsDb, { kind, status, limit });
+    console.log(`\n${kind === "feedback" ? "数据反馈" : "供需合作"}：${rows.length} 条${status ? `（状态 ${status}）` : ""}`);
+    for (const row of rows.reverse()) {
+      console.log(`\n[${row.public_id}] ${row.created_at} · ${row.status} · ${row.topic}`);
+      console.log(`标题：${row.subject || "-"}`);
+      if (row.metadata) console.log(`结构：${row.metadata}`);
+      if (row.details) console.log(`说明：${row.details}`);
+      if (row.context_url) console.log(`链接：${row.context_url}`);
+      console.log(`联系：${row.contact || "未留"}`);
+    }
+  } finally {
+    submissionsDb.close();
+  }
+}
+
+async function cmdSubmissionStatus(config, publicId, status) {
+  const submissionsDb = openSubmissionsDb(submissionsDbPath(config));
+  try {
+    const changed = updateSubmissionStatus(submissionsDb, publicId, status);
+    console.log(changed ? `[submission] ${publicId} 已更新为 ${status}` : `[submission] 未找到 ${publicId}`);
+    return changed ? 0 : 1;
+  } finally {
+    submissionsDb.close();
+  }
+}
+
 async function cmdServe(config, db) {
-  // Web 只读页面（零依赖 SSR）。注意：不能 close db 前退出——长驻进程由 SIGINT 结束。
+  // 行情库保持只读；公开投稿写入独立数据库。长驻进程由 SIGINT 结束。
   const host = arg("--host", "127.0.0.1");
   const port = Number(arg("--port", "8090")) || 8090;
+  const publicOrigin = String(process.env.PUBLIC_ORIGIN || "").trim();
+  if (publicOrigin.startsWith("https://") && String(process.env.SUBMISSION_HASH_SECRET || "").length < 32) {
+    throw new Error("公网投稿服务需要至少 32 字符的 SUBMISSION_HASH_SECRET");
+  }
   const { startWeb } = await import("./lib/web.mjs");
-  const app = await startWeb({ db, host, port });
+  const submissionsDb = openSubmissionsDb(submissionsDbPath(config));
+  const app = await startWeb({ db, submissionsDb, host, port });
   const shutdown = () => {
     console.log("\n[web] 停止。");
-    app.close(() => { try { db.close(); } catch {} process.exit(0); });
+    app.close(() => {
+      try { submissionsDb.close(); } catch {}
+      try { db.close(); } catch {}
+      process.exit(0);
+    });
   };
   process.on("SIGINT", shutdown);
   process.on("SIGTERM", shutdown);
@@ -186,9 +236,12 @@ async function cmdServe(config, db) {
 }
 
 async function main() {
-  const [cmd, productId] = process.argv.slice(2).filter((a) => !a.startsWith("--"));
+  const [cmd, productId, statusValue] = process.argv.slice(2).filter((a) => !a.startsWith("--"));
   const config = loadConfig();
-  const db = openDb(config.dbPath);
+  if (cmd === "submissions") return cmdSubmissions(config);
+  if (cmd === "submission-status") return cmdSubmissionStatus(config, productId, statusValue);
+
+  const db = cmd === "serve" ? openDbReadOnly(config.dbPath) : openDb(config.dbPath);
   try {
     switch (cmd) {
       case "pull": return await cmdPull(config, db);
@@ -203,9 +256,11 @@ async function main() {
       case "serve": return await cmdServe(config, db);
       default:
         console.log(
-          `用法: node radar.mjs <pull|watch|daemon|products|offers|history|alerts|sources|import|serve> ...\n` +
+          `用法: node radar.mjs <pull|watch|daemon|products|offers|history|alerts|sources|submissions|submission-status|import|serve> ...\n` +
           `  import <raw.json>   把历史 priceai raw 快照回填进库\n` +
-          `  serve [--port 8090] 启动只读 Web 页面\n` +
+          `  submissions [--kind feedback|cooperation] [--status new] 查看公开提交\n` +
+          `  submission-status <编号> <状态> 更新处理状态\n` +
+          `  serve [--port 8090] 启动 Web 页面与投稿接口\n` +
           `  详见 README.md`
         );
         return 1;
