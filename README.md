@@ -102,9 +102,14 @@ node radar.mjs import <raw.json>                # 历史 raw 快照回填（幂�
 | 目标 id | 店铺/目录 | 类型与公开入口 | 单目标缓存周期 |
 | --- | --- | --- | --- |
 | `aisou` | AI搜 | Kami：`aisou.pro/user/api/index/commodity` | 30min |
+| `redeemgpt` | RedeemGPT | Kami：`faka.redeemgpt.com/user/api/index/commodity` | 30min |
+| `ai666` | AI666 | Kami：`ai666.id/user/api/index/commodity` | 30min |
+| `shopcardai` | CardAI | Kami：`shopcardai.click/user/api/index/commodity` | 30min |
 | `ikunlove` | IkunLove | IkunLove JSON：`ikunlove.best/api/shop/products` | 30min |
 | `mooncake` | Mooncake | Mooncake JS 目录：`fk1.ybkjs.top/mooncake-official-media/catalog.js` | 12h |
-| `wzyp-harvey`、`wzyp-paimon`、`wzyp-ai-choice`、`wzyp-direct`、`wzyp-lightyear` | 派大星、派蒙AI、AI优选站、GPTplus直营、光年AI | ShopApi：固定登记的 `wzyp.cn` 店铺，读取 `/shopApi/Shop/categoryList` 与 `/shopApi/Shop/goodsList` | 60min |
+| `wzyp-harvey`、`wzyp-paimon`、`wzyp-ai-choice`、`wzyp-direct`、`wzyp-lightyear` | 派大星、派蒙AI、AI优选站、GPTplus直营、光年AI | ShopApi：固定登记的 `wzyp.cn` 店铺，读取 `/shopApi/Shop/categoryList` 与 `/shopApi/Shop/goodsList` | 60min，非默认 |
+
+`wzyp.cn` 的 ShopApi 目标仍可在 `config.json` 中显式启用，但当前会对 airadar.vip 生产 VPS 返回 WAF 挑战页，因此不纳入生产默认列表，也不尝试绕过。
 
 采集边界与失败语义：
 

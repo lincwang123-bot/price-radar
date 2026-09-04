@@ -18,13 +18,11 @@
       "request_delay_ms": 500,
       "targets": [
         "aisou",
+        "redeemgpt",
+        "ai666",
+        "shopcardai",
         "ikunlove",
-        "mooncake",
-        "wzyp-harvey",
-        "wzyp-paimon",
-        "wzyp-ai-choice",
-        "wzyp-direct",
-        "wzyp-lightyear"
+        "mooncake"
       ]
     }
   },

@@ -17,6 +17,36 @@ const TARGETS = [
     pageSize: 100,
   },
   {
+    id: "redeemgpt",
+    name: "RedeemGPT",
+    kind: "kami",
+    origin: "https://faka.redeemgpt.com",
+    endpoint: "/user/api/index/commodity",
+    intervalMinutes: 30,
+    maxPages: 5,
+    pageSize: 100,
+  },
+  {
+    id: "ai666",
+    name: "AI666",
+    kind: "kami",
+    origin: "https://ai666.id",
+    endpoint: "/user/api/index/commodity",
+    intervalMinutes: 30,
+    maxPages: 5,
+    pageSize: 100,
+  },
+  {
+    id: "shopcardai",
+    name: "CardAI",
+    kind: "kami",
+    origin: "https://shopcardai.click",
+    endpoint: "/user/api/index/commodity",
+    intervalMinutes: 30,
+    maxPages: 5,
+    pageSize: 100,
+  },
+  {
     id: "ikunlove",
     name: "IkunLove",
     kind: "ikunlove",
@@ -60,7 +90,11 @@ function shop(id, name, token) {
   };
 }
 
-export const DEFAULT_DIRECT_TARGET_IDS = Object.freeze(TARGETS.map((target) => target.id));
+// wzyp.cn 的公开 ShopApi 在普通家庭网络可用，但当前会对本项目
+// 生产 VPS 返回 WAF 挑战页。它们保留为显式可选目标，不在默认列表中启用。
+export const DEFAULT_DIRECT_TARGET_IDS = Object.freeze([
+  "aisou", "redeemgpt", "ai666", "shopcardai", "ikunlove", "mooncake",
+]);
 
 export function directTargets(ids = DEFAULT_DIRECT_TARGET_IDS) {
   const requested = new Set(ids);
