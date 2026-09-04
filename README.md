@@ -132,6 +132,16 @@ bash deploy/deploy.sh   # 本地执行：rsync 代码 → 装 systemd → 启动
 - `.env` 仅用于部署环境变量，已被 Git 忽略；当前 Web 页面不内置访问口令校验，如需限制访问应在反向代理或 WAF 层配置。
 - **Quick Tunnel 仅作本地验证或首次临时回退**：若尚未配置 Named Tunnel 的两个 VPS 文件，脚本才会使用 `price-radar-tunnel.service`，其 `trycloudflare.com` 地址会随重启改变，不应用作正式域名入口。
 
+### 可选：独立访客统计
+
+Web 页面支持 Cloudflare Web Analytics，用于统计页面访问和独立访客。请在 Cloudflare 创建该站点的 **Web Analytics site token** 后，仅在 VPS 的 `/opt/linc/apps/price-radar/.env` 写入：
+
+```sh
+CLOUDFLARE_WEB_ANALYTICS_TOKEN=你的公开_site_token
+```
+
+不要把 Cloudflare 账户 API Token 填入这里，也不要同时开启 Cloudflare 的自动注入。重启 `price-radar-web` 后，页面会加载 Cloudflare 的官方 beacon。令牌未配置或格式无效时，页面不会加载任何统计脚本，也不会影响网站访问。
+
 ## 数据库
 
 `data/radar.sqlite`（WAL，已 gitignore）。核心表：
