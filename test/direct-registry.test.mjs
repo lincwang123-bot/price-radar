@@ -5,10 +5,35 @@ import { DEFAULT_DIRECT_TARGET_IDS, directTargets } from "../collectors/direct/r
 
 test("默认直采列表只启用生产 VPS 已验证可达的目标", () => {
   assert.deepEqual(DEFAULT_DIRECT_TARGET_IDS, [
-    "aisou", "redeemgpt", "ai666", "shopcardai", "ikunlove", "mooncake",
+    "aisou", "redeemgpt", "ai666", "shopcardai", "web3chirou", "morimm", "burstpro-ai", "ikunlove", "mooncake",
   ]);
-  assert.equal(directTargets().length, 6);
+  assert.equal(directTargets().length, 9);
   assert.equal(directTargets(["wzyp-harvey"])[0].token, "harvey");
+});
+
+test("Dujiao 原站仅固定登记已验证的公开目录", () => {
+  assert.deepEqual(
+    directTargets(["morimm", "burstpro-ai"])
+      .map(({ id, kind, origin, endpoint }) => ({ id, kind, origin, endpoint })),
+    [
+      { id: "morimm", kind: "dujiao", origin: "https://morimm.com", endpoint: "/api/v1/public/products" },
+      { id: "burstpro-ai", kind: "dujiao", origin: "https://burstpro-ai.online", endpoint: "/api/v1/public/products" },
+    ],
+  );
+});
+
+test("新 Kami 原站均固定登记，仅高价值可达源默认启用", () => {
+  assert.deepEqual(
+    directTargets(["web3chirou", "lynnzee", "zhanghao66"])
+      .map(({ id, kind, origin }) => ({ id, kind, origin })),
+    [
+      { id: "web3chirou", kind: "kami", origin: "https://web3chirou.com" },
+      { id: "lynnzee", kind: "kami", origin: "https://lynnzee.myweb999.cfd" },
+      { id: "zhanghao66", kind: "kami", origin: "https://zhanghao66.com" },
+    ],
+  );
+  assert.ok(DEFAULT_DIRECT_TARGET_IDS.includes("web3chirou"));
+  assert.ok(!DEFAULT_DIRECT_TARGET_IDS.some((id) => ["lynnzee", "zhanghao66"].includes(id)));
 });
 
 test("未登记目标不能把直采器当作任意代理", () => {

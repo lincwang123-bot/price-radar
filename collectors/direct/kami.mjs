@@ -31,6 +31,9 @@ export async function collectKami(target, options = {}) {
   const endpoint = new URL(target?.endpoint ?? CATALOG_PATH, `${source.origin}/`);
   const offers = [];
   const seen = new Set();
+  const seenRawIds = new Set();
+  let consecutiveEmptyPages = 0;
+  let reportedTotal = null;
 
   for (let page = 1; page <= maxPages; page += 1) {
     if (page > 1) await delay(requestDelayMs);
@@ -39,6 +42,13 @@ export async function collectKami(target, options = {}) {
     url.searchParams.set("page", String(page));
     const payload = await safeFetchJson(url.href, fetchOptions(source.origin, options));
     const pageOffers = parseKamiPage(payload, source, capturedAt);
+    let newRawIds = 0;
+    for (const item of payload.data) {
+      const rawId = identifier(item?.id ?? item?.commodity_id ?? item?.goods_id);
+      if (!rawId || seenRawIds.has(rawId)) continue;
+      seenRawIds.add(rawId);
+      newRawIds += 1;
+    }
     for (const offer of pageOffers) {
       if (seen.has(offer.offerId)) continue;
       seen.add(offer.offerId);
@@ -47,7 +57,18 @@ export async function collectKami(target, options = {}) {
 
     const rawCount = payload.data.length;
     const total = nonNegativeInteger(payload.total);
-    if (rawCount < pageSize || (total !== null && page * pageSize >= total)) break;
+    if (total !== null) reportedTotal = total;
+    consecutiveEmptyPages = rawCount === 0 ? consecutiveEmptyPages + 1 : 0;
+
+    // 部分 Kami 站点会忽略请求的 limit 上限，例如 limit=100 仍只返回
+    // 96 条，同时 total 显示还有后续页。有 total 时因此不能用
+    // rawCount < pageSize 判断末页，而是以已见原始 ID 数、重复页和连续空页收敛。
+    if (rawCount > 0 && newRawIds === 0) break;
+    if (reportedTotal !== null) {
+      if (seenRawIds.size >= reportedTotal || consecutiveEmptyPages >= 2) break;
+    } else if (rawCount < pageSize) {
+      break;
+    }
   }
 
   return offers;
@@ -144,9 +165,15 @@ function nonNegativeInteger(value) {
 function inventoryState(stockValue, stateValue) {
   const count = nonNegativeInteger(typeof stockValue === "string" ? stockValue.replace(/,/g, "") : stockValue);
   if (count !== null) return { stockCount: count, status: count === 0 ? "out_of_stock" : "in_stock" };
-  const text = cleanText(`${stockValue ?? ""} ${stateValue ?? ""}`).toLowerCase();
-  if (/out[_ -]?of[_ -]?stock|已售罄|售罄|缺货|无货/.test(text)) return { stockCount: 0, status: "out_of_stock" };
+  const labels = [stockValue, stateValue]
+    .map((value) => cleanText(value).toLowerCase())
+    .filter(Boolean);
+  const text = labels.join(" ");
   if (/low[_ -]?stock|即将售罄|库存紧张|库存较少/.test(text)) return { stockCount: null, status: "low_stock" };
+  if (/out[_ -]?of[_ -]?stock|已售罄|售罄|缺货|无货/.test(text)) return { stockCount: 0, status: "out_of_stock" };
+  if (labels.some((label) => ["一般", "充足", "非常多", "库存充足", "库存正常"].includes(label))) {
+    return { stockCount: null, status: "in_stock" };
+  }
   if (/in[_ -]?stock|online|有货/.test(text)) return { stockCount: null, status: "in_stock" };
   return { stockCount: null, status: "unknown" };
 }

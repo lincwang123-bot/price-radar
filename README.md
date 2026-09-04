@@ -105,9 +105,14 @@ node radar.mjs import <raw.json>                # 历史 raw 快照回填（幂�
 | `redeemgpt` | RedeemGPT | Kami：`faka.redeemgpt.com/user/api/index/commodity` | 30min |
 | `ai666` | AI666 | Kami：`ai666.id/user/api/index/commodity` | 30min |
 | `shopcardai` | CardAI | Kami：`shopcardai.click/user/api/index/commodity` | 30min |
+| `web3chirou` | 蔚莱云AI | Kami：`web3chirou.com/user/api/index/commodity` | 60min |
+| `morimm` | MoriMM | Dujiao：`morimm.com/api/v1/public/products` | 30min |
+| `burstpro-ai` | BurstPro AI | Dujiao：`burstpro-ai.online/api/v1/public/products` | 30min |
 | `ikunlove` | IkunLove | IkunLove JSON：`ikunlove.best/api/shop/products` | 30min |
 | `mooncake` | Mooncake | Mooncake JS 目录：`fk1.ybkjs.top/mooncake-official-media/catalog.js` | 12h |
 | `wzyp-harvey`、`wzyp-paimon`、`wzyp-ai-choice`、`wzyp-direct`、`wzyp-lightyear` | 派大星、派蒙AI、AI优选站、GPTplus直营、光年AI | ShopApi：固定登记的 `wzyp.cn` 店铺，读取 `/shopApi/Shop/categoryList` 与 `/shopApi/Shop/goodsList` | 60min，非默认 |
+
+`web3chirou`、`morimm` 与 `burstpro-ai` 已在生产 VPS 验证可达。`web3chirou` 的 Kami 目录会出现“请求 100 条但首页仅返回 96 条”的情况；采集器在存在 `total` 时不再以单页长度提前结束，并用唯一 ID、重复页、连续空页和最大页数共同限定请求。Dujiao 多规格商品按 SKU 独立生成报价，只补充已确认的品牌名，不把父商品中的 Plus / Pro 5x / Pro 20x 混入每个 SKU。`lynnzee` 与 `zhanghao66` 仅保留为显式可选目标，不纳入生产默认。
 
 `wzyp.cn` 的 ShopApi 目标仍可在 `config.json` 中显式启用，但当前会对 airadar.vip 生产 VPS 返回 WAF 挑战页，因此不纳入生产默认列表，也不尝试绕过。
 

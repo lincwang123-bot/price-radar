@@ -45,12 +45,13 @@ export function classifyDirectOffer({ title, category = "" }) {
   const text = normalized(`${category} ${title}`);
   if (!text) return null;
 
-  if (has(text, /接码|接马|验证码|手机号|短信|\bsms\b|phone\s*(?:number|verify)/i)) {
-    return PRODUCTS["verification-service"];
-  }
   // 邮箱标题经常带有“已注册 OpenAI”等用途说明，需先于订阅关键词判断。
   if (has(titleText, /gmail|outlook|hotmail|微软邮箱|谷歌邮箱|邮箱账号|邮箱老号|域名邮箱/)) {
     return PRODUCTS["email-accounts"];
+  }
+  // “手机号注册”只是账号属性，不等于卖家在提供接码服务。
+  if (has(titleText, /接码|接马|验证码|短信验证|\bsms\b|phone\s*(?:number|verify)|手机号\s*(?:接码|验证|接收)/i)) {
+    return PRODUCTS["verification-service"];
   }
   // 纯教程/额度说明不是会员报价，避免把低价资料当成代充最低价。
   if (has(titleText, /教程|教学|攻略|邀请额度/) && !has(titleText, /直充|代充|卡密|成品|月卡|年卡|会员|账号/)) {
@@ -60,7 +61,7 @@ export function classifyDirectOffer({ title, category = "" }) {
   // 品牌和套餐必须在商品标题中出现；店铺分类只做辅助信息。
   // 否则某个“ChatGPT Plus”分类下误放的其他品牌商品会污染最低价。
   const chatgpt = has(titleText, /chat\s*gpt|openai|\bgpt\b|\bg\s*plus\b|\bgplus\b|codex/i) ||
-    (has(categoryText, /chat\s*gpt|openai/i) && has(titleText, /\bplus\b|\bpro\b|pro(?=\d)|team|business|\bgo\b/i));
+    (has(categoryText, /chat\s*gpt|openai/i) && has(titleText, /\bplus\b|\bpro\b|pro(?=\d)|team|business|\bgo\b|(?:5|20)\s*x|x\s*(?:5|20)/i));
   const claude = has(titleText, /claude|cladue/i);
   const gemini = has(titleText, /gemini|google\s*ai|反重力|antigravity/i);
   const grok = has(titleText, /super\s*grok|\bgrok\b|\bgokr\b|\bgork\b/i);
@@ -75,8 +76,14 @@ export function classifyDirectOffer({ title, category = "" }) {
     return PRODUCTS["chatgpt-go"];
   }
   if (chatgpt && has(titleText, /\bpro\b|pro(?=\d)/)) {
-    if (has(titleText, /20\s*x|200\s*(?:刀|美金|usd|dollar)/)) return PRODUCTS["chatgpt-pro-20x"];
-    if (has(titleText, /5\s*x|100\s*(?:刀|美金|usd|dollar)/)) return PRODUCTS["chatgpt-pro-5x"];
+    if (has(titleText, /(?:20\s*x|x\s*20)|200\s*(?:刀|美金|usd|dollar)/)) return PRODUCTS["chatgpt-pro-20x"];
+    if (has(titleText, /(?:5\s*x|x\s*5)|100\s*(?:刀|美金|usd|dollar)/)) return PRODUCTS["chatgpt-pro-5x"];
+  }
+  // 部分 Kami 店铺在标题中只写“5x / 20x”，品类名才标明 ChatGPT。
+  // 只有品类已经确认品牌时才使用这个补充规则，避免普通数字误分类。
+  if (chatgpt && has(categoryText, /chat\s*gpt|openai/i)) {
+    if (has(titleText, /20\s*x|x\s*20/)) return PRODUCTS["chatgpt-pro-20x"];
+    if (has(titleText, /5\s*x|x\s*5/)) return PRODUCTS["chatgpt-pro-5x"];
   }
   if (chatgpt && has(titleText, /\bplus\b|g\s*\+/)) {
     return has(titleText, /成品|账号|共享|拼车|日抛|周抛|镜像|普号|体验|试用|trial|free\s*号|独享号/)
@@ -85,8 +92,10 @@ export function classifyDirectOffer({ title, category = "" }) {
   }
 
   if (claude && has(titleText, /\bmax\b/)) {
-    if (has(titleText, /20\s*x/)) return PRODUCTS["claude-max-20x"];
-    if (has(titleText, /5\s*x/)) return PRODUCTS["claude-max-5x"];
+    if (has(titleText, /20\s*x|x\s*20/)) return PRODUCTS["claude-max-20x"];
+    if (has(titleText, /5\s*x|x\s*5/)) return PRODUCTS["claude-max-5x"];
+    // Max 不应因为标题同时含“代充 / 月卡”而掉入 Pro 排行。
+    return null;
   }
   if (claude && has(titleText, /\bpro\b|月卡|订阅|直充|代充/)) return PRODUCTS["claude-pro-month"];
 
@@ -95,14 +104,19 @@ export function classifyDirectOffer({ title, category = "" }) {
     return PRODUCTS["gemini-pro-recharge"];
   }
 
-  if (grok && has(titleText, /heavy/)) return PRODUCTS["super-grok-heavy"];
-  if (grok && has(titleText, /super|会员|月卡|年卡|成品|代充|直充|premium/)) return PRODUCTS["super-grok"];
-
-  if (has(text, /(?:^|\s)(?:x|twitter)(?:\s|$)/) && has(text, /premium|会员|蓝标|蓝v/)) {
+  // X Premium 套餐可能把 Super Grok 写成附赠权益；主商品仍应归 X。
+  if (has(titleText, /(?:^|\s)(?:x|twitter)(?:\s|$|-)/) && has(titleText, /premium|会员|蓝标|蓝v/)) {
     return PRODUCTS["x-twitter-premium"];
   }
 
-  if (has(text, /codex|api|中转|额度|点数|token|余额|兑换码|\bcdk\b/)) {
+  if (grok && has(titleText, /heavy/)) return PRODUCTS["super-grok-heavy"];
+  if (grok && has(titleText, /super|会员|月卡|年卡|成品|代充|直充|premium/)) return PRODUCTS["super-grok"];
+
+  // API/CDK 必须出现 AI 品牌上下文，或明确写成“API 中转”。
+  // 不再因 Twitter 账号的 token 登录、Graph API 等通用词误分类。
+  const aiService = /codex|openai|chat\s*gpt|\bgpt\b|claude|gemini|\bgrok\b/i;
+  const apiService = /api|中转|额度|点数|token|余额|兑换码|\bcdk\b/i;
+  if (has(titleText, /api\s*中转|中转\s*api|api中转站|中转站/i) || (has(titleText, aiService) && has(titleText, apiService))) {
     return PRODUCTS["api-cdk-credits"];
   }
   if (has(text, /gmail|outlook|hotmail|微软邮箱|谷歌邮箱|邮箱账号|邮箱老号|域名邮箱/)) {

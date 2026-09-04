@@ -11,14 +11,19 @@ const cases = [
   ["GPT PLUS 充值卡密(IOS美区质保)", "ChatGPT", "chatgpt-plus-recharge"],
   ["ChatGPT plus-月卡 独享 成品号", "ChatGPT", "chatgpt-plus"],
   ["GPT PRO 5X 菲区代充1个月", "ChatGPT", "chatgpt-pro-5x"],
+  ["GPT PRO X20 菲区代充1个月", "ChatGPT", "chatgpt-pro-20x"],
+  ["ios x5自助充值卡密", "ChatGPT正规付款自助卡密", "chatgpt-pro-5x"],
   ["ChatGPT Pro200刀版本（官网直充）", "ChatGPT", "chatgpt-pro-20x"],
   ["48月 GPT Business Standard 标准席位", "ChatGPT", "chatgpt-team-business"],
   ["Claude Pro直充月卡", "Claude", "claude-pro-month"],
   ["Claude Max 20X直充月卡", "Claude", "claude-max-20x"],
+  ["Claude Max X5 代充", "CDK", "claude-max-5x"],
+  ["Claude Max X20 代充", "CDK", "claude-max-20x"],
   ["Gemini Pro 12个月成品号", "Gemini", "gemini-pro-recharge"],
   ["Gemini Ultra 独享月卡", "Gemini", "gemini-ultra"],
   ["Super Grok Heavy 月卡", "Grok", "super-grok-heavy"],
   ["X Premium+ 年卡", "X", "x-twitter-premium"],
+  ["X-Twitter Premium+自助卡密（赠送Super Grok）", "X", "x-twitter-premium"],
   ["Codex 点数额度充值", "ChatGPT", "api-cdk-credits"],
   ["OpenAI 哥伦比亚手机号短效接码 SMS", "ChatGPT", "verification-service"],
   ["Gmail 老号带辅助邮箱", "邮箱", "email-accounts"],
@@ -35,7 +40,11 @@ test("无法可靠识别的商品不进入公开排行", () => {
   assert.equal(classifyDirectOffer({ title: "节点加速教程", category: "教程" }), null);
   assert.equal(classifyDirectOffer({ title: "0 刀虚拟卡手搓 G Plus 教程", category: "ChatGPT Plus" }), null);
   assert.equal(classifyDirectOffer({ title: "Claude 成品账号 Free 版", category: "Claude Pro" }), null);
+  assert.equal(classifyDirectOffer({ title: "Claude Max 代充（倍数未注明）", category: "Claude" }), null);
   assert.equal(classifyDirectOffer({ title: "豆包专业版一个月 VIP 会员", category: "ChatGPT Plus" }), null);
+  assert.equal(classifyDirectOffer({ title: "Instagram账号新建，手机号注册，开通2FA", category: "账号" }), null);
+  assert.equal(classifyDirectOffer({ title: "推特老号｜邮箱可用｜token登录", category: "社交账号" }), null);
+  assert.equal(classifyDirectOffer({ title: "Graph Api", category: "Outlook 邮箱" })?.id, "email-accounts");
 });
 
 test("邮箱和试用号不被冒充为 Plus 代充", () => {
