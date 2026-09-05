@@ -14,6 +14,8 @@ const PRODUCTS = {
   "claude-max-20x": product("claude-max-20x", "Claude Max 20x", "Claude", "订阅/会员"),
   "gemini-pro-recharge": product("gemini-pro-recharge", "Gemini / Google AI Pro", "Gemini", "订阅/会员"),
   "gemini-ultra": product("gemini-ultra", "Gemini / Google AI Ultra", "Gemini", "订阅/会员"),
+  "gemini-activation-service": product("gemini-activation-service", "Gemini 权限激活服务", "Gemini", "辅助服务", "权限激活服务，不代表完整订阅；需在原店核对适用条件"),
+  "gemini-claim-link": product("gemini-claim-link", "Gemini 权益领取链接", "Gemini", "辅助服务", "领取链接，不代表已开通订阅；需在原店核对资格和使用条件"),
   "super-grok": product("super-grok", "Super Grok", "Grok", "订阅/会员"),
   "super-grok-heavy": product("super-grok-heavy", "Super Grok Heavy", "Grok", "订阅/会员"),
   "x-twitter-premium": product("x-twitter-premium", "X Premium", "X", "订阅/会员"),
@@ -152,6 +154,8 @@ export function classifyDirectOffer({ title, category = "", sourceId = "" }) {
   }
   if (claude && has(titleText, /\bpro\b|月卡|订阅|直充|代充/)) return PRODUCTS["claude-pro-month"];
 
+  if (gemini && has(titleText, /激活.*权限|权限.*激活/)) return PRODUCTS["gemini-activation-service"];
+  if (gemini && has(titleText, /链接/) && !has(titleText, /成品|账号|代充|直充/)) return PRODUCTS["gemini-claim-link"];
   if (gemini && has(titleText, /ultra/)) return PRODUCTS["gemini-ultra"];
   if (gemini && has(titleText, /\bpro\b|advanced|plus|会员|年卡|月卡|成品|代充|直充/)) {
     return PRODUCTS["gemini-pro-recharge"];
@@ -255,6 +259,7 @@ export function groupDirectOffers(rawOffers) {
 
 export function stableDirectSnapshotId(offers, staleTargetIds = []) {
   const rows = (offers ?? []).map((offer) => ({
+    productId: classifyDirectOffer(offer)?.id ?? null,
     offerId: String(offer.offerId ?? ""),
     sourceId: String(offer.sourceId ?? ""),
     title: String(offer.title ?? ""),

@@ -48,6 +48,7 @@ test("原店历史走势排除售罄与无质保低价，但保留库存紧张�
       [
         historyOffer("bad-warranty", "GPT PRO 20X 直冲卡密（无任何质保）", 348, "in_stock", 5),
         historyOffer("bad-stock", "GPT PRO 20X 已售罄", 99, "out_of_stock", 0),
+        historyOffer("bad-category", "100刀Codex API中转额度(纯Pro号池)", 10, "in_stock", 8),
         historyOffer("valid-old", "GPT PRO 20X 菲区代充1个月", 1050, "in_stock", 3),
       ],
       99,

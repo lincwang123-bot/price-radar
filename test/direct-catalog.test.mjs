@@ -22,6 +22,8 @@ const cases = [
   ["Claude Max X20 代充", "CDK", "claude-max-20x"],
   ["Gemini Pro 12个月成品号", "Gemini", "gemini-pro-recharge"],
   ["Gemini Ultra 独享月卡", "Gemini", "gemini-ultra"],
+  ["全自动激活 Gemini pro 和antigravity 权限", "Gemini", "gemini-activation-service"],
+  ["Gemini Pro 3个月链接", "Gemini", "gemini-claim-link"],
   ["Super Grok Heavy 月卡", "Grok", "super-grok-heavy"],
   ["X Premium+ 年卡", "X", "x-twitter-premium-plus"],
   ["X-Twitter Premium+自助卡密（赠送Super Grok）", "X", "x-twitter-premium-plus"],
@@ -164,6 +166,8 @@ test("快照 ID 与输入顺序和抓取时间无关，但价格变化会改变"
   const changed = stableDirectSnapshotId([a, { ...b, price: 129 }], []);
   assert.equal(first, reordered);
   assert.notEqual(first, changed);
+  const categoryDependent = {...a, title: "ios x5自助充值卡密", category: "ChatGPT"};
+  assert.notEqual(stableDirectSnapshotId([categoryDependent]), stableDirectSnapshotId([{...categoryDependent, category: "其他"}]));
 });
 
 function offer(id, title, price, status, capturedAt = "2026-09-05T00:00:00Z", stockCount) {
