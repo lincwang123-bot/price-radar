@@ -14,7 +14,7 @@ npm run check
 test -z "$(git status --porcelain)" || { echo 'Commit reviewed changes before deployment.' >&2; exit 1; }
 REVISION="$(git rev-parse HEAD)"
 BACKUP_DIR=/opt/linc/backups/price-radar
-CODE_BACKUP="${BACKUP_DIR}/code-before-${REVISION}.tar.gz"
+CODE_BACKUP="${BACKUP_DIR}/code-before-${REVISION}-$(date -u +%Y%m%dT%H%M%SZ).tar.gz"
 ssh "$REMOTE" "sudo mkdir -p ${BACKUP_DIR}/submissions ${BACKUP_DIR}/analytics && sudo chown deploy:deploy ${BACKUP_DIR} ${BACKUP_DIR}/submissions ${BACKUP_DIR}/analytics && sudo chmod 700 ${BACKUP_DIR} ${BACKUP_DIR}/submissions ${BACKUP_DIR}/analytics"
 # This standalone module can back up the old deployment before its first upgrade.
 REMOTE_TEMP="$(ssh "$REMOTE" 'mktemp -d /tmp/price-radar-deploy.XXXXXX')"
@@ -23,7 +23,7 @@ cleanup() {
   result=$?
   if [ "$result" -ne 0 ] && [ "$CHANGED" -eq 1 ]; then
     echo 'Deployment failed; restoring previous code and service units.' >&2
-    ssh "$REMOTE" "sudo systemctl stop price-radar-web price-radar-collect && sudo tar -xzf ${CODE_BACKUP} -C ${APP_DIR} && for u in price-radar-web price-radar-collect; do sudo install -m 644 ${APP_DIR}/deploy/\$u.service /etc/systemd/system/\$u.service; done && sudo systemctl daemon-reload && sudo systemctl restart price-radar-web price-radar-collect && curl -A PriceRadarQA --retry 5 --retry-connrefused --retry-delay 1 -fsS --max-time 10 http://127.0.0.1:18090/ >/dev/null" || true
+    ssh "$REMOTE" "sudo systemctl stop price-radar-web price-radar-collect && sudo tar -xzf ${CODE_BACKUP} -C ${APP_DIR} && for u in price-radar-web price-radar-collect; do sudo install -m 644 ${APP_DIR}/deploy/\$u.service /etc/systemd/system/\$u.service; done && sudo systemctl daemon-reload && sudo systemctl restart price-radar-web price-radar-collect && sudo systemctl start price-radar-named-tunnel && curl -A PriceRadarQA --retry 5 --retry-connrefused --retry-delay 1 -fsS --max-time 10 http://127.0.0.1:18090/ >/dev/null" || true
   fi
   ssh "$REMOTE" "rm -f ${REMOTE_TEMP}/backup.mjs && rmdir ${REMOTE_TEMP}" || true
   exit "$result"
@@ -34,7 +34,8 @@ ssh "$REMOTE" "node --input-type=module -e 'import {backupSubmissions} from \"${
 ssh "$REMOTE" "if test -f ${APP_DIR}/analytics/analytics.sqlite; then node --input-type=module -e 'import {backupSubmissions} from \"${REMOTE_TEMP}/backup.mjs\"; console.log(JSON.stringify(await backupSubmissions(\"${APP_DIR}/analytics/analytics.sqlite\",\"${BACKUP_DIR}/analytics\",{kind:\"analytics\"})))'; fi"
 ssh "$REMOTE" "tar --exclude='./data' --exclude='./submissions' --exclude='./analytics' --exclude='./backups' --exclude='./.env' --exclude='./config.json' --exclude='./.git' -czf ${CODE_BACKUP} -C ${APP_DIR} . && chmod 600 ${CODE_BACKUP} && tar -tzf ${CODE_BACKUP} >/dev/null"
 
-# This script upgrades the app only. Existing named tunnel and other projects are not changed.
+# Existing tunnel Requires=web: stopping web also stops it. Start the same unit
+# after web recovery; never install/change its config, route or credentials.
 ssh "$REMOTE" "systemctl is-active --quiet price-radar-named-tunnel"
 
 echo "==> rsync code -> ${REMOTE}:${APP_DIR} (exclude data/, .env, .git)"
@@ -74,11 +75,11 @@ ssh "$REMOTE" "sudo -u deploy grep -q '^ANALYTICS_BACKUP_DIR=' ${APP_DIR}/.env |
 ssh "$REMOTE" "sudo -u deploy grep -q '^SUBMISSION_HASH_SECRET=' ${APP_DIR}/.env || { sudo -u deploy sh -c 'printf \"SUBMISSION_HASH_SECRET=\" >> ${APP_DIR}/.env; /usr/bin/openssl rand -hex 32 >> ${APP_DIR}/.env'; echo submission-secret-added; }"
 
 echo "==> daemon-reload + enable + start"
-ssh "$REMOTE" "sudo systemctl daemon-reload && sudo systemctl enable price-radar-collect price-radar-web && sudo systemctl restart price-radar-collect price-radar-web && echo started"
+ssh "$REMOTE" "sudo systemctl daemon-reload && sudo systemctl enable price-radar-collect price-radar-web && sudo systemctl restart price-radar-collect price-radar-web && sudo systemctl start price-radar-named-tunnel && echo started"
 
 echo "==> service states"
 ssh "$REMOTE" "systemctl is-active price-radar-collect price-radar-web price-radar-named-tunnel"
-ssh "$REMOTE" "curl -A PriceRadarQA --retry 5 --retry-connrefused --retry-delay 1 -fsS --max-time 10 http://127.0.0.1:18090/ >/dev/null && curl -A PriceRadarQA -fsS --max-time 15 https://airadar.vip/ >/dev/null && sudo systemctl start price-radar-backup.service && sudo systemctl enable --now price-radar-backup.timer"
+ssh "$REMOTE" "curl -A PriceRadarQA --retry 5 --retry-connrefused --retry-delay 1 -fsS --max-time 10 http://127.0.0.1:18090/ >/dev/null && curl -A PriceRadarQA --retry 6 --retry-all-errors --retry-delay 2 -fsS --max-time 15 https://airadar.vip/ >/dev/null && sudo systemctl start price-radar-backup.service && sudo systemctl enable --now price-radar-backup.timer"
 
 echo "==> deploy ${REVISION} healthy; collector owns scheduled data refresh"
 CHANGED=0
