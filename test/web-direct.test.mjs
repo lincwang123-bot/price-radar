@@ -18,8 +18,8 @@ test("原店直采报价支持翻页，PriceAI Top 5 可跳转完整直采排行
     const { port } = server.address();
 
     const homeHtml = await fetch(`http://127.0.0.1:${port}/`).then((response) => response.text());
-    assert.match(homeHtml, /原店直采最低/);
-    assert.match(homeHtml, /原始店铺直采/);
+    assert.match(homeHtml, /AI 订阅报价/);
+    assert.match(homeHtml, /店铺产品/);
 
     const directHtml = await fetch(`http://127.0.0.1:${port}/product?source=direct-shops&id=chatgpt-plus-recharge&page=2`).then((response) => response.text());
     assert.match(directHtml, /共 23 条公开报价/);
@@ -29,9 +29,9 @@ test("原店直采报价支持翻页，PriceAI Top 5 可跳转完整直采排行
     assert.doesNotMatch(directHtml, />#21</);
 
     const priceAiHtml = await fetch(`http://127.0.0.1:${port}/product?source=priceai&id=chatgpt-plus-recharge`).then((response) => response.text());
-    assert.match(priceAiHtml, /PriceAI 上游只公开部分 Top 报价/);
-    assert.match(priceAiHtml, /5 条公开样本，并非其全站可用数量/);
-    assert.match(priceAiHtml, /查看原店直采完整排行/);
+    assert.match(priceAiHtml, /仅展示本站已收录报价，并非全部市场报价/);
+    assert.match(priceAiHtml, /5 条已过滤样本不代表市场可用总量/);
+    assert.match(priceAiHtml, /查看更多店铺报价/);
     assert.match(priceAiHtml, /source=direct-shops&amp;id=chatgpt-plus-recharge/);
   } finally {
     if (server.listening) await new Promise((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
@@ -124,7 +124,7 @@ test("首页为已采集的新品牌生成独立分类，详情可返回对应�
     const html = await fetch(base + "/?family=cursor").then((res) => res.text());
     for (const key of ["cursor", "perplexity", "notion", "manus", "relay"]) {
       assert.match(html, new RegExp(`data-family-filter="${key}"`));
-      assert.match(html, new RegExp(`<tbody data-family="${key}" data-catalog-group`));
+      assert.match(html, new RegExp(`<div data-family="${key}" data-catalog-group`));
     }
     assert.doesNotMatch(html, /data-family-filter="mail"/);
     assert.match(html, /\[data-family\]\[hidden\]\{display:none!important\}/);
