@@ -80,6 +80,14 @@ const TARGETS = [
   { id: "yufenggpt", name: "御风AI", kind: "kami", origin: "https://yufenggpt.com", endpoint: "/user/api/index/commodity", intervalMinutes: 30, maxPages: 5, pageSize: 100 },
   { id: "google7676", name: "以太AI", kind: "kami", origin: "https://google7676.top", endpoint: "/user/api/index/commodity", intervalMinutes: 30, maxPages: 5, pageSize: 100 },
   { id: "tehuio", name: "Tehuio", kind: "kami", origin: "https://tehuio.com", endpoint: "/user/api/index/commodity", intervalMinutes: 30, maxPages: 5, pageSize: 100 },
+  { id: "codesky", name: "花生店铺", kind: "kami", origin: "https://store.codesky.qzz.io", endpoint: "/user/api/index/commodity", intervalMinutes: 30, maxPages: 5, pageSize: 100 },
+  { id: "fk10886", name: "10886源头发卡网", kind: "kami", origin: "https://fk.10886.xyz", endpoint: "/user/api/index/commodity", intervalMinutes: 30, maxPages: 5, pageSize: 100 },
+  { id: "gugugaga", name: "Gpt全自助发货", kind: "kami", origin: "https://gugugugagaga.taootp.com", endpoint: "/user/api/index/commodity", intervalMinutes: 30, maxPages: 5, pageSize: 100 },
+  { id: "flyai", name: "FlyAI", kind: "dujiao", origin: "https://flyai.qzz.io", endpoint: "/api/v1/public/products", intervalMinutes: 30 },
+  { id: "otaor", name: "Acc-OTAOR", kind: "dujiao", origin: "https://acc.otaor.com", endpoint: "/api/v1/public/products", intervalMinutes: 30 },
+  { id: "whh985", name: "王哈哈AI", kind: "dujiao", origin: "https://shop.whh985.com", endpoint: "/api/v1/public/products", intervalMinutes: 30 },
+  { id: "aictk", name: "艾琳AI", kind: "dujiao", origin: "https://shop.aictk.shop", endpoint: "/api/v1/public/products", intervalMinutes: 30 },
+  { id: "ccdawang", name: "CC大王", kind: "dujiao", origin: "https://ccdawang.win", endpoint: "/api/v1/public/products", intervalMinutes: 30 },
   {
     id: "morimm",
     name: "MoriMM",
@@ -146,6 +154,7 @@ function shop(id, name, token) {
 export const DEFAULT_DIRECT_TARGET_IDS = Object.freeze([
   "aisou", "redeemgpt", "ai666", "shopcardai", "web3chirou", "morimm", "burstpro-ai", "ikunlove", "mooncake",
   "lynnzee", "zhanghao66", "yufenggpt", "google7676", "tehuio",
+  "codesky", "fk10886", "gugugaga", "flyai", "whh985", "aictk", "ccdawang",
 ]);
 
 export function directTargets(ids = DEFAULT_DIRECT_TARGET_IDS) {

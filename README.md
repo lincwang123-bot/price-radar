@@ -111,13 +111,22 @@ node radar.mjs import <raw.json>                # 历史 raw 快照回填（幂�
 | `yufenggpt` | 御风AI | Kami：`yufenggpt.com/user/api/index/commodity` | 30min |
 | `google7676` | 以太AI | Kami：`google7676.top/user/api/index/commodity` | 30min |
 | `tehuio` | Tehuio | Kami：`tehuio.com/user/api/index/commodity` | 30min |
+| `codesky` | 花生店铺 | Kami：`store.codesky.qzz.io/user/api/index/commodity` | 30min |
+| `fk10886` | 10886源头发卡网 | Kami：`fk.10886.xyz/user/api/index/commodity` | 30min |
+| `gugugaga` | Gpt全自助发货 | Kami：`gugugugagaga.taootp.com/user/api/index/commodity` | 30min |
+| `flyai` | FlyAI | Dujiao：`flyai.qzz.io/api/v1/public/products` | 30min |
+| `whh985` | 王哈哈AI | Dujiao：`shop.whh985.com/api/v1/public/products` | 30min |
+| `aictk` | 艾琳AI | Dujiao：`shop.aictk.shop/api/v1/public/products` | 30min |
+| `ccdawang` | CC大王 | Dujiao：`ccdawang.win/api/v1/public/products` | 30min |
 | `morimm` | MoriMM | Dujiao：`morimm.com/api/v1/public/products` | 30min |
 | `burstpro-ai` | BurstPro AI | Dujiao：`burstpro-ai.online/api/v1/public/products` | 30min |
 | `ikunlove` | IkunLove | IkunLove JSON：`ikunlove.best/api/shop/products` | 30min |
 | `mooncake` | Mooncake | Mooncake JS 目录：`fk1.ybkjs.top/mooncake-official-media/catalog.js` | 12h |
 | `wzyp-harvey`、`wzyp-paimon`、`wzyp-ai-choice`、`wzyp-direct`、`wzyp-lightyear` | 派大星、派蒙AI、AI优选站、GPTplus直营、光年AI | ShopApi：固定登记的 `wzyp.cn` 店铺，读取 `/shopApi/Shop/categoryList` 与 `/shopApi/Shop/goodsList` | 60min，非默认 |
 
-以上 14 个默认店铺均已在生产 VPS 验证可达。`web3chirou` 的 Kami 目录会出现“请求 100 条但首页仅返回 96 条”的情况；采集器在存在 `total` 时不再以单页长度提前结束，并用唯一 ID、重复页、连续空页和最大页数共同限定请求。Dujiao 多规格商品按 SKU 独立生成报价，只补充已确认的品牌名，不把父商品中的 Plus / Pro 5x / Pro 20x 混入每个 SKU。
+以上 21 个默认店铺均已在生产 VPS 验证可达。`web3chirou` 的 Kami 目录会出现“请求 100 条但首页仅返回 96 条”的情况；采集器在存在 `total` 时不再以单页长度提前结束，并用唯一 ID、重复页、连续空页和最大页数共同限定请求。Dujiao 多规格商品按 SKU 独立生成报价，只补充已确认的品牌名，不把父商品中的 Plus / Pro 5x / Pro 20x 混入每个 SKU。自动生成的 `SKU-1` 仅在单规格商品中回退到父标题，多规格仍不猜测。
+
+`otaor`（`acc.otaor.com`）仅登记为可选候选：2026-09-05 核验时所有商品都明确标为售罄，因此未加入默认来源；旧地址 `xtacc.top` 不重复计入。无法正常访问、返回挑战页或已不再是商品站的候选不启用。
 
 `wzyp.cn` 的 ShopApi 目标仍可在 `config.json` 中显式启用，但当前会对 airadar.vip 生产 VPS 返回 WAF 挑战页，因此不纳入生产默认列表，也不尝试绕过。
 
@@ -131,6 +140,8 @@ node radar.mjs import <raw.json>                # 历史 raw 快照回填（幂�
 - Perplexity Pro 和 Notion AI 商业版按 1 / 12 / 24 个月拆分，Manus 按 2000 / 5000 / 10000 积分拆分，Cursor 区分 Pro / Pro+ / Ultra 以及明确月卡和期限未注明，X Premium+ 与 Premium 单独排行。质保天数不用于推断订阅期限；永久权益、多个档位共用一个起售价以及多产品全家桶不进入单一订阅排行。
 - 补充 `Max5X`、`20×`、繁体接码等明确写法；API 中转优先于标题中的 Pro / Max 号池词识别。“库存紧张”保留为可购买报价。
 - Gemini 权限激活和权益领取链接单独展示，不参与完整订阅的最低价；历史走势也排除已明确改分到其他商品组的报价。
+- ChatGPT Plus 明确年卡代充单独分组；免费 GPT / Grok 账号不因附带 Outlook 邮箱或“成品”字样混入邮箱、付费订阅排行。
+- 直采快照 ID 包含内容指纹和本轮观察时间。每个通过节流检查的观察均独立入库，保留 A→B→A 的价格回归、报价不变时的新核验时间，以及失败后恢复的状态；旧快照不覆盖、不删除。
 
 页面展示的是原站公开商品列表中的**挂牌价**，不等同于最终结算价。优惠券、支付渠道、手续费、汇率、购买数量/规格和结账页变动都可能改变实付金额；ShopApi 采集器也不调用结算询价接口。购买前必须回到原店铺核对商品说明与最终应付金额。
 

@@ -10,6 +10,7 @@ import {
 
 const cases = [
   ["GPT PLUS 充值卡密(IOS美区质保)", "ChatGPT", "chatgpt-plus-recharge"],
+  ["ChatGPT Plus年卡 正价订阅 IOS CDK", "ChatGPT", "chatgpt-plus-recharge-12m"],
   ["ChatGPT plus-月卡 独享 成品号", "ChatGPT", "chatgpt-plus"],
   ["GPT PRO 5X 菲区代充1个月", "ChatGPT", "chatgpt-pro-5x"],
   ["GPT PRO X20 菲区代充1个月", "ChatGPT", "chatgpt-pro-20x"],
@@ -101,6 +102,8 @@ test("无法可靠识别的商品不进入公开排行", () => {
   assert.equal(classifyDirectOffer({ title: "节点加速教程", category: "教程" }), null);
   assert.equal(classifyDirectOffer({ title: "0 刀虚拟卡手搓 G Plus 教程", category: "ChatGPT Plus" }), null);
   assert.equal(classifyDirectOffer({ title: "Claude 成品账号 Free 版", category: "Claude Pro" }), null);
+  assert.equal(classifyDirectOffer({ title: "Grok 普号 | 成品帐密SSO | 可生图", category: "Grok" }), null);
+  assert.equal(classifyDirectOffer({ title: "Gpt-Free普号 | 账密 AT | outlook邮箱", category: "GPT" }), null);
   assert.equal(classifyDirectOffer({ title: "Claude Max 代充（倍数未注明）", category: "Claude" }), null);
   assert.equal(classifyDirectOffer({ title: "豆包专业版一个月 VIP 会员", category: "ChatGPT Plus" }), null);
   assert.equal(classifyDirectOffer({ title: "Instagram账号新建，手机号注册，开通2FA", category: "账号" }), null);

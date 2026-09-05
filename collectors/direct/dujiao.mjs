@@ -4,6 +4,11 @@ const PRODUCTS_PATH = "/api/v1/public/products";
 const ALLOWED_ORIGINS = new Set([
   "https://morimm.com",
   "https://burstpro-ai.online",
+  "https://flyai.qzz.io",
+  "https://acc.otaor.com",
+  "https://shop.whh985.com",
+  "https://shop.aictk.shop",
+  "https://ccdawang.win",
 ]);
 
 // Dujiao's public endpoint is paginated. These limits are deliberately fixed:
@@ -298,7 +303,7 @@ function localizedText(value) {
 
 function nonDefaultSkuCode(value) {
   const code = cleanText(value);
-  return code && !/^default$/i.test(code) ? code : "";
+  return code && !/^(?:default|sku[-_]?\d+)$/i.test(code) ? code : "";
 }
 
 function normalizedDeliveryMode(value) {

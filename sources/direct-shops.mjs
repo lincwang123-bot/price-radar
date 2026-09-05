@@ -64,7 +64,10 @@ export async function pull(ctx) {
   const products = groupDirectOffers(allOffers);
   if (!products.length) throw new Error("原始店铺未产出可确认分类的有效报价");
   const publishedOfferCount = products.reduce((count, product) => count + product.offers.length, 0);
-  const snapshotId = stableDirectSnapshotId(products.flatMap((product) => product.offers), staleTargets);
+  // 内容指纹不是观察事件 ID：A→B→A 必须产生第三个观察，否则历史去重
+  // 会让当前页面停在 B；相同报价的新一轮成功核验也需要保留新时间。
+  const contentId = stableDirectSnapshotId(products.flatMap((product) => product.offers), staleTargets);
+  const snapshotId = `${contentId}-${Date.parse(capturedAt)}`;
   const excludedCounts = allOffers.reduce((counts, offer) => {
     const reason = directOfferExclusionReason(offer);
     if (reason) counts[reason] += 1;

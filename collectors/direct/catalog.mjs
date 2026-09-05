@@ -6,6 +6,7 @@ const PRODUCTS = {
   "chatgpt-go": product("chatgpt-go", "ChatGPT Go", "ChatGPT", "订阅/会员"),
   "chatgpt-plus": product("chatgpt-plus", "ChatGPT Plus 成品号/共享", "ChatGPT", "账号/共享"),
   "chatgpt-plus-recharge": product("chatgpt-plus-recharge", "ChatGPT Plus 代充/卡密", "ChatGPT", "订阅/会员"),
+  "chatgpt-plus-recharge-12m": product("chatgpt-plus-recharge-12m", "ChatGPT Plus 代充/卡密 · 12 个月", "ChatGPT", "订阅/会员", "12 个月；以原店交付说明为准"),
   "chatgpt-pro-5x": product("chatgpt-pro-5x", "ChatGPT Pro 5x", "ChatGPT", "订阅/会员"),
   "chatgpt-pro-20x": product("chatgpt-pro-20x", "ChatGPT Pro 20x", "ChatGPT", "订阅/会员"),
   "chatgpt-team-business": product("chatgpt-team-business", "ChatGPT Team / Business", "ChatGPT", "团队席位/账号"),
@@ -60,6 +61,8 @@ export function classifyDirectOffer({ title, category = "", sourceId = "" }) {
   const categoryText = normalized(category);
   const text = normalized(`${category} ${title}`);
   if (!text) return null;
+  // 注册邮箱只是免费 AI 账号的附带属性，不应被当成独立邮箱报价。
+  if (/^(?:chat\s*gpt|gpt)\s*[- ]*(?:free\b|普号|账号免费版)/.test(titleText)) return null;
 
   // 邮箱标题经常带有“已注册 OpenAI”等用途说明，需先于订阅关键词判断。
   if (has(titleText, /gmail|outlook|hotmail|微软邮箱|谷歌邮箱|邮箱账号|邮箱老号|域名邮箱/) ||
@@ -119,6 +122,7 @@ export function classifyDirectOffer({ title, category = "", sourceId = "" }) {
 
   if (chatgpt && has(titleText, /不含\s*plus|无\s*plus|without\s+plus/i)) return null;
   if (claude && has(titleText, /\bfree\b|免费版/) && !has(titleText, /\bpro\b|max/i)) return null;
+  if (grok && has(titleText, /\bfree\b|免费版|普号|白号/)) return null;
   // 一个标题同时列出 5x 和 20x 时，目录价格无法对应具体 SKU，暂不发布。
   const fiveX = has(titleText, /(?:^|[^0-9])5\s*x|x\s*5(?!\d)/);
   const twentyX = has(titleText, /(?:^|[^0-9])20\s*x|x\s*20(?!\d)/);
@@ -141,9 +145,9 @@ export function classifyDirectOffer({ title, category = "", sourceId = "" }) {
     if (has(titleText, /5\s*x|x\s*5/)) return PRODUCTS["chatgpt-pro-5x"];
   }
   if (chatgpt && has(titleText, /\bplus(?:\b|(?=\d))|g\s*\+/)) {
-    return has(titleText, /成品|账号|共享|拼车|日抛|周抛|镜像|普号|体验|试用|trial|free\s*号|独享号/)
-      ? PRODUCTS["chatgpt-plus"]
-      : PRODUCTS["chatgpt-plus-recharge"];
+    if (has(titleText, /成品|账号|共享|拼车|日抛|周抛|镜像|普号|体验|试用|trial|free\s*号|独享号/)) return PRODUCTS["chatgpt-plus"];
+    if (singleSubscriptionMonths(titleText) === 12) return PRODUCTS["chatgpt-plus-recharge-12m"];
+    return PRODUCTS["chatgpt-plus-recharge"];
   }
 
   if (claude && has(titleText, /\bmax(?:\b|(?=\d))/)) {

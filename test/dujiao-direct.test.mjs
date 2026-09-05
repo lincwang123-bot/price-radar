@@ -150,6 +150,25 @@ test("Dujiao collector 只请求固定公开端点并按 pagination 有界翻页
   assert.ok(calls.every(({ init }) => init.method === "GET" && init.redirect === "manual"));
 });
 
+test("自动生成的 SKU-1 仅在单规格时回退父标题，多规格不得冒用起售价", () => {
+  const base = {id: 50, slug: "gemini-link", title: {"zh-CN": "Gemini 18月链接CDK兑换"}, fulfillment_type: "auto"};
+  const sku = {id: 1, sku_code: "SKU-1", spec_values: {}, price_amount: 8.5, auto_stock_available: 2, is_active: true};
+  const one = parseDujiaoProducts({data: [{...base, skus: [sku]}]}, burstTarget, capturedAt);
+  assert.equal(one[0].title, "Gemini 18月链接CDK兑换");
+  assert.equal(groupDirectOffers(one)[0].productId, "gemini-claim-link");
+  const multiple = parseDujiaoProducts({data: [{...base, skus: [sku, {...sku, id: 2, sku_code: "SKU-2"}]}]}, burstTarget, capturedAt);
+  assert.deepEqual(multiple, []);
+});
+
+test("父商品标为售罄时，不因 SKU 残留库存发布有货报价", () => {
+  const offers = parseDujiaoProducts({data: [{
+    id: 31, title: {"zh-CN": "ChatGPT Plus 月卡"}, fulfillment_type: "auto", is_sold_out: true, stock_status: "out_of_stock",
+    skus: [{id: 34, sku_code: "DEFAULT", price_amount: 125, auto_stock_available: 6, is_active: true}],
+  }]}, burstTarget, capturedAt);
+  assert.equal(offers[0].status, "out_of_stock");
+  assert.deepEqual(groupDirectOffers(offers), []);
+});
+
 test("Dujiao collector 在网络请求前拒绝未登记来源", async () => {
   let called = false;
   await assert.rejects(
