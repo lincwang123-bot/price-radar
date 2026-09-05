@@ -15,4 +15,4 @@ PrivateTmp=true
 ProtectHome=true
 ProtectSystem=strict
 ReadWritePaths=/opt/linc/backups/price-radar/submissions
-
+ReadWritePaths=/opt/linc/backups/price-radar/analytics

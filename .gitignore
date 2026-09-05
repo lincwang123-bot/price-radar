@@ -1,6 +1,7 @@
 # 本地运行数据与通知/访问配置：不得发布到 GitHub。
 data/
 backups/
+analytics/
 *.log
 *.sqlite
 *.sqlite-shm

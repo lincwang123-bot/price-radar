@@ -220,12 +220,18 @@ async function cmdServe(config, db) {
   }
   const { startWeb } = await import("./lib/web.mjs");
   const submissionsDb = openSubmissionsDb(submissionsDbPath(config));
-  const app = await startWeb({ db, submissionsDb, host, port });
+  let analytics=null;
+  if(process.env.ANALYTICS_DB_PATH&&process.env.ANALYTICS_HASH_SECRET){
+    try{const {openAnalytics}=await import("./lib/analytics.mjs");analytics=openAnalytics(process.env.ANALYTICS_DB_PATH,process.env.ANALYTICS_HASH_SECRET);}
+    catch{console.error("[analytics] startup unavailable; public pages remain available");}
+  }
+  const app = await startWeb({ db, submissionsDb, analytics, host, port });
   const shutdown = () => {
     console.log("\n[web] 停止。");
     app.close(() => {
       try { submissionsDb.close(); } catch {}
       try { db.close(); } catch {}
+      try { analytics?.close(); } catch {}
       process.exit(0);
     });
   };
@@ -244,6 +250,7 @@ async function main() {
     const { backupSubmissions } = await import("./lib/backup.mjs");
     const directory = process.env.SUBMISSIONS_BACKUP_DIR || path.join(path.dirname(config.dataDir), "backups", "submissions");
     console.log(JSON.stringify(await backupSubmissions(path.resolve(submissionsDbPath(config)), path.resolve(directory))));
+    if(process.env.ANALYTICS_DB_PATH&&process.env.ANALYTICS_BACKUP_DIR)console.log(JSON.stringify(await backupSubmissions(process.env.ANALYTICS_DB_PATH,process.env.ANALYTICS_BACKUP_DIR,{kind:"analytics"})));
     return 0;
   }
 

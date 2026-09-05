@@ -155,6 +155,16 @@ PriceAI 官方仓库当前 `main` 使用 [PriceAI Source Available License 1.0](
 
 ### 站长后台与投稿备份
 
+### 第一方访问统计（2026-09-05）
+
+当前使用VPS第一方服务器统计，不依赖Cloudflare付费产品或另一个追踪脚本。后台 `/admin/analytics` 提供7/30天页面访问量、访客估算、区间重新去重、趋势和仅认证可导出的按日CSV；未开始统计的历史显示“未采集”。这不是精准真人PV，也不是实际人数，共享网络可能合并、换IP或浏览器可能重复。
+
+只信任当前本机Tunnel转发的 `CF-Connecting-IP`，不信任任意XFF；缺少可信IP不计。HMAC去标识摘要在线保留31天、按日汇总长期保留，不存原始IP、完整UA、查询参数或表单信息。后台、API、提交页、HEAD、错误页、预取、管理员和已知机器人不计；每标识每分钟最多60次、全站最多600次。统计写入在响应结束后执行，锁等待上限5ms，故障不影响公开页。公开隐私说明：`/privacy`。
+
+统计库固定到 `ANALYTICS_DB_PATH=/opt/linc/apps/price-radar/analytics/analytics.sqlite`，备份到 `ANALYTICS_BACKUP_DIR=/opt/linc/backups/price-radar/analytics`，均不进Git或代码同步删除范围。每日备份同时覆盖投稿与统计库，最多14份，均经过隔离恢复检查。
+
+管理员用户名、scrypt hash与统计HMAC密钥独立存于服务器root所有、0600的 `/etc/price-radar/web.env`，只由Web单元读取；collector的文件系统禁止访问投稿、统计、备份与Web配置。首次配置可在本机运行 `node scripts/provision-admin.mjs <仓库外私密目录绝对路径>`，自动生成强随机口令到本机0600交付文件，仅将hash送往服务器，拒绝覆盖既有配置。不要将该文件提交Git、发送聊天或打印内容。
+
 `/admin` 是独立的站长模块。没有同时配置 `ADMIN_USERNAME`、`ADMIN_PASSWORD_HASH` 和 HTTPS `PUBLIC_ORIGIN` 时返回 404；本次实现不会自动创建账号。口令 hash 格式由 `lib/admin.mjs` 的 `hashAdminPassword()` 生成（scrypt，口令至少 16 字符），原口令不得写入仓库、命令行参数或聊天。会话有效期 1 小时，退出或服务重启后失效；状态与内部备注在同一事务中追加操作审计，后台不提供删除投稿、改价、自动上架或对外联系功能。
 
 使用 `node radar.mjs backup-submissions` 执行 SQLite 在线备份，包含已提交的 WAL。`SUBMISSIONS_BACKUP_DIR` 必须是独立绝对路径；生产模板使用 `/opt/linc/backups/price-radar/submissions`，备份文件 0600、目录 0700，默认保留最近 14 份。每份在临时目录恢复并执行 `quick_check` 与表计数，再成为可用备份。此过程不覆盖生产数据库，也不输出投稿正文。`price-radar-backup.timer` 每天 UTC 19:40 左右运行（北京时间次日 03:40），掉线期间错过的任务在恢复后补跑。

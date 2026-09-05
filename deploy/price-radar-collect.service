@@ -15,6 +15,10 @@ Restart=on-failure
 RestartSec=8s
 NoNewPrivileges=true
 PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/linc/apps/price-radar/data
+InaccessiblePaths=/opt/linc/apps/price-radar/submissions /opt/linc/apps/price-radar/analytics /opt/linc/backups/price-radar /etc/price-radar/web.env
 
 [Install]
 WantedBy=multi-user.target

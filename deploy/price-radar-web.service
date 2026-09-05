@@ -10,6 +10,7 @@ User=deploy
 Group=deploy
 WorkingDirectory=/opt/linc/apps/price-radar
 EnvironmentFile=-/opt/linc/apps/price-radar/.env
+EnvironmentFile=-/etc/price-radar/web.env
 ExecStart=/usr/bin/node --disable-warning=ExperimentalWarning radar.mjs serve --host 127.0.0.1 --port 18090
 Restart=on-failure
 RestartSec=5s
@@ -18,6 +19,7 @@ PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=true
 ReadWritePaths=/opt/linc/apps/price-radar/submissions
+ReadWritePaths=/opt/linc/apps/price-radar/analytics
 UMask=0077
 
 [Install]
