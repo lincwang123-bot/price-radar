@@ -38,7 +38,7 @@ test("原店直采报价支持翻页，PriceAI Top 5 可跳转完整直采排行
   }
 });
 
-test("原店历史走势重算并排除旧快照中的售罄与无质保低价", async () => {
+test("原店历史走势排除售罄与无质保低价，但保留库存紧张的可售报价", async () => {
   const db = openDb(":memory:");
   const server = createApp({ db });
   try {
@@ -55,7 +55,7 @@ test("原店历史走势重算并排除旧快照中的售罄与无质保低价",
     storeSnapshot(db, directHistorySnapshot(
       "direct-history-new",
       "2026-09-05T01:00:00.000Z",
-      [historyOffer("valid-new", "GPT PRO 20X 菲区代充1个月", 1060, "in_stock", 2)],
+      [historyOffer("valid-new", "GPT PRO 20X 菲区代充1个月", 1060, "low_stock", 2)],
       1060,
     ));
 

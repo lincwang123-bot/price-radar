@@ -23,8 +23,8 @@ const cases = [
   ["Gemini Pro 12个月成品号", "Gemini", "gemini-pro-recharge"],
   ["Gemini Ultra 独享月卡", "Gemini", "gemini-ultra"],
   ["Super Grok Heavy 月卡", "Grok", "super-grok-heavy"],
-  ["X Premium+ 年卡", "X", "x-twitter-premium"],
-  ["X-Twitter Premium+自助卡密（赠送Super Grok）", "X", "x-twitter-premium"],
+  ["X Premium+ 年卡", "X", "x-twitter-premium-plus"],
+  ["X-Twitter Premium+自助卡密（赠送Super Grok）", "X", "x-twitter-premium-plus"],
   ["Codex 点数额度充值", "ChatGPT", "api-cdk-credits"],
   ["OpenAI 哥伦比亚手机号短效接码 SMS", "ChatGPT", "verification-service"],
   ["Gmail 老号带辅助邮箱", "邮箱", "email-accounts"],
@@ -34,6 +34,64 @@ test("明确的原店商品映射到稳定产品分类", () => {
   for (const [title, category, expected] of cases) {
     assert.equal(classifyDirectOffer({ title, category })?.id, expected, title);
   }
+});
+
+test("扩充原店标题写法，且 API 与组合套餐不冒充高价订阅", () => {
+  for (const [title, category, expected] of [
+    ["Claude 正价Max5X", "Claude", "claude-max-5x"],
+    ["Claude 正价Max20X", "Claude", "claude-max-20x"],
+    ["【质保30天】GPT PRO 20× 正规代充", "ChatGPT", "chatgpt-pro-20x"],
+    ["ChatGPT plus30天会员", "ChatGPT", "chatgpt-plus-recharge"],
+    ["gopay GOJEK長效接碼 印尼", "SMS接碼服務", "verification-service"],
+    ["Gpt/Codex 美国实卡手机号 临时单次", "实卡/接码", "verification-service"],
+    ["Mail.tm长效邮箱", "邮箱产品", "email-accounts"],
+    ["满年谷歌账号", "Google 邮箱", "email-accounts"],
+    ["推特蓝V-Premium一个月", "推特电报会员服务", "x-twitter-premium"],
+    ["推特蓝V-Premium➕ 一个月", "推特电报会员服务", "x-twitter-premium-plus"],
+    ["100刀Codex API中转额度(纯Pro号池)", "ChatGPT业务", "api-cdk-credits"],
+    ["AI平台直充100美元额度-Claude Opus / Max / 官API", "Claude API", "api-cdk-credits"],
+  ]) assert.equal(classifyDirectOffer({title, category})?.id, expected, title);
+  for (const title of ["Claude MAX5x/20x 官方订阅", "GPT Pro 5x 和 20x 版本", "GPT PLUS 月年卡", "GPT PLUS 月卡/年卡"]) {
+    assert.equal(classifyDirectOffer({title, category:'ChatGPT'}) , null, title);
+  }
+  const titled = {title:'1个月PLUS代充 订阅质保 IOS 渠道', category:'CDK'};
+  assert.equal(classifyDirectOffer({...titled,sourceId:'redeemgpt'})?.id, 'chatgpt-plus-recharge');
+  assert.equal(classifyDirectOffer({...titled,sourceId:'unknown'}), null);
+});
+
+test("新 AI 品类按套餐、期限和额度区分，不从质保天数推断订阅周期", () => {
+  for (const [title, category, expected] of [
+    ['Perplexity Pro 自助充值月卡','Perplexity','perplexity-pro-1m'],
+    ['perplexity-年卡-独享','perplexity pro','perplexity-pro-12m'],
+    ['perplexity pro-两年卡-独享','perplexity pro','perplexity-pro-24m'],
+    ['NotionAI商业版-月卡','Notion AI','notion-ai-business-1m'],
+    ['NotionAI商业版-年卡','Notion AI','notion-ai-business-12m'],
+    ['NotionAI商业版-两年卡','Notion AI','notion-ai-business-24m'],
+    ['Manus-2000积分','Manus','manus-2000-credits'],
+    ['Manus-5000积分','Manus','manus-5000-credits'],
+    ['Manus-10000积分','Manus','manus-10000-credits'],
+    ['Cursor月卡--质保','Cursor Pro','cursor-pro-1m'],
+    ['cursor pro 20美刀成品会员账号【质保28天】','cursor','cursor-pro'],
+    ['cursor pro+ 60美刀成品会员账号【质保28天】','cursor','cursor-pro-plus'],
+    ['cursor ulrta 200美刀成品会员账号【质保28天】','cursor','cursor-ultra'],
+  ]) assert.equal(classifyDirectOffer({title,category})?.id,expected,title);
+  for (const title of ['Perplexity Pro 永久卡', 'Perplexity Pro 月卡/年卡', 'Manus-2000/5000积分', 'Cursor Free 普号', 'NotionAI商业版-永久卡', '五大AI全家桶年卡(包含gemini pro,perplexity pro,claude pro)']) {
+    assert.equal(classifyDirectOffer({title}),null,title);
+  }
+  assert.equal(classifyDirectOffer({title:'Claude 普号Google邮箱注册',category:'Claude'}),null);
+  assert.equal(classifyDirectOffer({title:'mail.com邮箱 普号注册专用',category:'邮箱产品'})?.id,'email-accounts');
+});
+
+test("库存紧张属于可购买报价，且新类别仍排除售罄与无质保商品", () => {
+  const products=groupDirectOffers([
+    {...offer('low','Perplexity Pro 月卡',36,'low_stock'),stockCount:null},
+    offer('sold','Perplexity Pro 月卡',1,'out_of_stock'),
+    offer('bare','Perplexity Pro 月卡 无质保',2,'in_stock'),
+  ]);
+  assert.equal(products.length,1);
+  assert.equal(products[0].lowestPrice,36);
+  assert.equal(products[0].inStockCount,1);
+  assert.equal(products[0].offerCount,1);
 });
 
 test("无法可靠识别的商品不进入公开排行", () => {

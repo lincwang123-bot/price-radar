@@ -6,8 +6,9 @@ import { DEFAULT_DIRECT_TARGET_IDS, directTargets } from "../collectors/direct/r
 test("默认直采列表只启用生产 VPS 已验证可达的目标", () => {
   assert.deepEqual(DEFAULT_DIRECT_TARGET_IDS, [
     "aisou", "redeemgpt", "ai666", "shopcardai", "web3chirou", "morimm", "burstpro-ai", "ikunlove", "mooncake",
+    "lynnzee", "zhanghao66", "yufenggpt", "google7676", "tehuio",
   ]);
-  assert.equal(directTargets().length, 9);
+  assert.equal(directTargets().length, 14);
   assert.equal(directTargets(["wzyp-harvey"])[0].token, "harvey");
 });
 
@@ -33,7 +34,18 @@ test("新 Kami 原站均固定登记，仅高价值可达源默认启用", () =>
     ],
   );
   assert.ok(DEFAULT_DIRECT_TARGET_IDS.includes("web3chirou"));
-  assert.ok(!DEFAULT_DIRECT_TARGET_IDS.some((id) => ["lynnzee", "zhanghao66"].includes(id)));
+  assert.ok(["lynnzee", "zhanghao66"].every(id => DEFAULT_DIRECT_TARGET_IDS.includes(id)));
+});
+
+test("新增 Kami 目标固定登记原站路径与请求上限", () => {
+  for (const target of directTargets(["yufenggpt", "google7676", "tehuio"])) {
+    assert.equal(target.kind, "kami");
+    assert.equal(target.endpoint, "/user/api/index/commodity");
+    assert.equal(target.maxPages, 5);
+    assert.equal(target.pageSize, 100);
+    assert.equal(target.intervalMinutes, 30);
+    assert.ok(DEFAULT_DIRECT_TARGET_IDS.includes(target.id));
+  }
 });
 
 test("未登记目标不能把直采器当作任意代理", () => {

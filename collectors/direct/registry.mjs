@@ -77,6 +77,9 @@ const TARGETS = [
     maxPages: 5,
     pageSize: 100,
   },
+  { id: "yufenggpt", name: "御风AI", kind: "kami", origin: "https://yufenggpt.com", endpoint: "/user/api/index/commodity", intervalMinutes: 30, maxPages: 5, pageSize: 100 },
+  { id: "google7676", name: "以太AI", kind: "kami", origin: "https://google7676.top", endpoint: "/user/api/index/commodity", intervalMinutes: 30, maxPages: 5, pageSize: 100 },
+  { id: "tehuio", name: "Tehuio", kind: "kami", origin: "https://tehuio.com", endpoint: "/user/api/index/commodity", intervalMinutes: 30, maxPages: 5, pageSize: 100 },
   {
     id: "morimm",
     name: "MoriMM",
@@ -142,6 +145,7 @@ function shop(id, name, token) {
 // 生产 VPS 返回 WAF 挑战页。它们保留为显式可选目标，不在默认列表中启用。
 export const DEFAULT_DIRECT_TARGET_IDS = Object.freeze([
   "aisou", "redeemgpt", "ai666", "shopcardai", "web3chirou", "morimm", "burstpro-ai", "ikunlove", "mooncake",
+  "lynnzee", "zhanghao66", "yufenggpt", "google7676", "tehuio",
 ]);
 
 export function directTargets(ids = DEFAULT_DIRECT_TARGET_IDS) {

@@ -95,7 +95,7 @@ node radar.mjs import <raw.json>                # 历史 raw 快照回填（幂�
 
 ## 原始店铺直采（`direct-shops`）
 
-`direct-shops` 是本项目独立实现的原始店铺公开目录采集器，与 `priceai` 的 Top 5 公开快照是两个独立数据源：分别拉取、缓存并生成快照。直采目标不从 PriceAI 的 Top 5 或线上渠道表导入，PriceAI 也不作为直采失败时的回退；跨源商品仍须由业务侧确认是否等价。
+`direct-shops` 是本项目独立实现的原始店铺公开目录采集器，与 `priceai` 的 Top 5 公开快照是两个独立数据源：分别拉取、缓存并生成快照。候选店铺可通过公开商品链接发现，经原站和生产 VPS 核验后人工登记；不会自动导入第三方完整渠道表，PriceAI 也不作为直采失败时的回退。跨源商品仍须由业务侧确认是否等价。
 
 首批来源是代码内固定登记的公开 HTTPS 入口：
 
@@ -106,13 +106,18 @@ node radar.mjs import <raw.json>                # 历史 raw 快照回填（幂�
 | `ai666` | AI666 | Kami：`ai666.id/user/api/index/commodity` | 30min |
 | `shopcardai` | CardAI | Kami：`shopcardai.click/user/api/index/commodity` | 30min |
 | `web3chirou` | 蔚莱云AI | Kami：`web3chirou.com/user/api/index/commodity` | 60min |
+| `lynnzee` | LynnZee | Kami：`lynnzee.myweb999.cfd/user/api/index/commodity` | 30min |
+| `zhanghao66` | 账号66 | Kami：`zhanghao66.com/user/api/index/commodity` | 30min |
+| `yufenggpt` | 御风AI | Kami：`yufenggpt.com/user/api/index/commodity` | 30min |
+| `google7676` | 以太AI | Kami：`google7676.top/user/api/index/commodity` | 30min |
+| `tehuio` | Tehuio | Kami：`tehuio.com/user/api/index/commodity` | 30min |
 | `morimm` | MoriMM | Dujiao：`morimm.com/api/v1/public/products` | 30min |
 | `burstpro-ai` | BurstPro AI | Dujiao：`burstpro-ai.online/api/v1/public/products` | 30min |
 | `ikunlove` | IkunLove | IkunLove JSON：`ikunlove.best/api/shop/products` | 30min |
 | `mooncake` | Mooncake | Mooncake JS 目录：`fk1.ybkjs.top/mooncake-official-media/catalog.js` | 12h |
 | `wzyp-harvey`、`wzyp-paimon`、`wzyp-ai-choice`、`wzyp-direct`、`wzyp-lightyear` | 派大星、派蒙AI、AI优选站、GPTplus直营、光年AI | ShopApi：固定登记的 `wzyp.cn` 店铺，读取 `/shopApi/Shop/categoryList` 与 `/shopApi/Shop/goodsList` | 60min，非默认 |
 
-`web3chirou`、`morimm` 与 `burstpro-ai` 已在生产 VPS 验证可达。`web3chirou` 的 Kami 目录会出现“请求 100 条但首页仅返回 96 条”的情况；采集器在存在 `total` 时不再以单页长度提前结束，并用唯一 ID、重复页、连续空页和最大页数共同限定请求。Dujiao 多规格商品按 SKU 独立生成报价，只补充已确认的品牌名，不把父商品中的 Plus / Pro 5x / Pro 20x 混入每个 SKU。`lynnzee` 与 `zhanghao66` 仅保留为显式可选目标，不纳入生产默认。
+以上 14 个默认店铺均已在生产 VPS 验证可达。`web3chirou` 的 Kami 目录会出现“请求 100 条但首页仅返回 96 条”的情况；采集器在存在 `total` 时不再以单页长度提前结束，并用唯一 ID、重复页、连续空页和最大页数共同限定请求。Dujiao 多规格商品按 SKU 独立生成报价，只补充已确认的品牌名，不把父商品中的 Plus / Pro 5x / Pro 20x 混入每个 SKU。
 
 `wzyp.cn` 的 ShopApi 目标仍可在 `config.json` 中显式启用，但当前会对 airadar.vip 生产 VPS 返回 WAF 挑战页，因此不纳入生产默认列表，也不尝试绕过。
 
@@ -123,6 +128,8 @@ node radar.mjs import <raw.json>                # 历史 raw 快照回填（幂�
 - 每个目标成功后原子更新本地缓存。某目标首次采集失败且没有可用缓存时，整轮 `direct-shops` 不发布不完整快照；已有缓存时沿用该目标上次的完整结果，并把汇总快照标记为 `stale: true`。请求失败不等同于商品下架或无货。
 - 原始缓存会保留店铺返回的完整商品状态，便于核对采集结果；公开快照会排除售罄商品，以及标题明确标注“无质保 / 无售后”的商品。它们不参与最低价、报价排行或产品计数，避免用不可购买或无保障的异常低价误导用户。
 - 只发布能可靠归入本项目商品分类的条目；无法确认分类的商品保留在采集统计中，但不进入报价快照。
+- Perplexity Pro 和 Notion AI 商业版按 1 / 12 / 24 个月拆分，Manus 按 2000 / 5000 / 10000 积分拆分，Cursor 区分 Pro / Pro+ / Ultra 以及明确月卡和期限未注明，X Premium+ 与 Premium 单独排行。质保天数不用于推断订阅期限；永久权益、多个档位共用一个起售价以及多产品全家桶不进入单一订阅排行。
+- 补充 `Max5X`、`20×`、繁体接码等明确写法；API 中转优先于标题中的 Pro / Max 号池词识别。“库存紧张”保留为可购买报价。
 
 页面展示的是原站公开商品列表中的**挂牌价**，不等同于最终结算价。优惠券、支付渠道、手续费、汇率、购买数量/规格和结账页变动都可能改变实付金额；ShopApi 采集器也不调用结算询价接口。购买前必须回到原店铺核对商品说明与最终应付金额。
 

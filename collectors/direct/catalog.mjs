@@ -17,19 +17,33 @@ const PRODUCTS = {
   "super-grok": product("super-grok", "Super Grok", "Grok", "订阅/会员"),
   "super-grok-heavy": product("super-grok-heavy", "Super Grok Heavy", "Grok", "订阅/会员"),
   "x-twitter-premium": product("x-twitter-premium", "X Premium", "X", "订阅/会员"),
+  "x-twitter-premium-plus": product("x-twitter-premium-plus", "X Premium+", "X", "订阅/会员"),
+  ...Object.fromEntries([1, 12, 24].flatMap((months) => [
+    [`perplexity-pro-${months}m`, product(`perplexity-pro-${months}m`, `Perplexity Pro · ${months} 个月`, "Perplexity", "订阅/会员", `${months} 个月；以原店交付说明为准`)],
+    [`notion-ai-business-${months}m`, product(`notion-ai-business-${months}m`, `Notion AI 商业版 · ${months} 个月`, "Notion AI", "订阅/会员", `${months} 个月；以原店交付说明为准`)],
+  ])),
+  ...Object.fromEntries([2000, 5000, 10000].map((credits) => [
+    `manus-${credits}-credits`, product(`manus-${credits}-credits`, `Manus · ${credits} 积分`, "Manus", "积分/额度", `${credits} 积分；以原店交付说明为准`),
+  ])),
+  ...Object.fromEntries([["pro", "Pro"], ["pro-plus", "Pro+"], ["ultra", "Ultra"]].flatMap(([id, name]) => [
+    [`cursor-${id}`, product(`cursor-${id}`, `Cursor ${name} · 期限未注明`, "Cursor", "订阅/账号", "订阅期限未注明；质保天数不代表订阅周期")],
+    [`cursor-${id}-1m`, product(`cursor-${id}-1m`, `Cursor ${name} · 1 个月`, "Cursor", "订阅/账号", "1 个月；以原店交付说明为准")],
+  ])),
   "api-cdk-credits": product("api-cdk-credits", "API / CDK / 额度", "API/CDK", "额度/开发服务"),
   "verification-service": product("verification-service", "接码 / 验证服务", "接码", "辅助服务"),
   "email-accounts": product("email-accounts", "邮箱账号", "邮箱", "账号"),
 };
 
-function product(id, name, platform, productType) {
-  return Object.freeze({ id, name, platform, productType, spec: "原始店铺直采" });
+function product(id, name, platform, productType, spec = "原始店铺直采") {
+  return Object.freeze({ id, name, platform, productType, spec });
 }
 
 function normalized(value) {
   return String(value ?? "")
     .normalize("NFKC")
     .toLowerCase()
+    .replace(/[×✕✖]/g, "x")
+    .replace(/接碼/g, "接码")
     .replace(/[\u2010-\u2015_\/|【】()[\]（）·:：,，]+/g, " ")
     .replace(/\s+/g, " ")
     .trim();
@@ -39,35 +53,74 @@ function has(text, pattern) {
   return pattern.test(text);
 }
 
-export function classifyDirectOffer({ title, category = "" }) {
+export function classifyDirectOffer({ title, category = "", sourceId = "" }) {
   const titleText = normalized(title);
   const categoryText = normalized(category);
   const text = normalized(`${category} ${title}`);
   if (!text) return null;
 
   // 邮箱标题经常带有“已注册 OpenAI”等用途说明，需先于订阅关键词判断。
-  if (has(titleText, /gmail|outlook|hotmail|微软邮箱|谷歌邮箱|邮箱账号|邮箱老号|域名邮箱/)) {
+  if (has(titleText, /gmail|outlook|hotmail|微软邮箱|谷歌邮箱|邮箱账号|邮箱老号|域名邮箱/) ||
+      (has(categoryText, /^邮箱产品$/) && has(titleText, /mail\.com|mail\.tm|rambler|gmx|firstmail/))) {
     return PRODUCTS["email-accounts"];
   }
   // “手机号注册”只是账号属性，不等于卖家在提供接码服务。
-  if (has(titleText, /接码|接马|验证码|短信验证|\bsms\b|phone\s*(?:number|verify)|手机号\s*(?:接码|验证|接收)/i)) {
+  if (has(titleText, /接码|接马|验证码|短信验证|\bsms\b|phone\s*(?:number|verify)|手机号\s*(?:接码|验证|接收)/i) ||
+      (has(categoryText, /^实卡\s*接码$/) && has(titleText, /手机号/) && has(titleText, /临时|单次/))) {
     return PRODUCTS["verification-service"];
   }
   // 纯教程/额度说明不是会员报价，避免把低价资料当成代充最低价。
   if (has(titleText, /教程|教学|攻略|邀请额度/) && !has(titleText, /直充|代充|卡密|成品|月卡|年卡|会员|账号/)) {
     return null;
   }
+  if (has(titleText, /补差价|差价专用|月年卡|月卡\s*年卡|全家桶|多合一/)) return null;
+
+  // API 商品经常同时提及 Pro / Max 号池，必须先于订阅套餐识别。
+  const aiService = /codex|openai|chat\s*gpt|\bgpt\b|claude|gemini|\bgrok\b/i;
+  if ((has(titleText, /\bapi\b|中转/i) && has(titleText, aiService)) || has(titleText, /api\s*中转|中转\s*api|api中转站|中转站/i)) {
+    return PRODUCTS["api-cdk-credits"];
+  }
+
+  if (has(titleText, /perplexity/)) {
+    if (!has(titleText, /\bpro\b/) && categoryText !== "perplexity pro") return null;
+    const months = singleSubscriptionMonths(titleText);
+    return PRODUCTS[`perplexity-pro-${months}m`] ?? null;
+  }
+  if (has(titleText, /notion\s*ai/) && has(titleText, /商业版|business/)) {
+    const months = singleSubscriptionMonths(titleText);
+    return PRODUCTS[`notion-ai-business-${months}m`] ?? null;
+  }
+  if (has(titleText, /\bmanus\b/) && has(titleText, /积分|credits/)) {
+    const amounts = [...titleText.matchAll(/\d[\d,]*/g)].map((match) => Number(match[0].replaceAll(",", "")));
+    return amounts.length === 1 ? PRODUCTS[`manus-${amounts[0]}-credits`] ?? null : null;
+  }
+  if (has(titleText, /cursor/)) {
+    if (has(titleText, /\bfree\b|普号|白号|试用/)) return null;
+    const tier = has(titleText, /ultra|ulrta/) ? "ultra"
+      : has(titleText, /pro\s*(?:\+|plus|➕)/) ? "pro-plus"
+      : has(titleText, /\bpro\b/) || categoryText === "cursor pro" ? "pro" : null;
+    if (!tier) return null;
+    const months = singleSubscriptionMonths(titleText);
+    if (months === 1) return PRODUCTS[`cursor-${tier}-1m`];
+    if (months === undefined) return PRODUCTS[`cursor-${tier}`];
+    return null;
+  }
 
   // 品牌和套餐必须在商品标题中出现；店铺分类只做辅助信息。
   // 否则某个“ChatGPT Plus”分类下误放的其他品牌商品会污染最低价。
   const chatgpt = has(titleText, /chat\s*gpt|openai|\bgpt\b|\bg\s*plus\b|\bgplus\b|codex/i) ||
-    (has(categoryText, /chat\s*gpt|openai/i) && has(titleText, /\bplus\b|\bpro\b|pro(?=\d)|team|business|\bgo\b|(?:5|20)\s*x|x\s*(?:5|20)/i));
+    (has(categoryText, /chat\s*gpt|openai/i) && has(titleText, /\bplus\b|\bpro\b|pro(?=\d)|team|business|\bgo\b|(?:5|20)\s*x|x\s*(?:5|20)/i)) ||
+    (sourceId === "redeemgpt" && categoryText === "cdk" && has(titleText, /1个月plus代充/) && has(titleText, /ios/));
   const claude = has(titleText, /claude|cladue/i);
   const gemini = has(titleText, /gemini|google\s*ai|反重力|antigravity/i);
   const grok = has(titleText, /super\s*grok|\bgrok\b|\bgokr\b|\bgork\b/i);
 
   if (chatgpt && has(titleText, /不含\s*plus|无\s*plus|without\s+plus/i)) return null;
   if (claude && has(titleText, /\bfree\b|免费版/) && !has(titleText, /\bpro\b|max/i)) return null;
+  // 一个标题同时列出 5x 和 20x 时，目录价格无法对应具体 SKU，暂不发布。
+  const fiveX = has(titleText, /(?:^|[^0-9])5\s*x|x\s*5(?!\d)/);
+  const twentyX = has(titleText, /(?:^|[^0-9])20\s*x|x\s*20(?!\d)/);
+  if ((chatgpt || claude) && fiveX && twentyX) return null;
 
   if (chatgpt && has(titleText, /team|business|团队|席位|母号|车位/)) {
     return PRODUCTS["chatgpt-team-business"];
@@ -85,13 +138,13 @@ export function classifyDirectOffer({ title, category = "" }) {
     if (has(titleText, /20\s*x|x\s*20/)) return PRODUCTS["chatgpt-pro-20x"];
     if (has(titleText, /5\s*x|x\s*5/)) return PRODUCTS["chatgpt-pro-5x"];
   }
-  if (chatgpt && has(titleText, /\bplus\b|g\s*\+/)) {
+  if (chatgpt && has(titleText, /\bplus(?:\b|(?=\d))|g\s*\+/)) {
     return has(titleText, /成品|账号|共享|拼车|日抛|周抛|镜像|普号|体验|试用|trial|free\s*号|独享号/)
       ? PRODUCTS["chatgpt-plus"]
       : PRODUCTS["chatgpt-plus-recharge"];
   }
 
-  if (claude && has(titleText, /\bmax\b/)) {
+  if (claude && has(titleText, /\bmax(?:\b|(?=\d))/)) {
     if (has(titleText, /20\s*x|x\s*20/)) return PRODUCTS["claude-max-20x"];
     if (has(titleText, /5\s*x|x\s*5/)) return PRODUCTS["claude-max-5x"];
     // Max 不应因为标题同时含“代充 / 月卡”而掉入 Pro 排行。
@@ -105,7 +158,8 @@ export function classifyDirectOffer({ title, category = "" }) {
   }
 
   // X Premium 套餐可能把 Super Grok 写成附赠权益；主商品仍应归 X。
-  if (has(titleText, /(?:^|\s)(?:x|twitter)(?:\s|$|-)/) && has(titleText, /premium|会员|蓝标|蓝v/)) {
+  if (has(titleText, /(?:^|\s)(?:x|twitter)(?:\s|$|-)|推特/) && has(titleText, /premium|会员|蓝标|蓝\s*v/)) {
+    if (has(titleText, /premium\s*(?:\+|➕|plus)/)) return PRODUCTS["x-twitter-premium-plus"];
     return PRODUCTS["x-twitter-premium"];
   }
 
@@ -114,15 +168,25 @@ export function classifyDirectOffer({ title, category = "" }) {
 
   // API/CDK 必须出现 AI 品牌上下文，或明确写成“API 中转”。
   // 不再因 Twitter 账号的 token 登录、Graph API 等通用词误分类。
-  const aiService = /codex|openai|chat\s*gpt|\bgpt\b|claude|gemini|\bgrok\b/i;
   const apiService = /api|中转|额度|点数|token|余额|兑换码|\bcdk\b/i;
   if (has(titleText, /api\s*中转|中转\s*api|api中转站|中转站/i) || (has(titleText, aiService) && has(titleText, apiService))) {
     return PRODUCTS["api-cdk-credits"];
   }
-  if (has(text, /gmail|outlook|hotmail|微软邮箱|谷歌邮箱|邮箱账号|邮箱老号|域名邮箱/)) {
+  if (has(text, /gmail|outlook|hotmail|微软邮箱|谷歌邮箱|邮箱账号|邮箱老号|域名邮箱/) ||
+      (categoryText === "google 邮箱" && has(titleText, /谷歌账号/))) {
     return PRODUCTS["email-accounts"];
   }
   return null;
+}
+
+// 只识别商品明示的单一期限；不把质保期或多期限选择框当作订阅期限。
+function singleSubscriptionMonths(text) {
+  const numeral = { 一: 1, 两: 2, 二: 2, 三: 3, 六: 6, 十二: 12 };
+  const value = text.replace(/质保\s*(?:\d+|十二|一|两|二|三|六)\s*(?:天|日|个月|月|年)/g, "");
+  if (/永久|终身|lifetime/.test(value)) return null;
+  const months = new Set([...value.matchAll(/(?<![\d])(?:(\d+|十二|一|两|二|三|六)\s*(?:个)?)?(月|年)(?:卡)?/g)]
+    .map((match) => (numeral[match[1]] ?? Number(match[1] || 1)) * (match[2] === "年" ? 12 : 1)));
+  return months.size === 0 ? undefined : months.size === 1 ? [...months][0] : null;
 }
 
 export function directOfferExclusionReason(raw) {
@@ -206,7 +270,7 @@ export function stableDirectSnapshotId(offers, staleTargetIds = []) {
 }
 
 function isAvailable(status) {
-  return ["in_stock", "available", "online"].includes(String(status ?? "").toLowerCase());
+  return ["in_stock", "available", "online", "low_stock"].includes(String(status ?? "").toLowerCase());
 }
 
 function compareOffers(a, b) {
