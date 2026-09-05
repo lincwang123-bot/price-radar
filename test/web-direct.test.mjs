@@ -106,6 +106,35 @@ function snapshot(source, snapshotId, capturedAt, reportedCount, visibleCount) {
   };
 }
 
+test("首页为已采集的新品牌生成独立分类，详情可返回对应分类", async () => {
+  const db = openDb(":memory:");
+  const server = createApp({ db });
+  try {
+    const data = snapshot("direct-shops", "category-fixture", "2026-09-05T00:00:00.000Z", 1, 1);
+    data.products = [
+      ["cursor-pro", "Cursor"], ["perplexity-pro-1m", "Perplexity"],
+      ["notion-ai-business-1m", "Notion AI"], ["manus-2000-credits", "Manus"],
+      ["relay-cdk", "API/CDK"],
+    ].map(([productId, platform]) => ({ ...data.products[0], productId, platform, name: productId }));
+    storeSnapshot(db, data);
+    server.listen(0, "127.0.0.1");
+    await once(server, "listening");
+    const base = `http://127.0.0.1:${server.address().port}`;
+    const html = await fetch(base + "/?family=cursor").then((res) => res.text());
+    for (const key of ["cursor", "perplexity", "notion", "manus", "relay"]) {
+      assert.match(html, new RegExp(`data-family-filter="${key}"`));
+      assert.match(html, new RegExp(`<tbody data-family="${key}" data-catalog-group`));
+    }
+    assert.doesNotMatch(html, /data-family-filter="mail"/);
+    assert.match(html, /\[data-family\]\[hidden\]\{display:none!important\}/);
+    const detail = await fetch(base + "/product?source=direct-shops&id=cursor-pro").then((res) => res.text());
+    assert.match(detail, /class="breadcrumb" href="\/\?family=cursor"/);
+  } finally {
+    if (server.listening) await new Promise((resolve) => server.close(resolve));
+    db.close();
+  }
+});
+
 function directHistorySnapshot(snapshotId, capturedAt, offers, lowestPrice) {
   return {
     source: "direct-shops",
