@@ -153,6 +153,20 @@ PriceAI 官方仓库当前 `main` 使用 [PriceAI Source Available License 1.0](
 
 ## 新增一个数据源（同类型比价站）
 
+### 站长后台与投稿备份
+
+`/admin` 是独立的站长模块。没有同时配置 `ADMIN_USERNAME`、`ADMIN_PASSWORD_HASH` 和 HTTPS `PUBLIC_ORIGIN` 时返回 404；本次实现不会自动创建账号。口令 hash 格式由 `lib/admin.mjs` 的 `hashAdminPassword()` 生成（scrypt，口令至少 16 字符），原口令不得写入仓库、命令行参数或聊天。会话有效期 1 小时，退出或服务重启后失效；状态与内部备注在同一事务中追加操作审计，后台不提供删除投稿、改价、自动上架或对外联系功能。
+
+使用 `node radar.mjs backup-submissions` 执行 SQLite 在线备份，包含已提交的 WAL。`SUBMISSIONS_BACKUP_DIR` 必须是独立绝对路径；生产模板使用 `/opt/linc/backups/price-radar/submissions`，备份文件 0600、目录 0700，默认保留最近 14 份。每份在临时目录恢复并执行 `quick_check` 与表计数，再成为可用备份。此过程不覆盖生产数据库，也不输出投稿正文。`price-radar-backup.timer` 每天 UTC 19:40 左右运行（北京时间次日 03:40），掉线期间错过的任务在恢复后补跑。
+
+这只是本机备份，不能防止整台 VPS 丢失；异地副本还需要单独确定目的地。后台“采集与备份”页面显示最近验证结果，时间过旧也应视为异常。
+
+直采失败时最多使用 24 小时缓存（`direct-shops.max_cache_age_minutes` 可配置），超龄来源退出当轮报价并展示“不可用、不代表售罄”；原始历史保留。持续停机仍需通过后台和日志监控发现，不能把旧快照时间当作实时保证。
+
+渠道筛选与产品品牌独立：16688、链动小铺、登记独立站及未确认渠道。框架标签只写已识别接口类型，不能推导托管或担保。渠道选择会重算当前报价、最低价、总数及趋势，保留分页和返回品牌状态。
+
+`npm run check` 执行语法检查与完整测试；部署脚本要求干净且已提交的版本，先备份投稿和旧代码，再停止本项目服务同步，检查本机与公网 HTTP。失败时恢复旧代码及 web/collector 单元；数据库不做倒退恢复。旧代码归档在 `/opt/linc/backups/price-radar/code-before-<commit>.tar.gz`。首次新版本部署前须确认管理员凭据交付，或保持后台关闭。不要把第一次执行前的脚本审查当成已验证的生产回滚演练。
+
 1. 在 `sources/` 新建 `xxx.mjs`，实现：
 
 ```js

@@ -69,6 +69,7 @@ export async function collectKami(target, options = {}) {
     } else if (rawCount < pageSize) {
       break;
     }
+    if (page === maxPages) throw new Error("Kami 目录超过分页上限，本轮不发布截断目录");
   }
 
   return offers;
@@ -158,6 +159,7 @@ function positiveNumber(value) {
 }
 
 function nonNegativeInteger(value) {
+  if (value === null || value === undefined || value === "") return null;
   const number = Number(value);
   return Number.isSafeInteger(number) && number >= 0 ? number : null;
 }

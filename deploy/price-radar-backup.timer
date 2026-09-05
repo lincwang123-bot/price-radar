@@ -1,0 +1,10 @@
+[Unit]
+Description=Daily Price Radar local submission backup
+
+[Timer]
+OnCalendar=*-*-* 19:40:00 UTC
+RandomizedDelaySec=300
+Persistent=true
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,18 @@
+[Unit]
+Description=Price Radar verified local submission backup
+
+[Service]
+Type=oneshot
+User=deploy
+Group=deploy
+WorkingDirectory=/opt/linc/apps/price-radar
+EnvironmentFile=-/opt/linc/apps/price-radar/.env
+Environment=SUBMISSIONS_BACKUP_DIR=/opt/linc/backups/price-radar/submissions
+ExecStart=/usr/bin/node --disable-warning=ExperimentalWarning radar.mjs backup-submissions
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/opt/linc/backups/price-radar/submissions
+

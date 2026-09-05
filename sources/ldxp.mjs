@@ -7,6 +7,7 @@
 // 本适配器把「每个配置关键词」映射为一个 product，其 offers = 命中的商品按价格升序。
 
 import { claimSourceAttempt } from "../lib/source-timing.mjs";
+import { safeFetchJson } from "../lib/safe-fetch.mjs";
 
 const BASE = "https://relaywatch.online";
 const UA =
@@ -53,9 +54,7 @@ export async function pull(ctx) {
   // 源侧数据代次时间戳：summary.generated_at 变化代表新一批采集数据
   let generation;
   try {
-    const sres = await fetch(`${BASE}/api/summary`, { headers: { "User-Agent": UA } });
-    if (!sres.ok) throw new Error(`summary HTTP ${sres.status}`);
-    generation = (await sres.json()).generated_at;
+    generation = (await safeFetchJson(`${BASE}/api/summary`, {allowedOrigins:[BASE],headers:{"User-Agent":UA}})).generated_at;
   } catch (err) {
     ctx.log?.(`[ldxp-goods] 获取 summary 失败(${err.message})，用当前时间作为代次标记。`);
     generation = new Date().toISOString();
@@ -65,12 +64,7 @@ export async function pull(ctx) {
   let maxCaptured = ""; // 数据新鲜度锚点：这批商品里最新的 captured_at
   for (const kw of keywords) {
     const url = `${BASE}/api/ldxp/goods?q=${encodeURIComponent(kw)}&page_size=100`;
-    const res = await fetch(url, { headers: { "User-Agent": UA } });
-    if (!res.ok) {
-      ctx.log?.(`[ldxp-goods] “${kw}” 查询失败 HTTP ${res.status}`);
-      continue;
-    }
-    const body = await res.json();
+    const body = await safeFetchJson(url, {allowedOrigins:[BASE],headers:{"User-Agent":UA}});
     const items = Array.isArray(body.items) ? body.items : [];
     for (const it of items) {
       if (it.captured_at && it.captured_at > maxCaptured) maxCaptured = it.captured_at;

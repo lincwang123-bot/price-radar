@@ -87,7 +87,7 @@ test("Kami 在非空页没有新 ID 时停止，且不超过 maxPages", async ()
   assert.equal(repeatedCalls.length, 2);
 
   const boundedCalls = [];
-  const bounded = await collectKami(kamiTarget(), {
+  await assert.rejects(collectKami(kamiTarget(), {
     pageSize: 3,
     maxPages: 2,
     capturedAt,
@@ -96,10 +96,15 @@ test("Kami 在非空页没有新 ID 时停止，且不超过 maxPages", async ()
       { code: 200, total: 99, data: [kamiItem(2)] },
       { code: 200, total: 99, data: [kamiItem(3)] },
     ], boundedCalls),
-  });
-  assert.equal(bounded.length, 2);
+  }), /分页上限/);
   assert.equal(boundedCalls.length, 2);
   assert.ok(boundedCalls.every((url) => new URL(url).searchParams.get("limit") === "3"));
+});
+
+test("Kami null 库存不能覆盖明确的文字库存", () => {
+  const offers=parseKamiPage({data:[{id:1,name:"ChatGPT Plus 月卡",price:10,stock:null,stock_count:null,stock_state:"库存充足"}]},kamiTarget(),capturedAt);
+  assert.equal(offers[0].status,"in_stock");
+  assert.equal(offers[0].stockCount,null);
 });
 
 test("IkunLove 分转元并排除删除商品", () => {

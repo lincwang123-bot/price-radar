@@ -240,6 +240,12 @@ async function main() {
   const config = loadConfig();
   if (cmd === "submissions") return cmdSubmissions(config);
   if (cmd === "submission-status") return cmdSubmissionStatus(config, productId, statusValue);
+  if (cmd === "backup-submissions") {
+    const { backupSubmissions } = await import("./lib/backup.mjs");
+    const directory = process.env.SUBMISSIONS_BACKUP_DIR || path.join(path.dirname(config.dataDir), "backups", "submissions");
+    console.log(JSON.stringify(await backupSubmissions(path.resolve(submissionsDbPath(config)), path.resolve(directory))));
+    return 0;
+  }
 
   const db = cmd === "serve" ? openDbReadOnly(config.dbPath) : openDb(config.dbPath);
   try {

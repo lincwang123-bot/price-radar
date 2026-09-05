@@ -6,6 +6,7 @@
 // 合规：个人非商用低频采集（默认 6h/次）；goaihop 含赞助(sponsored)中转站，已在 extra 标注。
 
 import { claimSourceAttempt } from "../lib/source-timing.mjs";
+import { safeFetchJson } from "../lib/safe-fetch.mjs";
 
 const API = "https://goaihop.com/api/relay-packages";
 const UA =
@@ -30,9 +31,7 @@ function num(s) {
 
 async function fetchPage(offset, limit) {
   const url = `${API}?offset=${offset}&limit=${limit}`;
-  const res = await fetch(url, { headers: { "User-Agent": UA } });
-  if (!res.ok) throw new Error(`HTTP ${res.status} @ offset=${offset}`);
-  return res.json();
+  return safeFetchJson(url, { allowedOrigins: ["https://goaihop.com"], headers: { "User-Agent": UA } });
 }
 
 /**

@@ -8,6 +8,7 @@ import {
 } from "../collectors/direct/catalog.mjs";
 import { collectorFor, directTargets } from "../collectors/direct/registry.mjs";
 import { claimSourceAttempt } from "../lib/source-timing.mjs";
+import { metaSet } from "../lib/db.mjs";
 
 export const sourceId = "direct-shops";
 export const sourceLabel = "原始店铺直采";
@@ -27,13 +28,16 @@ export async function pull(ctx) {
   const capturedAt = new Date().toISOString();
   const allOffers = [];
   const staleTargets = [];
+  const health = [];
+  const maxCacheAgeMinutes = positiveNumber(cfg.max_cache_age_minutes, 1440);
 
   for (const target of targets) {
     const cachePath = path.join(cacheDir, `${target.id}.json`);
     const cached = readTargetCache(cachePath);
     const ageMinutes = cached?.fetchedAt ? (Date.now() - Date.parse(cached.fetchedAt)) / 60000 : Infinity;
-    if (cached && Number.isFinite(ageMinutes) && ageMinutes < target.intervalMinutes) {
+    if (cached && Number.isFinite(ageMinutes) && ageMinutes < Math.min(target.intervalMinutes, maxCacheAgeMinutes)) {
       allOffers.push(...cached.offers);
+      health.push({target:target.id,name:target.name,status:"cached",lastSuccess:cached.fetchedAt,ageMinutes:Math.round(ageMinutes)});
       ctx.log?.(`[${sourceId}] ${target.name} 命中本地缓存（${ageMinutes.toFixed(0)}min / ${target.intervalMinutes}min）。`);
       continue;
     }
@@ -50,19 +54,20 @@ export async function pull(ctx) {
       );
       writeTargetCache(cachePath, { targetId: target.id, fetchedAt: capturedAt, offers });
       allOffers.push(...offers);
+      health.push({target:target.id,name:target.name,status:"ok",lastSuccess:capturedAt,ageMinutes:0});
       ctx.log?.(`[${sourceId}] ${target.name}: ${offers.length} 条公开商品。`);
     } catch (error) {
-      if (!cached) {
-        throw new Error(`${target.name} 首次采集失败，本轮不发布部分快照: ${error.message}`);
-      }
       staleTargets.push(target.id);
-      allOffers.push(...cached.offers);
-      ctx.log?.(`[${sourceId}] ${target.name} 采集失败，沿用上次完整缓存: ${error.message}`);
+      const usable = cached && Number.isFinite(ageMinutes) && ageMinutes <= maxCacheAgeMinutes;
+      if (usable) allOffers.push(...cached.offers);
+      health.push({target:target.id,name:target.name,status:usable?"stale":"unavailable",lastSuccess:cached?.fetchedAt||null,ageMinutes:Number.isFinite(ageMinutes)?Math.round(ageMinutes):null});
+      ctx.log?.(`[${sourceId}] ${target.name} 采集失败，${usable?"暂用有效期内缓存":"无有效缓存，暂不参与当前报价"}: ${error.message}`);
     }
   }
 
   const products = groupDirectOffers(allOffers);
-  if (!products.length) throw new Error("原始店铺未产出可确认分类的有效报价");
+  // Empty current snapshot is intentional when every cache expired; never keep the old lowest price.
+  metaSet(ctx.db,"health:direct-targets",JSON.stringify({source:sourceId,checkedAt:capturedAt,maxCacheAgeMinutes,targets:health}));
   const publishedOfferCount = products.reduce((count, product) => count + product.offers.length, 0);
   // 内容指纹不是观察事件 ID：A→B→A 必须产生第三个观察，否则历史去重
   // 会让当前页面停在 B；相同报价的新一轮成功核验也需要保留新时间。

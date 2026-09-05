@@ -6,6 +6,7 @@
 // DATA_LICENSE 提示：cardnav 禁止高频爬取/镜像全量，本适配器不做这些。
 
 import { claimSourceAttempt } from "../lib/source-timing.mjs";
+import { safeFetchText } from "../lib/safe-fetch.mjs";
 
 const BASE = "https://cardnav.xyz";
 const UA =
@@ -119,12 +120,7 @@ export async function pull(ctx) {
   for (const slug of pages) {
     const url = `${BASE}/official-price/${encodeURIComponent(slug)}`;
     try {
-      const res = await fetch(url, { headers: { "User-Agent": UA } });
-      if (!res.ok) {
-        ctx.log?.(`[${sourceId}] ${slug} HTTP ${res.status}，跳过。`);
-        continue;
-      }
-      const html = await res.text();
+      const html = await safeFetchText(url, { allowedOrigins:[BASE],headers:{"User-Agent":UA} });
       const parsed = parsePage(html, slug);
       if (!parsed.rows.length) {
         ctx.log?.(`[${sourceId}] ${slug} 未解析到价格行（页面结构可能变更），跳过。`);

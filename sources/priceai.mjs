@@ -1,5 +1,6 @@
 import { mkdirSync, readFileSync, writeFileSync, existsSync } from "node:fs";
 import path from "node:path";
+import { safeFetchJson } from "../lib/safe-fetch.mjs";
 
 // PriceAI 官方公开快照流适配器。
 // 端点契约见 https://priceai.cc/price-radar-api.md
@@ -26,18 +27,12 @@ export function rawToSnapshot(raw, fetchedAt = new Date().toISOString()) {
   };
 }
 
-async function getJson(url, { etag } = {}) {
-  const headers = { "User-Agent": UA, Accept: "application/json" };
-  if (etag) headers["If-None-Match"] = etag;
-  const res = await fetch(url, { headers });
-  if (res.status === 304) return { notModified: true };
-  if (!res.ok) throw new Error(`HTTP ${res.status} ${res.statusText} @ ${url}`);
-  return {
-    body: await res.json(),
-    etag: res.headers.get("etag") || undefined,
-    lastModified: res.headers.get("last-modified") || undefined,
-    cacheControl: res.headers.get("cache-control") || undefined,
-  };
+const fetchOptions = { allowedOrigins: ["https://data.priceai.cc"], maxBytes: 10 * 1024 * 1024, timeoutMs: 15000, headers: { "User-Agent": UA, Accept: "application/json" } };
+export function validatePriceaiPointer(ptr) {
+  if (!ptr || !/^[A-Za-z0-9][A-Za-z0-9_-]{0,99}$/.test(ptr.snapshot_id || "")) throw new Error("PriceAI snapshot_id 无效");
+  const expected = `https://data.priceai.cc/v1/snapshots/${ptr.snapshot_id}.json`;
+  if (ptr.snapshot_url !== expected) throw new Error("PriceAI snapshot_url 必须匹配固定域名、目录和 ID");
+  return ptr;
 }
 
 /**
@@ -50,24 +45,9 @@ export async function pull(ctx) {
   const cacheFile = path.join(ctx.dataDir, `${sourceId}-latest.json`);
   const dataDir = ctx.dataDir;
 
-  // 1) 指针（本地缓存 ETag，命中 304 则沿用）
-  let prev = null;
-  if (existsSync(cacheFile)) {
-    try { prev = JSON.parse(readFileSync(cacheFile, "utf8")); } catch { prev = null; }
-  }
-  const ptrRes = await getJson(LATEST_URL, { etag: prev?.etag });
-  let ptr;
-  if (ptrRes.notModified && prev?.body) {
-    ptr = prev.body;
-    ctx.log?.(`[priceai] 指针 304 未变化（ETag 命中），沿用缓存。`);
-  } else {
-    ptr = ptrRes.body;
-    writeFileSync(cacheFile, JSON.stringify({
-      etag: ptrRes.etag ?? null,
-      body: ptr,
-      fetched_at: new Date().toISOString(),
-    }));
-  }
+  // Small public pointer is fetched once per daemon round; immutable raw files remain cached.
+  const ptr = validatePriceaiPointer(await safeFetchJson(LATEST_URL, fetchOptions));
+  writeFileSync(cacheFile, JSON.stringify({body:ptr,fetched_at:new Date().toISOString()}));
 
   const snapshotId = ptr.snapshot_id;
   const rawPath = path.join(rawDir, `${sourceId}-${snapshotId}.json`);
@@ -80,12 +60,12 @@ export async function pull(ctx) {
     snapshot = JSON.parse(readFileSync(rawPath, "utf8"));
   } else {
     ctx.log?.(`[priceai] 下载新快照 ${snapshotId} ...`);
-    const snapRes = await fetch(ptr.snapshot_url, { headers: { "User-Agent": UA } });
-    if (!snapRes.ok) throw new Error(`HTTP ${snapRes.status} @ ${ptr.snapshot_url}`);
-    snapshot = await snapRes.json();
+    snapshot = await safeFetchJson(ptr.snapshot_url, fetchOptions);
+    if (snapshot.snapshot_id !== snapshotId) throw new Error("PriceAI 快照 ID 与指针不一致");
     writeFileSync(rawPath, JSON.stringify(snapshot));
     ctx.log?.(`[priceai] 快照已缓存: ${path.basename(rawPath)}。`);
   }
+  if (snapshot.snapshot_id !== snapshotId) throw new Error("PriceAI 缓存 ID 与指针不一致");
 
   return {
     source: sourceId,

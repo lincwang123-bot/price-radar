@@ -40,6 +40,13 @@ test("直采每轮观察独立记录：A→B→A、不变与失败恢复均保�
     assert.deepEqual(snapshots.map(s => s.stale), [false, false, false, false, true, false]);
     assert.ok(snapshots[3].fetchedAt > snapshots[2].fetchedAt);
     assert.equal(db.prepare("SELECT COUNT(*) AS n FROM snapshots").get().n, 6);
+    fail=true;t.mock.timers.tick(25*60*60_000);
+    const expired=await pull(ctx);assert.equal(expired.snapshot.stale,true);
+    assert.equal(expired.snapshot.products.length,0,"expired cache must not keep a current minimum");
+    storeSnapshot(db,expired.snapshot);
+    assert.equal(db.prepare("SELECT COUNT(*) n FROM products WHERE snapshot_id=?").get(lastSnapshotId(db,"direct-shops")).n,0);
+    const health=JSON.parse(db.prepare("SELECT value FROM meta WHERE key='health:direct-targets'").get().value);
+    assert.equal(health.targets[0].status,"unavailable");assert.equal(health.targets[0].target,"aisou");
   } finally {
     db.close();
     t.mock.restoreAll();
