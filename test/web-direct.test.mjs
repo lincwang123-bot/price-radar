@@ -29,7 +29,8 @@ test("原店直采报价支持翻页，PriceAI Top 5 可跳转完整直采排行
     assert.doesNotMatch(directHtml, />#21</);
 
     const priceAiHtml = await fetch(`http://127.0.0.1:${port}/product?source=priceai&id=chatgpt-plus-recharge`).then((response) => response.text());
-    assert.match(priceAiHtml, /PriceAI 公开快照仅提供该品类的 Top 5/);
+    assert.match(priceAiHtml, /PriceAI 上游只公开部分 Top 报价/);
+    assert.match(priceAiHtml, /5 条公开样本，并非其全站可用数量/);
     assert.match(priceAiHtml, /查看原店直采完整排行/);
     assert.match(priceAiHtml, /source=direct-shops&amp;id=chatgpt-plus-recharge/);
   } finally {

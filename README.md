@@ -147,13 +147,21 @@ node radar.mjs import <raw.json>                # 历史 raw 快照回填（幂�
 
 ### 与 PriceAI 的许可证边界
 
-PriceAI 官方仓库当前 `main` 使用 [PriceAI Source Available License 1.0](https://github.com/dimthink/PriceAI/blob/main/LICENSE)：这是带用途限制的 source-available 许可，不是 OSI 认可的开源许可证，未经另行许可不能据此开展其许可证禁止的商用、公开托管或竞争性价格聚合等用途。历史 MIT 许可只适用于当时仍以 MIT 授权的旧提交，例如最后一个 MIT 快照 [`15877f09052e3c272b93679f56b99efd2be3c3d2`](https://github.com/dimthink/PriceAI/tree/15877f09052e3c272b93679f56b99efd2be3c3d2)，不能倒推覆盖之后的 `main` 代码。
+目前未能核实 PriceAI 当前仓库许可：此前引用的 `main/LICENSE` 链接不可用，不能据此声称已获得特定许可、已确认当前条款或可复用其源码。本项目仅接入其公开文档说明的快照接口，公开接口存在也不自动构成对所有再利用方式的授权；如需扩大使用范围，应先核实当前条款或联系权利方。
 
 本项目的 `direct-shops` 按上述原站公开入口独立实现；没有复制 PriceAI 当前 `main` 的采集代码，也没有复制其线上完整渠道表。固定目标白名单由本项目单独登记与维护。
 
 ## 新增一个数据源（同类型比价站）
 
 ### 站长后台与投稿备份
+
+### 搜索抓取与索引基础
+
+`/robots.txt` 声明站点地图与私有路径限制，保留边缘既有搜索/训练机器人策略；`/sitemap.xml` 从当前真实产品动态生成，仅包含规范公开页，不包含筛选组合、投稿、后台或 API。由于行情观察时间不等于页面实际修改时间，暂不输出可选 `lastmod`，避免虚假更新信号。
+
+公开页有清洁 canonical、描述和与页面类型相符的 JSON-LD；UTM/渠道筛选不另建索引页，报价分页保留规范页码。不存在的产品返回真实 404。源站仅对可信本机 Tunnel 传入的 HTTP 协议标记重定向至固定 HTTPS 主域；不会为 SEO 修改后台鉴权或共享缓存私人内容。
+
+Google Search Console 与百度搜索资源平台仍需真实账号验证和提交。可在服务器配置 `GOOGLE_SITE_VERIFICATION`、`BAIDU_SITE_VERIFICATION` 的官方公开验证值；缺省为空，不伪造验证。技术可索引不等于已收录，也不保证收录时间。`www.airadar.vip` 的 DNS/跳转需另行在域名控制台核实配置。第一方统计要求公开页到达源站，当前保留 `no-store`，不盲目开启 HTML 边缘缓存。
 
 ### 第一方访问统计（2026-09-05）
 
@@ -214,15 +222,15 @@ Named Tunnel 的配置必须仅保存在 VPS：`/etc/price-radar/cloudflared/con
 bash deploy/deploy.sh   # 本地执行：rsync 代码 → 装 systemd → 启动三服务
 ```
 
-- 脚本只有在 VPS 同时具备上述 `config.yml` 和 `credentials.json` 时才会启用 Named Tunnel；其健康状态确认后，脚本只会停用本项目旧的 `price-radar-tunnel.service`，不会影响主机上的其他 `cloudflared` 服务。
-- `.env` 仅用于部署环境变量，已被 Git 忽略；当前 Web 页面不内置访问口令校验，如需限制访问应在反向代理或 WAF 层配置。
+- 脚本要求本站既有 Named Tunnel 处于运行状态，不安装、修改隧道配置或凭据，也不操作旧 Quick Tunnel 和其他项目。既有 Tunnel 依赖 web，部署重启 web 后会启动同一 Tunnel 服务恢复连接。
+- `.env` 仅用于部署环境变量，已被 Git 忽略；公开行情无需登录，`/admin` 内置独立口令、会话及 CSRF 保护，后台密钥仅由 web 加载 `/etc/price-radar/web.env`。
 - `PUBLIC_ORIGIN=https://airadar.vip` 用于校验投稿请求来源。部署脚本只会在缺少该项时补入，不会覆盖现有值。
 - `SUBMISSIONS_DB_PATH` 指向单独的投稿目录，`SUBMISSION_HASH_SECRET` 用于生成短期防滥用摘要；部署脚本会在首次启用时生成随机密钥，不会将密钥输出到终端或仓库。
-- **Quick Tunnel 仅作本地验证或首次临时回退**：若尚未配置 Named Tunnel 的两个 VPS 文件，脚本才会使用 `price-radar-tunnel.service`，其 `trycloudflare.com` 地址会随重启改变，不应用作正式域名入口。
+- 仓库保留旧 Quick Tunnel 单元仅供历史参考，当前部署脚本不会自动启用它。
 
-### 可选：独立访客统计
+### 可选：Cloudflare Web Analytics
 
-Web 页面支持 Cloudflare Web Analytics，用于统计页面访问和独立访客。请在 Cloudflare 创建该站点的 **Web Analytics site token** 后，仅在 VPS 的 `/opt/linc/apps/price-radar/.env` 写入：
+现用第一方统计见上文。代码仍保留可选 Cloudflare beacon 接口，但 Cloudflare Web Analytics 的 Visits 是访问会话口径，不能当作独立访客 UV。若以后有明确需求再配置，勿重复注入；仅可在 VPS 的 `/opt/linc/apps/price-radar/.env` 写入公开 site token：
 
 ```sh
 CLOUDFLARE_WEB_ANALYTICS_TOKEN=你的公开_site_token
@@ -248,9 +256,9 @@ CLOUDFLARE_WEB_ANALYTICS_TOKEN=你的公开_site_token
 - **纠正公开数据**：选择价格、库存、质保、分类、链接、缺失数据或页面问题，再补充产品、链接和必要说明。
 - **供需合作**：供给方或采购方选择产品方向、合作规模、保障与结算方式，并填写合作说明和联系方式。
 
-本地和生产环境默认都写入权限隔离的 `submissions/submissions.sqlite`，手工查询命令与 Web 服务使用同一路径，不会与行情采集库混用。Web 进程以 SQLite 只读方式打开行情库，systemd 也只允许它写投稿目录。服务只保存表单内容、联系方式和用于限流的带密钥摘要，不保存原始 IP 或 User-Agent；超过 48 小时的客户端摘要会清除。页面明确禁止提交密码、卡密与 API Key，接口也会拦截常见的敏感凭据格式。接口还包含同源与 CSRF 校验、16 KiB 请求上限、24 小时去重和频率限制。
+本地和生产环境默认都写入权限隔离的 `submissions/submissions.sqlite`，手工查询与 Web 服务使用同一路径，不与行情库混用。Web 以 SQLite 只读方式打开行情库，systemd 只允许它写投稿和独立统计目录。投稿库保存用户主动填写的信息及短期防滥用摘要，不保存原始 IP 或 User-Agent；超过 48 小时的投稿限流摘要会清除，统计摘要使用另述的 31 天策略。页面禁止提交密码、卡密与 API Key，接口拦截常见敏感凭据格式，并有同源、CSRF、16 KiB 上限、24 小时去重和频率限制。
 
-第一版不开放公网管理后台，可通过 SSH 命令查看和处理：
+已提供受保护的 `/admin` 后台；仍可通过 SSH 命令查看和处理（输出包含私人信息，不要粘贴到公开日志）：
 
 ```sh
 node radar.mjs submissions --kind feedback --status new --limit 50
