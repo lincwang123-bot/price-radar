@@ -1,6 +1,7 @@
 import { randomBytes } from "node:crypto";
 
 import { safeFetchJson } from "../../lib/safe-fetch.mjs";
+import { directOfferExclusionReason } from './catalog.mjs';
 
 const GOODS_LIST_PATH = "/shopApi/Shop/goodsList";
 const CATEGORY_LIST_PATH = "/shopApi/Shop/categoryList";
@@ -69,6 +70,7 @@ export async function collectShopApi(target, options = {}) {
 
   for (const category of categories) {
     let received = 0;
+    let expectedTotal = null;
     const pageFingerprints = new Set();
     const categoryIds = new Set();
     for (let page = 1; page <= maxPages; page += 1) {
@@ -107,7 +109,12 @@ export async function collectShopApi(target, options = {}) {
       pageFingerprints.add(fingerprint);
       received += rawCount;
       const total = nonNegativeInteger(payload.data.total);
-      if (total !== null && received >= total) break;
+      if (total !== null) {
+        if (expectedTotal !== null && expectedTotal !== total) throw new Error('ShopApi 分页 total 变化，目录完整性无法确认');
+        expectedTotal = total;
+        if (received > total) throw new Error('ShopApi 分页超出 total，目录完整性无法确认');
+        if (received === total) break;
+      }
       if (rawCount < pageSize) {
         if (total !== null && received < total) throw new Error('ShopApi 分页未完整：返回数量与 total 不一致');
         break;
@@ -156,8 +163,9 @@ function selectCategories(payload, maxCategories) {
   }
   if (!candidates.length) throw new Error("ShopApi 未返回可用公开分类");
 
-  const allCategory = candidates.find((category) =>
-    category.id === 0 || /^(?:全部|全部商品|所有商品|all)$/i.test(category.name));
+  // 店主可以把普通分类命名为“全部商品”(已验证QOZ92954的177473)。
+  // 只有协议的id=0才代表全店；名称不能用于跳过其他分类。
+  const allCategory = candidates.find((category) => category.id === 0);
   if (allCategory) return [allCategory];
 
   const nonEmpty = candidates.filter((category) => category.goodsCount === null || category.goodsCount > 0);
@@ -171,6 +179,11 @@ function goodsOffer(item, source, capturedAt) {
   const title = cleanText(item.name ?? item.goods_name ?? item.title);
   const price = positiveNumber(item.price ?? item.real_price ?? item.amount);
   if (!id || !title || price === null) return null;
+  const description = String(item.description ?? '').replace(/<[^>]*>/g, ' ').replace(/&nbsp;|&#160;/gi, ' ').replace(/\s+/g, ' ').trim();
+  // 已观察的“封号不质保不售后”仅限定封号风险；先移除此完整受限短语，
+  // 其余说明仍交统一规则检查，不能遮盖另行声明的全商品无质保。
+  const warrantyText = description.replace(/封号\s*不质保\s*(?:[、,，及和]\s*)?不售后/g, '');
+  if (directOfferExclusionReason({ title: warrantyText }) === 'no_warranty') return null;
 
   const inventory = inventoryState(item.extend?.stock_count ?? item.stock_count ?? item.stock);
   const inactive = isExplicitlyInactive(item.status);
@@ -254,6 +267,7 @@ function positiveNumber(value) {
 }
 
 function nonNegativeInteger(value) {
+  if (value === null || value === undefined || value === '') return null;
   const number = Number(value);
   return Number.isSafeInteger(number) && number >= 0 ? number : null;
 }

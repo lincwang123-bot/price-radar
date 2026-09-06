@@ -10,6 +10,7 @@ import { collectorFor, directTargets } from "../collectors/direct/registry.mjs";
 import { claimSourceAttempt } from "../lib/source-timing.mjs";
 import { metaSet } from "../lib/db.mjs";
 import { isAccessDeniedError } from '../lib/safe-fetch.mjs';
+import { readDirectImports } from '../lib/direct-transfer.mjs';
 
 export const sourceId = "direct-shops";
 export const sourceLabel = "原始店铺直采";
@@ -73,6 +74,20 @@ export async function pull(ctx) {
     }
   }
 
+  // Imported public snapshots are passive evidence only. Never add them to
+  // the network target loop or overwrite the active collectors' caches.
+  const activeIds=new Set(targets.map(target=>target.id));
+  for(const record of readDirectImports(ctx.dataDir)){
+    const target=record.target;
+    if(activeIds.has(target.id))continue;
+    if(record.status==='ok'){
+      allOffers.push(...withHealth(record.offers,'cached',240));
+      health.push({target:target.id,name:target.name,status:'cached',lastSuccess:record.checkedAt,ageMinutes:Math.round((Date.now()-Date.parse(record.checkedAt))/60000),imported:true});
+    }else{
+      staleTargets.push(target.id);
+      health.push({target:target.id,name:target.name,status:'unavailable',lastSuccess:null,ageMinutes:null,imported:true});
+    }
+  }
   const products = groupDirectOffers(allOffers);
   // Empty current snapshot is intentional when every cache expired; never keep the old lowest price.
   metaSet(ctx.db,"health:direct-targets",JSON.stringify({source:sourceId,checkedAt:capturedAt,maxCacheAgeMinutes,targets:health}));

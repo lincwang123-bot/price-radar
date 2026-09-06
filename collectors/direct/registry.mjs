@@ -131,6 +131,9 @@ const TARGETS = [
   shop("wzyp-ai-choice", "AI优选站", "QOZ92954"),
   shop("wzyp-direct", "GPTplus直营", "caoyuhan520"),
   shop("wzyp-lightyear", "光年AI", "M24HF217"),
+  shop("wzyp-dabai", "大白AI货源", "dabai"),
+  shop("wzyp-aiopc", "AI OPC", "aiopc"),
+  shop("wzyp-chronos", "Chronos", "1KUKOX05"),
 ];
 
 const COLLECTORS = {
@@ -144,6 +147,10 @@ const COLLECTORS = {
   aichong: collectAichong,
 };
 
+// Fixed public storefronts eligible for an explicitly operated local collector.
+// Listing here does not enable requests from the production server.
+export const SHOP_API_TARGET_IDS = Object.freeze(TARGETS.filter(target => target.kind === 'shopApi').map(target => target.id));
+
 function shop(id, name, token) {
   return {
     id,
@@ -152,9 +159,10 @@ function shop(id, name, token) {
     kind: "shopApi",
     origin: "https://wzyp.cn",
     intervalMinutes: 60,
+    requestDelayMs: 1000,
     pageSize: 100,
     maxPagesPerCategory: 4,
-    maxCategories: 40,
+    maxCategories: 50,
   };
 }
 

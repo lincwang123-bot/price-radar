@@ -34,10 +34,20 @@ export const PLATFORM16688_SHOPS = Object.freeze([
   ['S231625', '皮特小铺', 'G11162208'],
   ['S428748', '萃选ai', 'G88462961'],
   ['S301515', '蜡笔小新', 'G57094210'],
-].map(([shopNo, name, seed]) => Object.freeze({
+  // Additional seeds from the original platform's public /source directory,
+  // validated through retail goods/detail and shop/detail, not wholesale price.
+  ['S686505', '安安 对接：ANANHT', 'G33156626', 'https://www.16688.com.cn/source'],
+  ['S542868', '一苇的ai小铺', 'G63667678', 'https://www.16688.com.cn/source'],
+  ['S995876', '鹰鹰小铺', 'G13677689', 'https://www.16688.com.cn/source'],
+  ['S763680', '小高老板娘的店', 'G78548110', 'https://www.16688.com.cn/source'],
+  ['S513295', '源头AI - Bot | 对接：team', 'G95118424', 'https://www.16688.com.cn/source'],
+  ['S888822', '带鱼ai', 'G69292311', 'https://www.16688.com.cn/source'],
+  ['S361816', 'AI充值', 'G70554833', 'https://www.16688.com.cn/source'],
+].map(([shopNo, name, seed, discoveryUrl]) => Object.freeze({
   id: `16688-${shopNo.toLowerCase()}`, kind: 'platform16688', name, shopNo,
   origin: 'https://www.16688.com.cn', currency: 'CNY',
   seedUrl: `https://16688.com.cn/goods/${seed}`,
+  ...(discoveryUrl ? { discoveryUrl } : {}),
 })));
 
 function sourceFor(target) {

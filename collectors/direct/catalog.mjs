@@ -47,6 +47,7 @@ function normalized(value) {
   return String(value ?? "")
     .normalize("NFKC")
     .toLowerCase()
+    .replace(/\bgp\.t\b/g, 'gpt')
     .replace(/[×✕✖]/g, "x")
     .replace(/接碼/g, "接码")
     .replace(/[\u2010-\u2015_\/|【】()[\]（）·:：,，]+/g, " ")
@@ -63,6 +64,10 @@ export function classifyDirectOffer({ title, category = "", sourceId = "" }) {
   const categoryText = normalized(category);
   const text = normalized(`${category} ${title}`);
   if (!text) return null;
+  // Verified retail spelling of GPT. Do not let this new alias turn an
+  // explicitly mixed-brand subscription bundle into a single GPT quote.
+  const dottedGpt = /\bgp\.t\b/i.test(String(title ?? '').normalize('NFKC'));
+  if (dottedGpt && /claude\s*(?:pro|max|team)|gemini\s*(?:pro|ultra|plus)|(?:super\s*grok|grok\s*(?:super|heavy|lite))|suno\s*(?:pro|premier)|cursor\s*(?:pro|ultra)|perplexity\s*pro|notion\s*(?:ai|business)|\b(?:canva|midjourney)\b/i.test(titleText)) return null;
   if (/\bsuno\b/.test(titleText)) {
     const months=singleSubscriptionMonths(titleText),tier=/\bpremier\b/.test(titleText)?'premier':/\bpro\b/.test(titleText)?'pro':null;
     return tier?PRODUCTS[`suno-${tier}-${months}m`]??null:null;
