@@ -87,8 +87,15 @@ export function classifyDirectOffer({ title, category = "", sourceId = "" }) {
   if (has(titleText, /补差价|差价专用|月年卡|月卡\s*年卡|全家桶|多合一/)) return null;
 
   // API 商品经常同时提及 Pro / Max 号池，必须先于订阅套餐识别。
-  const aiService = /codex|openai|chat\s*gpt|\bgpt\b|claude|gemini|\bgrok\b/i;
-  if ((has(titleText, /\bapi\b|中转/i) && has(titleText, aiService)) || has(titleText, /api\s*中转|中转\s*api|api中转站|中转站/i)) {
+  const aiService = /codex|openai|chat\s*gpt|\bgpt\b|\bg[\s-]*plus\b|claude|gemini|\bgrok\b/i;
+  // “余额支付/余额不足”是结算提示。只有余额为充值对象或紧邻金额时
+  // 才作为额度商品证据，且不覆盖明示原厂订阅代充的主商品。
+  const originalSubscription = has(titleText, /(?:官方|原厂).*?(?:月订阅|订阅|月卡).*?(?:代充|直充|充值)/);
+  const balanceProduct = !originalSubscription && has(titleText,
+    /余额\s*(?:充值|兑换|额度)|(?:充值|兑换)\s*余额|\d+(?:\.\d+)?\s*(?:刀|美元|美金|usd)\s*余额(?!\s*(?:支付|不足))|余额\s*\d+(?:\.\d+)?\s*(?:刀|美元|美金|usd)/);
+  // 镜像站通行卡和中转余额是第三方服务；CDK本身仅说明交付方式，
+  // 不能据此把真实原厂订阅代充一并移出订阅分类。
+  if (((has(titleText, /\bapi\b|中转|镜像站/i) || balanceProduct) && has(titleText, aiService)) || has(titleText, /api\s*中转|中转\s*api|api中转站|中转站/i)) {
     return PRODUCTS["api-cdk-credits"];
   }
 
@@ -130,8 +137,9 @@ export function classifyDirectOffer({ title, category = "", sourceId = "" }) {
   if (claude && has(titleText, /\bfree\b|免费版/) && !has(titleText, /\bpro\b|max/i)) return null;
   if (grok && has(titleText, /\bfree\b|免费版|普号|白号/)) return null;
   // 一个标题同时列出 5x 和 20x 时，目录价格无法对应具体 SKU，暂不发布。
-  const fiveX = has(titleText, /(?:^|[^0-9])5\s*x|x\s*5(?!\d)/);
-  const twentyX = has(titleText, /(?:^|[^0-9])20\s*x|x\s*20(?!\d)/);
+  // 倍率必须是完整数字；1.5x、15x、x5.5均不是5x订阅。
+  const fiveX = has(titleText, /(?<![\d.])5\s*x(?![\d.])|(?<![a-z\d.])x\s*5(?![\d.])/);
+  const twentyX = has(titleText, /(?<![\d.])20\s*x(?![\d.])|(?<![a-z\d.])x\s*20(?![\d.])/);
   if ((chatgpt || claude) && fiveX && twentyX) return null;
 
   if (chatgpt && has(titleText, /team|business|团队|席位|母号|车位/)) {
@@ -141,14 +149,14 @@ export function classifyDirectOffer({ title, category = "", sourceId = "" }) {
     return PRODUCTS["chatgpt-go"];
   }
   if (chatgpt && has(titleText, /\bpro\b|pro(?=\d)/)) {
-    if (has(titleText, /(?:20\s*x|x\s*20)|200\s*(?:刀|美金|usd|dollar)/)) return PRODUCTS["chatgpt-pro-20x"];
-    if (has(titleText, /(?:5\s*x|x\s*5)|100\s*(?:刀|美金|usd|dollar)/)) return PRODUCTS["chatgpt-pro-5x"];
+    if (twentyX || has(titleText, /200\s*(?:刀|美金|usd|dollar)/)) return PRODUCTS["chatgpt-pro-20x"];
+    if (fiveX || has(titleText, /100\s*(?:刀|美金|usd|dollar)/)) return PRODUCTS["chatgpt-pro-5x"];
   }
   // 部分 Kami 店铺在标题中只写“5x / 20x”，品类名才标明 ChatGPT。
   // 只有品类已经确认品牌时才使用这个补充规则，避免普通数字误分类。
   if (chatgpt && has(categoryText, /chat\s*gpt|openai/i)) {
-    if (has(titleText, /20\s*x|x\s*20/)) return PRODUCTS["chatgpt-pro-20x"];
-    if (has(titleText, /5\s*x|x\s*5/)) return PRODUCTS["chatgpt-pro-5x"];
+    if (twentyX) return PRODUCTS["chatgpt-pro-20x"];
+    if (fiveX) return PRODUCTS["chatgpt-pro-5x"];
   }
   if (chatgpt && has(titleText, /\bplus(?:\b|(?=\d))|g\s*\+/)) {
     if (has(titleText, /日抛|周抛|普号|体验|试用|trial|free\s*号/) || ['成品账号', '共享'].includes(deliveryForm(titleText))) return PRODUCTS["chatgpt-plus"];
@@ -157,8 +165,8 @@ export function classifyDirectOffer({ title, category = "", sourceId = "" }) {
   }
 
   if (claude && has(titleText, /\bmax(?:\b|(?=\d))/)) {
-    if (has(titleText, /20\s*x|x\s*20/)) return PRODUCTS["claude-max-20x"];
-    if (has(titleText, /5\s*x|x\s*5/)) return PRODUCTS["claude-max-5x"];
+    if (twentyX) return PRODUCTS["claude-max-20x"];
+    if (fiveX) return PRODUCTS["claude-max-5x"];
     // Max 不应因为标题同时含“代充 / 月卡”而掉入 Pro 排行。
     return null;
   }

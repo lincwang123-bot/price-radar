@@ -6,6 +6,31 @@ const quote = (title, patch = {}) => ({ title, offer_id: title, price: 100, curr
 const list = (source, product_id, offers, name = product_id) => ({ source, stale: false, products: [{ product_id, name, currency: 'CNY', offers }] });
 const category = (lists, key) => buildProductDirectory(lists).find(row => row.key === key);
 
+test('explicit classified G Plus and Codex offers survive the bare-tier fallback guard', () => {
+  const cases = [
+    ['chatgpt-plus-recharge', 'chatgpt-plus', 'G Plus [官方直充] CDK 全自动充值 直充自己账号'],
+    ['chatgpt-plus-recharge', 'chatgpt-plus', '【官方充值】Codex Plus 1 个月丨菲区正价代充丨带账单丨质保丨无法覆盖'],
+    ['chatgpt-pro-5x', 'chatgpt-pro-5x', '【美区IOS】JPT Codex Pro 5X 官方充值 质保30天'],
+    ['verification-service', 'verification-service', 'codex 短效接🐎未接到可换号 包接马成功100% 不限次数 南非实卡codex 单次接马plus'],
+  ];
+  for (const source of ['direct-shops', 'priceai', 'ldxp-goods']) for (const [id, key, title] of cases) {
+    const directory = buildProductDirectory([list(source, source === 'ldxp-goods' ? 'search-mixed' : id, [quote(title)])]);
+    const products = directory.flatMap(row => row.products);
+    const shown = products.flatMap(product => directoryQuotes(product).entries.map(entry => ({ key: product.key, title: entry.offer.title })));
+    assert.deepEqual(shown, [{ key, title }], `${source}: ${title}`);
+  }
+});
+
+test('classified alias titles still reject mixed subscription bundles and untrusted search fallback', () => {
+  const titles = ['G Plus + Claude Pro', 'Codex Plus + Gemini Pro', 'JPT Codex Pro 5X + Claude Pro', 'GPlus + Canva'];
+  for (const source of ['direct-shops', 'priceai', 'ldxp-goods']) {
+    const directory = buildProductDirectory([list(source, 'chatgpt-plus-recharge', [...titles, 'Plus UnknownBrand', 'Plus Canva'].map(title => quote(title)))]);
+    assert.equal(directory.flatMap(row => row.products.flatMap(product => directoryQuotes(product).entries)).length, 0, source);
+  }
+  const search = buildProductDirectory([list('ldxp-goods', 'chatgpt-plus-recharge', [quote('Plus 月卡')])]);
+  assert.equal(search.flatMap(row => row.products.flatMap(product => directoryQuotes(product).entries)).length, 0);
+});
+
 test('16688 exact product URLs deduplicate changed titles/specs across sources, preferring direct', () => {
   const entries = [
     { list: { source: 'priceai' }, product: { currency: 'CNY' }, offer: quote('Claude Pro 旧标题', { url: 'https://16688.com.cn/goods/G69013943?utm_source=legacy', comparison_known: false }) },
