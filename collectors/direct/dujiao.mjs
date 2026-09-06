@@ -1,4 +1,5 @@
 import { safeFetchJson } from "../../lib/safe-fetch.mjs";
+import { isAuthorizedMerchantTarget, inheritMerchantTarget } from '../../lib/merchant-target-capability.mjs';
 
 const PRODUCTS_PATH = "/api/v1/public/products";
 const ALLOWED_ORIGINS = new Set([
@@ -259,8 +260,8 @@ function normalizedTarget(target) {
   const name = cleanText(target?.name) || id;
   if (!id) throw new Error("Dujiao 来源缺少 id");
   const origin = normalizedOrigin(target?.origin ?? target?.baseUrl);
-  if (!ALLOWED_ORIGINS.has(origin)) throw new Error(`Dujiao 未登记来源: ${origin}`);
-  return { ...target, id, name, origin, currency: cleanText(target?.currency) || "CNY" };
+  if (!ALLOWED_ORIGINS.has(origin) && !isAuthorizedMerchantTarget(target)) throw new Error(`Dujiao 未登记来源: ${origin}`);
+  return inheritMerchantTarget(target, { ...target, id, name, origin, currency: cleanText(target?.currency) || "CNY" });
 }
 
 function normalizedOrigin(value) {

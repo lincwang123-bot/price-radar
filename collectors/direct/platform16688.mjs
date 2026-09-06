@@ -1,5 +1,6 @@
 import { safeFetchJson } from '../../lib/safe-fetch.mjs';
 import { directOfferExclusionReason } from './catalog.mjs';
+import { isAuthorizedMerchantTarget } from '../../lib/merchant-target-capability.mjs';
 
 // Verified 2026-09-06 from existing public /goods/G… links, then the public
 // goods/detail response. No shop-number enumeration or authenticated APIs.
@@ -51,6 +52,7 @@ export const PLATFORM16688_SHOPS = Object.freeze([
 })));
 
 function sourceFor(target) {
+  if (isAuthorizedMerchantTarget(target) && target.origin === 'https://www.16688.com.cn' && /^S\d{1,20}$/.test(target.shopNo)) return target;
   const source = PLATFORM16688_SHOPS.find(s => s.id === target?.id && s.shopNo === target?.shopNo);
   if (!source || target.origin !== source.origin) throw new Error('16688 未登记店铺');
   return source;

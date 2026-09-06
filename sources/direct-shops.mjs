@@ -8,9 +8,10 @@ import {
 } from "../collectors/direct/catalog.mjs";
 import { collectorFor, directTargets } from "../collectors/direct/registry.mjs";
 import { claimSourceAttempt } from "../lib/source-timing.mjs";
-import { metaSet } from "../lib/db.mjs";
+import { metaGet, metaSet } from "../lib/db.mjs";
 import { isAccessDeniedError } from '../lib/safe-fetch.mjs';
 import { readDirectImports } from '../lib/direct-transfer.mjs';
+import { readApprovedManifest, collectApprovedMerchants } from '../lib/merchant-collection.mjs';
 
 export const sourceId = "direct-shops";
 export const sourceLabel = "原始店铺直采";
@@ -19,7 +20,11 @@ export async function pull(ctx) {
   const cfg = ctx.config?.sources?.[sourceId] ?? {};
   const minIntervalMinutes = positiveNumber(cfg.min_interval_minutes, 30);
   const timing = claimSourceAttempt(ctx.db, sourceId, minIntervalMinutes);
-  if (!timing.allowed) {
+  const bridgeDir = ctx.merchantBridgeDir ?? process.env.MERCHANT_BRIDGE_DIR;
+  const manifest = readApprovedManifest(bridgeDir);
+  const previousManifest = metaGet(ctx.db,'merchant-onboarding:manifest');
+  const merchantCycle = manifest.merchants.length > 0 || (previousManifest != null && previousManifest !== manifest.fingerprint);
+  if (!timing.allowed && !merchantCycle) {
     ctx.log?.(`[${sourceId}] 距上次实际尝试仅 ${timing.elapsedMinutes.toFixed(1)}min（< ${minIntervalMinutes}min），跳过本轮。`);
     return { source: sourceId, skipped: true, snapshotId: null };
   }
@@ -35,11 +40,22 @@ export async function pull(ctx) {
   const requestDelayMs = positiveNumber(cfg.request_delay_ms, 500);
   let attemptedTargets = 0;
   const deniedOrigins = new Map();
+  let previousHealth = [];
+  try { previousHealth = JSON.parse(metaGet(ctx.db,'health:direct-targets') || '{}').targets || []; } catch {}
 
   for (const target of targets) {
     const cachePath = path.join(cacheDir, `${target.id}.json`);
     const cached = readTargetCache(cachePath);
     const ageMinutes = cached?.fetchedAt ? (Date.now() - Date.parse(cached.fetchedAt)) / 60000 : Infinity;
+    if (!timing.allowed) {
+      const prior = previousHealth.find(row=>row.target===target.id);
+      const usable = cached && Number.isFinite(ageMinutes) && ageMinutes >= 0 && ageMinutes <= maxCacheAgeMinutes;
+      const status = usable ? (prior?.status === 'stale' ? 'stale' : 'cached') : 'unavailable';
+      if (usable) allOffers.push(...withHealth(cached.offers,status,maxCacheAgeMinutes));
+      if (status === 'stale' || status === 'unavailable') staleTargets.push(target.id);
+      health.push({target:target.id,name:target.name,status,lastSuccess:cached?.fetchedAt||null,ageMinutes:Number.isFinite(ageMinutes)?Math.round(ageMinutes):null});
+      continue;
+    }
     if (!deniedOrigins.has(target.origin) && cached && Number.isFinite(ageMinutes) && ageMinutes < Math.min(target.intervalMinutes, maxCacheAgeMinutes)) {
       allOffers.push(...withHealth(cached.offers, 'cached', maxCacheAgeMinutes));
       health.push({target:target.id,name:target.name,status:"cached",lastSuccess:cached.fetchedAt,ageMinutes:Math.round(ageMinutes)});
@@ -88,6 +104,17 @@ export async function pull(ctx) {
       health.push({target:target.id,name:target.name,status:'unavailable',lastSuccess:null,ageMinutes:null,imported:true});
     }
   }
+  const merchantResult = await collectApprovedMerchants(ctx,{manifest,existingOffers:allOffers,capturedAt,maxCacheAgeMinutes});
+  // Recheck approval at publication time as an operator may pause a merchant
+  // while a bounded network request is in flight.
+  const currentManifest = readApprovedManifest(bridgeDir);
+  const approvedIds = new Set(currentManifest.merchants.filter(row =>
+    manifest.merchants.some(original=>original.id===row.id && JSON.stringify(original)===JSON.stringify(row))).map(row=>row.id));
+  allOffers.push(...merchantResult.offers.filter(offer=>approvedIds.has(offer.extra?.merchantCollectionId)));
+  const merchantHealth = merchantResult.health.filter(row=>approvedIds.has(row.id));
+  staleTargets.push(...merchantHealth.filter(row=>row.status==='unavailable').map(row=>row.id));
+  metaSet(ctx.db,'health:merchant-onboarding',JSON.stringify({source:'merchant-onboarding',status:currentManifest.valid?'ok':'unavailable',checkedAt:capturedAt,manifestValid:currentManifest.valid,targets:merchantHealth}));
+  metaSet(ctx.db,'merchant-onboarding:manifest',manifest.fingerprint);
   const products = groupDirectOffers(allOffers);
   // Empty current snapshot is intentional when every cache expired; never keep the old lowest price.
   metaSet(ctx.db,"health:direct-targets",JSON.stringify({source:sourceId,checkedAt:capturedAt,maxCacheAgeMinutes,targets:health}));

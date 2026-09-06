@@ -208,6 +208,7 @@ function goodsOffer(item, source, capturedAt) {
     capturedAt,
     expiresAt: null,
     deliveryMode: Number(item.extend?.send_order) === 0 ? "auto" : null,
+    extra: { shopUrl: `${source.origin}/shop/${encodeURIComponent(source.token)}` },
   };
 }
 

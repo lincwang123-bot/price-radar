@@ -65,11 +65,12 @@ for(const failure of ['rsync','smoke'])test(`real deploy EXIT trap restores fixt
  const checkout=path.join(root,'checkout'),app=path.join(root,'app'),units=path.join(root,'units'),bin=path.join(root,'bin');
  try{
   for(const dir of [checkout,app,units,bin,path.join(root,'temp')])mkdirSync(dir);
+  mkdirSync(path.join(root,'etc'));writeFileSync(path.join(root,'etc','web.env'),'ADMIN_TEST_TOKEN=private-fixture\n');
   cpSync('deploy',path.join(checkout,'deploy'),{recursive:true});mkdirSync(path.join(checkout,'lib'));writeFileSync(path.join(checkout,'lib','backup.mjs'),'// fixture');
-  const source=readFileSync('deploy/deploy.sh','utf8').replace('APP_DIR=/opt/linc/apps/price-radar',`APP_DIR=${app}`).replace('BACKUP_DIR=/opt/linc/backups/price-radar',`BACKUP_DIR=${root}/backups`);
+  const source=readFileSync('deploy/deploy.sh','utf8').replace('APP_DIR=/opt/linc/apps/price-radar',`APP_DIR=${app}`).replace('BACKUP_DIR=/opt/linc/backups/price-radar',`BACKUP_DIR=${root}/backups`).replace('WEB_ENV=/etc/price-radar/web.env',`WEB_ENV=${root}/etc/web.env`);
   writeFileSync(path.join(checkout,'deploy','deploy.sh'),source);
   writeFileSync(path.join(checkout,'web.mjs'),'new');writeFileSync(path.join(checkout,'introduced.mjs'),'new');writeFileSync(path.join(app,'web.mjs'),'old');
-  for(const dir of ['data','submissions','analytics','backups','.git']){
+  for(const dir of ['data','submissions','analytics','merchant-bridge','backups','.git']){
    mkdirSync(path.join(app,dir));const file=path.join(app,dir,'fixture.sqlite');
    if(['data','submissions','analytics'].includes(dir)){const db=new DatabaseSync(file);db.exec("CREATE TABLE fixture(value TEXT);INSERT INTO fixture VALUES('pre-deploy fixture')");db.close();}
    else writeFileSync(file,'private fixture retained');
@@ -88,8 +89,10 @@ for(const failure of ['rsync','smoke'])test(`real deploy EXIT trap restores fixt
   for(const name of names)assert.equal(readFileSync(path.join(units,name),'utf8'),'old actual '+name);
   assert.deepEqual(JSON.parse(readFileSync(path.join(root,'state.json'))).units,original);
   for(const dir of ['data','submissions','analytics']){const db=new DatabaseSync(path.join(app,dir,'fixture.sqlite'),{readOnly:true});try{assert.equal(db.prepare('SELECT value FROM fixture').get().value,'post-deploy fixture retained');assert.equal(db.prepare('PRAGMA quick_check').get().quick_check,'ok');}finally{db.close();}}
-  for(const dir of ['backups','.git'])assert.equal(readFileSync(path.join(app,dir,'fixture.sqlite'),'utf8'),'private fixture retained');
-  assert.equal(readFileSync(path.join(app,'.env'),'utf8'),envText);assert.equal(readFileSync(path.join(app,'config.json'),'utf8'),'fixture config retained');
+  for(const dir of ['merchant-bridge','backups','.git'])assert.equal(readFileSync(path.join(app,dir,'fixture.sqlite'),'utf8'),'private fixture retained');
+  assert.equal(readFileSync(path.join(app,'.env'),'utf8'),envText+(failure==='smoke'?`\nMERCHANT_BRIDGE_DIR=${app}/merchant-bridge\n`:''));assert.equal(readFileSync(path.join(app,'config.json'),'utf8'),'fixture config retained');
+  assert.equal(readFileSync(path.join(root,'etc','web.env'),'utf8'),'ADMIN_TEST_TOKEN=private-fixture\n'+(failure==='smoke'?`\nMERCHANT_BRIDGE_DIR=${app}/merchant-bridge\n`:''));
+  assert.ok(!result.stdout.includes('private-fixture'));assert.ok(!result.stderr.includes('private-fixture'));
  }finally{
   if(existsSync(path.join(root,'state.json'))){const temp=JSON.parse(readFileSync(path.join(root,'state.json'))).remoteTemp;if(/^\/tmp\/price-radar-deploy\.[A-Za-z0-9]+$/.test(temp||''))rmSync(temp,{recursive:true,force:true});}
   rmSync(root,{recursive:true,force:true});

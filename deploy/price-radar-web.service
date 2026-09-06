@@ -20,6 +20,7 @@ ProtectSystem=strict
 ProtectHome=true
 ReadWritePaths=/opt/linc/apps/price-radar/submissions
 ReadWritePaths=/opt/linc/apps/price-radar/analytics
+ReadWritePaths=/opt/linc/apps/price-radar/merchant-bridge
 UMask=0077
 
 [Install]

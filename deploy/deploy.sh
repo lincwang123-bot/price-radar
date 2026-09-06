@@ -5,6 +5,7 @@
 set -euo pipefail
 
 APP_DIR=/opt/linc/apps/price-radar
+WEB_ENV=/etc/price-radar/web.env
 REMOTE=linc-vps
 LOCAL_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 
@@ -42,7 +43,7 @@ scp -q "$LOCAL_DIR/deploy/restore-code.sh" "$LOCAL_DIR/deploy/rollback-units.sh"
 ssh "$REMOTE" "sudo bash ${REMOTE_TEMP}/rollback-units.sh snapshot ${REMOTE_TEMP}/units"
 ssh "$REMOTE" "node --input-type=module -e 'import {backupSubmissions} from \"${REMOTE_TEMP}/backup.mjs\"; console.log(JSON.stringify(await backupSubmissions(\"${APP_DIR}/submissions/submissions.sqlite\",\"${BACKUP_DIR}/submissions\")))'"
 ssh "$REMOTE" "if test -f ${APP_DIR}/analytics/analytics.sqlite; then node --input-type=module -e 'import {backupSubmissions} from \"${REMOTE_TEMP}/backup.mjs\"; console.log(JSON.stringify(await backupSubmissions(\"${APP_DIR}/analytics/analytics.sqlite\",\"${BACKUP_DIR}/analytics\",{kind:\"analytics\"})))'; fi"
-ssh "$REMOTE" "tar --exclude='./data' --exclude='./submissions' --exclude='./analytics' --exclude='./backups' --exclude='./.env' --exclude='./config.json' --exclude='./.git' -czf ${CODE_BACKUP} -C ${APP_DIR} . && chmod 600 ${CODE_BACKUP} && tar -tzf ${CODE_BACKUP} >/dev/null"
+ssh "$REMOTE" "tar --exclude='./data' --exclude='./submissions' --exclude='./analytics' --exclude='./merchant-bridge' --exclude='./backups' --exclude='./.env' --exclude='./config.json' --exclude='./.git' -czf ${CODE_BACKUP} -C ${APP_DIR} . && chmod 600 ${CODE_BACKUP} && tar -tzf ${CODE_BACKUP} >/dev/null"
 
 # Existing tunnel Requires=web: stopping web also stops it. Start the same unit
 # after web recovery; never install/change its config, route or credentials.
@@ -55,6 +56,7 @@ rsync -az --delete \
   --exclude 'data/' \
   --exclude 'submissions/' \
   --exclude 'analytics/' \
+  --exclude 'merchant-bridge/' \
   --exclude 'backups/' \
   --exclude '.env' \
   --exclude '.git' \
@@ -63,7 +65,7 @@ rsync -az --delete \
   -e ssh "$LOCAL_DIR/" "${REMOTE}:${APP_DIR}/"
 
 echo "==> ensure data and submissions dirs + ownership deploy:deploy"
-ssh "$REMOTE" "sudo mkdir -p ${APP_DIR}/data ${APP_DIR}/submissions ${APP_DIR}/analytics && sudo chown deploy:deploy ${APP_DIR}/data ${APP_DIR}/submissions ${APP_DIR}/analytics && sudo chmod 700 ${APP_DIR}/submissions ${APP_DIR}/analytics"
+ssh "$REMOTE" "sudo mkdir -p ${APP_DIR}/data ${APP_DIR}/submissions ${APP_DIR}/analytics ${APP_DIR}/merchant-bridge && sudo chown deploy:deploy ${APP_DIR}/data ${APP_DIR}/submissions ${APP_DIR}/analytics ${APP_DIR}/merchant-bridge && sudo chmod 700 ${APP_DIR}/submissions ${APP_DIR}/analytics ${APP_DIR}/merchant-bridge"
 
 echo "==> install systemd units"
 for u in price-radar-collect price-radar-web; do
@@ -76,6 +78,7 @@ for u in price-radar-backup.service price-radar-backup.timer; do
 done
 
 echo "==> runtime env file; create if missing"
+ssh "$REMOTE" "sudo mkdir -p $(dirname "$WEB_ENV") && sudo touch ${WEB_ENV} && sudo chmod 600 ${WEB_ENV}"
 ssh "$REMOTE" "test -f ${APP_DIR}/.env || { umask 077; sudo -u deploy touch ${APP_DIR}/.env; echo env-created; }"
 ssh "$REMOTE" "sudo -u deploy grep -q '^PUBLIC_ORIGIN=' ${APP_DIR}/.env || { sudo -u deploy sh -c 'printf \"%s\\n\" \"PUBLIC_ORIGIN=https://airadar.vip\" >> ${APP_DIR}/.env'; echo public-origin-added; }"
 ssh "$REMOTE" "sudo -u deploy grep -q '^SUBMISSIONS_DB_PATH=' ${APP_DIR}/.env || { sudo -u deploy sh -c 'printf \"%s\\n\" \"SUBMISSIONS_DB_PATH=${APP_DIR}/submissions/submissions.sqlite\" >> ${APP_DIR}/.env'; echo submissions-path-added; }"
@@ -83,6 +86,11 @@ ssh "$REMOTE" "sudo -u deploy grep -q '^SUBMISSIONS_BACKUP_DIR=' ${APP_DIR}/.env
 ssh "$REMOTE" "sudo -u deploy grep -q '^ANALYTICS_DB_PATH=' ${APP_DIR}/.env || { sudo -u deploy sh -c 'printf \"%s\\n\" \"ANALYTICS_DB_PATH=${APP_DIR}/analytics/analytics.sqlite\" >> ${APP_DIR}/.env'; }"
 ssh "$REMOTE" "sudo -u deploy grep -q '^ANALYTICS_BACKUP_DIR=' ${APP_DIR}/.env || { sudo -u deploy sh -c 'printf \"%s\\n\" \"ANALYTICS_BACKUP_DIR=${BACKUP_DIR}/analytics\" >> ${APP_DIR}/.env'; }"
 ssh "$REMOTE" "sudo -u deploy grep -q '^SUBMISSION_HASH_SECRET=' ${APP_DIR}/.env || { sudo -u deploy sh -c 'printf \"SUBMISSION_HASH_SECRET=\" >> ${APP_DIR}/.env; /usr/bin/openssl rand -hex 32 >> ${APP_DIR}/.env'; echo submission-secret-added; }"
+for env_file in "${APP_DIR}/.env" "$WEB_ENV"; do
+  # Do not print either environment file: web.env contains admin credentials.
+  # Refuse a conflicting configured path instead of silently widening sandbox access.
+  ssh "$REMOTE" "sudo grep -qxF 'MERCHANT_BRIDGE_DIR=${APP_DIR}/merchant-bridge' ${env_file} || { if sudo grep -q '^MERCHANT_BRIDGE_DIR=' ${env_file}; then echo 'MERCHANT_BRIDGE_DIR conflicts with dedicated bridge path' >&2; exit 1; fi; sudo sh -c 'printf \"\\n%s\\n\" \"MERCHANT_BRIDGE_DIR=${APP_DIR}/merchant-bridge\" >> ${env_file}'; }"
+done
 
 echo "==> daemon-reload + enable + start"
 ssh "$REMOTE" "sudo systemctl daemon-reload && sudo systemctl enable price-radar-collect price-radar-web && sudo systemctl restart price-radar-collect price-radar-web && sudo systemctl start price-radar-named-tunnel && echo started"

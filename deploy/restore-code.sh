@@ -7,5 +7,5 @@ test -d "$app" && test "$app" != / && test -f "$archive"
 stage=$(mktemp -d /tmp/price-radar-code-restore.XXXXXX)
 trap 'rm -rf "$stage"' EXIT
 tar -xzf "$archive" -C "$stage"
-rsync -ac --delete --exclude '/data/' --exclude '/submissions/' --exclude '/analytics/' \
+rsync -ac --delete --exclude '/data/' --exclude '/submissions/' --exclude '/analytics/' --exclude '/merchant-bridge/' \
   --exclude '/backups/' --exclude '/.env' --exclude '/config.json' --exclude '/.git' "$stage/" "$app/"

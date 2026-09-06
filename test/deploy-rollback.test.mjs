@@ -5,17 +5,29 @@ import {execFileSync} from 'node:child_process';
 import os from 'node:os';
 import path from 'node:path';
 
+test('web bridge access does not grant market writes or expose private stores to collector',()=>{
+ const web=readFileSync('deploy/price-radar-web.service','utf8');
+ const collect=readFileSync('deploy/price-radar-collect.service','utf8');
+ assert.match(web,/^ReadWritePaths=\/opt\/linc\/apps\/price-radar\/merchant-bridge$/m);
+ assert.ok(!/^ReadWritePaths=.*\/price-radar\/data\b/m.test(web));
+ assert.match(collect,/^InaccessiblePaths=.*\/submissions .*\/analytics /m);
+ assert.ok(!/^ReadWritePaths=.*merchant-bridge/m.test(collect));
+ const deploy=readFileSync('deploy/deploy.sh','utf8');
+ assert.ok(deploy.includes("--exclude='./merchant-bridge'"));
+ assert.ok(deploy.includes("--exclude 'merchant-bridge/'"));
+});
+
 test('rollback removes newly deployed code but preserves private/runtime paths',()=>{
  const root=mkdtempSync(path.join(os.tmpdir(),'radar-rollback-'));
  try{
   const old=path.join(root,'old'),app=path.join(root,'app'),archive=path.join(root,'old.tgz');mkdirSync(old);mkdirSync(app);
   writeFileSync(path.join(old,'web.mjs'),'old');writeFileSync(path.join(app,'new-code.mjs'),'new');writeFileSync(path.join(app,'web.mjs'),'new');
-  for(const dir of ['data','submissions','analytics','backups','.git']){mkdirSync(path.join(app,dir));writeFileSync(path.join(app,dir,'fixture'),'keep');}
+  for(const dir of ['data','submissions','analytics','merchant-bridge','backups','.git']){mkdirSync(path.join(app,dir));writeFileSync(path.join(app,dir,'fixture'),'keep');}
   for(const name of ['.env','config.json'])writeFileSync(path.join(app,name),'keep');
   execFileSync('tar',['-czf',archive,'-C',old,'.']);
   execFileSync('bash',['deploy/restore-code.sh',archive,app]);
   assert.equal(readFileSync(path.join(app,'web.mjs'),'utf8'),'old');assert.equal(existsSync(path.join(app,'new-code.mjs')),false);
-  for(const dir of ['data','submissions','analytics','backups','.git'])assert.equal(readFileSync(path.join(app,dir,'fixture'),'utf8'),'keep');
+  for(const dir of ['data','submissions','analytics','merchant-bridge','backups','.git'])assert.equal(readFileSync(path.join(app,dir,'fixture'),'utf8'),'keep');
   for(const name of ['.env','config.json'])assert.equal(readFileSync(path.join(app,name),'utf8'),'keep');
  }finally{rmSync(root,{recursive:true,force:true});}
 });
