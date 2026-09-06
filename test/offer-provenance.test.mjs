@@ -1,12 +1,25 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {openDb,openDbReadOnly,storeSnapshot,offersOfProduct} from '../lib/db.mjs';
-import {offerProvenance,quoteSourceLabel,merchantIdForUrl,quoteTimeInfo} from '../lib/offer-provenance.mjs';
+import {offerProvenance,quoteSourceLabel,merchantIdForUrl,merchantKeyForOffer,quoteTimeInfo} from '../lib/offer-provenance.mjs';
 import {mkdtempSync,rmSync} from 'node:fs';
 import path from 'node:path';
 import {tmpdir} from 'node:os';
 import {projectProduct} from '../lib/quote-policy.mjs';
 const at='2026-09-06T00:00:00Z';
+test('共享平台根域不能作为商家，未归属报价键稳定且按报价隔离',()=>{
+ for(const host of ['16688.com.cn','www.16688.com.cn','wzyp.cn','www.wzyp.cn','16688.com.cn.','www.16688.com.cn.','wzyp.cn.','priceai.cc.','www.priceai.cc.'])assert.equal(merchantIdForUrl(`https://${host}/item/1`),null);
+ assert.equal(merchantIdForUrl('https://store.wzyp.cn/'),'domain:store.wzyp.cn');
+ const row={source:'priceai',product_id:'p',offer_id:'a',url:'https://16688.com.cn/item/1',merchant_id:'domain:16688.com.cn'};
+ const key=merchantKeyForOffer(row);assert.match(key,/^unresolved-quote:[a-f0-9]{64}$/);
+ assert.equal(key,merchantKeyForOffer({...row,url:'https://16688.com.cn:443/item/1',snapshot_id:'later',price:100}));
+ assert.equal(key,merchantKeyForOffer({...row,url:'https://www.16688.com.cn./item/1'}));
+ assert.equal(merchantIdForUrl('https://www.shop.example./item'),'domain:shop.example');
+ for(const change of [{offer_id:'b'},{product_id:'q'},{source:'direct-shops'},{url:'https://16688.com.cn/item/2'}])assert.notEqual(key,merchantKeyForOffer({...row,...change}));
+ assert.equal(merchantKeyForOffer({...row,url:'https://shop.example/item'}),'domain:shop.example');
+ assert.equal(merchantKeyForOffer({...row,url:'javascript:alert(1)'}),null);
+ assert.equal(offerProvenance('priceai',row,{fetchedAt:at}).merchant_id,null);
+});
 function snapshot(id,price,source='direct-shops') {return {source,snapshotId:String(id),fetchedAt:`2026-09-06T0${id}:00:00Z`,products:[{productId:'p',offers:[{offerId:'o',url:'https://shop.example/item/1',sourceId:'shop',price,currency:'CNY',status:'in_stock',source_type:'merchant_direct'}]}]};}
 test('来源等级由适配器决定，第三方载荷不能伪造商家直连或官方',()=>{
  for(const source of ['priceai','cardnav-official','goaihop-relay','ldxp-goods'])assert.equal(offerProvenance(source,{source_type:'merchant_direct'},{fetchedAt:at}).source_type,'third_party');

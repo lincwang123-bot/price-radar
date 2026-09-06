@@ -4,6 +4,15 @@ import {openDb,storeSnapshot} from '../lib/db.mjs';
 import {openAnalytics} from '../lib/analytics.mjs';
 import {openSubmissionsDb,listSubmissions} from '../lib/submissions.mjs';
 import {createApp} from '../lib/web.mjs';
+import {sponsoredContent} from '../lib/commerce-ui.mjs';
+test('共享域旧merchant_id不能冒认独立商家或产生广告曝光',()=>{
+ for(const host of ['16688.com.cn','wzyp.cn']){
+  const product={source:'priceai',product_id:'chatgpt-plus-recharge',snapshot_id:'old'};
+  const offer={...product,offer_id:'old-offer',merchant_id:'domain:'+host,source_id:'pretend-merchant',url:'https://'+host+'/goods/1',price:100,currency:'CNY',status:'in_stock'};
+  const campaign={id:'legacy',source:product.source,product_id:product.product_id,offer_id:offer.offer_id,merchant_id:offer.merchant_id,status:'approved',reviewed_at:new Date().toISOString(),placement:'sponsored_product',start_at:new Date(Date.now()-1000).toISOString(),end_at:new Date(Date.now()+3600000).toISOString()};
+  let impressions=0;assert.equal(sponsoredContent([offer],[campaign],{product,recordImpression:()=>impressions++}),'');assert.equal(impressions,0);
+ }
+});
 async function fixture(run){const db=openDb(':memory:'),submissionsDb=openSubmissionsDb(':memory:'),analytics=openAnalytics(':memory:','synthetic-test-secret-32-chars-long'),app=createApp({db,submissionsDb,analytics});try{
  storeSnapshot(db,{source:'direct-shops',snapshotId:'commerce',products:[{productId:'chatgpt-plus-recharge',name:'ChatGPT Plus',platform:'ChatGPT',currency:'CNY',offers:[100,110].map((price,i)=>({offerId:'o'+i,title:'ChatGPT Plus 代充 1个月',storeName:'虚构店铺'+i,price,currency:'CNY',status:'in_stock',stockCount:1,url:'https://merchant.test/product/'+i}))}]});
  await new Promise(r=>app.listen(0,'127.0.0.1',r));await run({base:'http://127.0.0.1:'+app.address().port,db,submissionsDb,analytics});

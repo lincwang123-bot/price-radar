@@ -7,7 +7,9 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { exportBackup } from '../scripts/export-backup.mjs';
-import { readBackupKey, encryptBackup, verifyMacBackup, pullMacBackup } from '../scripts/mac-backup.mjs';
+import { readBackupKey, encryptBackup, verifyMacBackup, pullMacBackup, DEFAULT_BACKUP_TIMEOUT_MS } from '../scripts/mac-backup.mjs';
+
+test('weak-network default budget is bounded to fifteen minutes',()=>assert.equal(DEFAULT_BACKUP_TIMEOUT_MS,900000));
 
 test('Mac backup encrypts, authenticates and restores three databases without exposing plaintext', async () => {
   const root = mkdtempSync(path.join(tmpdir(), 'airadar-mac-test-'));

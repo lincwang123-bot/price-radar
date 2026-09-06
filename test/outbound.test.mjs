@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {openDb,storeSnapshot} from '../lib/db.mjs';
 import {openAnalytics} from '../lib/analytics.mjs';
-import {outboundHref,handleOutbound,safeMerchantUrl} from '../lib/outbound.mjs';
+import {outboundHref,handleOutbound,safeMerchantUrl,resolveOutboundOffer} from '../lib/outbound.mjs';
 import {merchantSummary} from '../lib/admin-analytics.mjs';
 import {mkdtempSync,rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
@@ -68,6 +68,24 @@ test('current quote rejects stock, expiry, no-warranty and stale-snapshot bypass
    ctx.db.prepare("UPDATE offers SET status='in_stock',stock_count=NULL,expires_at=NULL,title=NULL").run();
   }
   ctx.db.prepare("UPDATE snapshots SET fetched_at='2026-09-01T00:00:00Z'").run();assert.equal(follow(ctx).statusCode,404);
+ }finally{ctx.analytics.close();ctx.db.close();}
+});
+test('shared-platform shops redirect with separate quote keys but cannot sponsor or open aggregator targets',()=>{
+ const ctx=fixture();try{
+  ctx.db.prepare("UPDATE offers SET url='https://16688.com.cn/shop/a',merchant_id='domain:16688.com.cn'").run();
+  ctx.db.prepare("INSERT INTO offers(source,snapshot_id,product_id,offer_id,price,currency,status,url,merchant_id) VALUES('fixture','s1','p','o2',12,'CNY','in_stock','https://16688.com.cn/shop/b','domain:16688.com.cn')").run();
+  assert.equal(follow(ctx).statusCode,302);assert.equal(follow(ctx,outboundHref({...offer,offer_id:'o2'})).statusCode,302);
+  const rows=ctx.analytics.outbound.report(30,date);assert.equal(rows.length,2);assert.notEqual(rows[0].merchant_id,rows[1].merchant_id);assert.ok(rows.every(r=>r.merchant_id.startsWith('unresolved-quote:')));
+  assert.match(merchantSummary(ctx.analytics),/未归属店铺（按报价隔离）/);
+  for(const url of ['https://wzyp.cn/shop/a','https://www.16688.com.cn/shop/a','https://16688.com.cn./shop/a']){ctx.db.prepare('UPDATE offers SET url=? WHERE offer_id=?').run(url,'o');assert.equal(follow(ctx).statusCode,302);assert.match(resolveOutboundOffer(ctx.db,{source:'fixture',snapshot:'s1',product:'p',offer:'o'},date.getTime()).merchant_id,/^unresolved-quote:/);}
+  assert.ok(ctx.analytics.outbound.report(30,date).every(r=>r.merchant_id.startsWith('unresolved-quote:')));
+  const c={id:'shared',merchant_id:'domain:16688.com.cn',source:'fixture',product_id:'p',offer_id:'o',label:'fixture',placement:'sponsored_product',start_at:'2026-09-01T00:00:00Z',end_at:'2026-10-01T00:00:00Z'};
+  assert.throws(()=>ctx.analytics.outbound.saveCampaign(c,{approve:true,now:date}),/requires verified/);
+  assert.throws(()=>ctx.analytics.outbound.saveCampaign({...c,merchant_id:rows[0].merchant_id},{approve:true,now:date}),/requires verified/);
+  ctx.analytics.db.prepare('INSERT INTO campaigns VALUES(?,?,?,?,?,?,?,?,?,?,?)').run(c.id,c.merchant_id,c.source,c.product_id,c.offer_id,c.label,c.placement,c.start_at,c.end_at,'approved',date.toISOString());
+  assert.equal(ctx.analytics.outbound.campaignsFor({source:'fixture',productId:'p'},date).length,0);
+  assert.equal(follow(ctx,outboundHref(offer,{}, {placement:'sponsored_product',campaignId:'shared'})).statusCode,404);
+  for(const url of ['https://data.priceai.cc/item','https://goaihop.com/item','https://cardnav.xyz/item']){ctx.db.prepare('UPDATE offers SET url=? WHERE offer_id=?').run(url,'o');assert.equal(follow(ctx).statusCode,404);}
  }finally{ctx.analytics.close();ctx.db.close();}
 });
 test('clicks dedupe per day, ignore forged proxy/HEAD/bots/admin/prefetch and preserve only hashes',()=>{

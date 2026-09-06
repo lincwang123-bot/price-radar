@@ -96,7 +96,8 @@ export async function verifyMacBackup(archive, key, directory, { restoreTo, sign
   finally { rmSync(temp, { recursive: true, force: true }); }
 }
 
-export async function pullMacBackup({ directory = DEFAULT_DIR, keyPath = DEFAULT_KEY, signal, spawnRemote = spawn, timeoutMs = 240000, sendReceipt=publishReceipt } = {}) {
+export const DEFAULT_BACKUP_TIMEOUT_MS=900000;
+export async function pullMacBackup({ directory = DEFAULT_DIR, keyPath = DEFAULT_KEY, signal, spawnRemote = spawn, timeoutMs = DEFAULT_BACKUP_TIMEOUT_MS, sendReceipt=publishReceipt } = {}) {
   if (!path.isAbsolute(directory) || !path.isAbsolute(keyPath)) throw new Error('Use absolute backup paths');
   privateDirectory(directory);
   // Do not silently create a different key when encrypted archives already exist.
