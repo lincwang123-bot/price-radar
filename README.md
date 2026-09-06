@@ -5,6 +5,8 @@
 
 > 2026-09-06 更新：扩源、覆盖验收、报价来源字段、P0 商业化入口和 Mac 回执已完成首轮发布验收。既有历史记录继续保留；完整商家账号、API 与信用体系仍属于后续阶段。
 
+> 同日第二轮扩源：默认原店目标由 23 增至 54（新增 30 家已核验的 16688 店铺与 AI 补给站），链动补充查询扩为 12 个关键词及有限分页。目标数不是有效报价数，也不是独立域名数；验证范围与未接入原因见 [扩源记录](docs/source-expansion-2026-09-06.md)。
+
 ## 联系方式
 
 - X：[ @superwang](https://x.com/superwang)
@@ -126,9 +128,11 @@ node radar.mjs import <raw.json>                # 历史 raw 快照回填（幂�
 | `burstpro-ai` | BurstPro AI | Dujiao：`burstpro-ai.online/api/v1/public/products` | 30min |
 | `ikunlove` | IkunLove | IkunLove JSON：`ikunlove.best/api/shop/products` | 30min |
 | `mooncake` | Mooncake | Mooncake JS 目录：`fk1.ybkjs.top/mooncake-official-media/catalog.js` | 12h |
+| `16688-s…`（30 家） | 固定店铺名单见 `collectors/direct/platform16688.mjs` | 16688 原店公开 `/shopApi/goods/list`，按已核验 `shop_no` 读取完整列表，不依赖 PriceAI 报价 | 60min |
+| `aichong` | AI补给站 | `aichong.xin/api/products`，仅在原站明确启用本地购买 `self_pay=true` 时收录 | 60min |
 | `wzyp-harvey`、`wzyp-paimon`、`wzyp-ai-choice`、`wzyp-direct`、`wzyp-lightyear` | 派大星、派蒙AI、AI优选站、GPTplus直营、光年AI | ShopApi：固定登记的 `wzyp.cn` 店铺，读取 `/shopApi/Shop/categoryList` 与 `/shopApi/Shop/goodsList` | 60min，非默认 |
 
-默认目标由 21 个扩为 23 个，线上配置已生效；两项新增原站入口已在本机和生产 VPS 只读核验可达，自动采集仍遵循缓存和最小间隔。AikaShop 的 6 条 Suno 套餐没有明确库存证据，均为“待核验”，不参与可售起价或覆盖成绩。`web3chirou` 的 Kami 目录会出现“请求 100 条但首页仅返回 96 条”的情况；采集器在存在 `total` 时不再以单页长度提前结束，并用唯一 ID、重复页、连续空页和最大页数共同限定请求。Dujiao 多规格商品按 SKU 独立生成报价，只补充已确认的品牌名，不把父商品中的 Plus / Pro 5x / Pro 20x 混入每个 SKU。自动生成的 `SKU-1` 仅在单规格商品中回退到父标题，多规格仍不猜测。
+默认目标已从早期 21、23 个扩为 54 个；新增原站入口均在本机和生产 VPS 核验可达，自动采集仍遵循缓存和最小间隔。默认清单统一由 registry 提供，配置不再维护另一份重复数组。AikaShop 的 6 条 Suno 套餐没有明确库存证据，均为“待核验”，不参与可售起价或覆盖成绩。`web3chirou` 的 Kami 目录会出现“请求 100 条但首页仅返回 96 条”的情况；采集器在存在 `total` 时不再以单页长度提前结束，并用唯一 ID、重复页、连续空页和最大页数共同限定请求。Dujiao 多规格商品按 SKU 独立生成报价，只补充已确认的品牌名，不把父商品中的 Plus / Pro 5x / Pro 20x 混入每个 SKU。自动生成的 `SKU-1` 仅在单规格商品中回退到父标题，多规格仍不猜测。
 
 `otaor`（`acc.otaor.com`）在 2026-09-05 核验时全部售罄，曾仅登记为候选；2026-09-06 复核 41 条 SKU 中 1 条 Gemini 权益兑换链接标有库存，其余 40 条售罄，故本次恢复默认目标。兑换链接不是完整订阅，不能计作订阅覆盖；旧地址 `xtacc.top` 不重复计入。无法正常访问、返回挑战页或已不再是商品站的候选不启用。
 
@@ -137,9 +141,9 @@ node radar.mjs import <raw.json>                # 历史 raw 快照回填（幂�
 采集边界与失败语义：
 
 - 只请求固定白名单内无需登录即可读取的公开商品目录；不提交账号凭据，不绕过登录、验证码或 WAF，不把采集器当通用代理。ShopApi 路径中的店铺 token 是公开店铺标识，不是登录凭据。
-- 源级最短请求间隔默认 30min；单目标另按上表复用缓存，分页请求默认间隔 500ms，并限制页数/分类数。即使 daemon 运行更频繁，也不会据此提高原站请求频率。
+- 源级最短请求间隔默认 30min；单目标另按上表复用缓存，实际店铺请求之间和分页请求默认间隔 500ms，并限制页数/分类数。缓存命中不产生原站请求。即使 daemon 运行更频繁，也不会据此提高原站请求频率。
 - 每个目标成功后原子更新本地缓存。失败目标单独记录健康状态，已有缓存可在期限内保留；健康店铺仍可发布和比价。报价是否可用按对应目标判断，不能只凭汇总 `stale` 字段把所有店铺一起禁用。缺失/超龄目标不冒充在售，请求失败不等同于商品下架或无货。
-- 原始缓存会保留店铺返回的完整商品状态，便于核对采集结果；公开快照会排除售罄商品，以及标题明确标注“无质保 / 无售后”的商品。它们不参与最低价、报价排行或产品计数，避免用不可购买或无保障的异常低价误导用户。
+- 缓存保留规范化商品状态，公开快照排除售罄和标题明确标注“无质保 / 无售后”的商品；16688 额外检查商品说明中的明确无保障条款，命中后在解析阶段排除。不能将缓存数量当作原站商品总数。被排除的条目不参与最低价、报价排行或产品计数，避免异常低价误导用户。
 - 只发布能可靠归入本项目商品分类的条目；无法确认分类的商品保留在采集统计中，但不进入报价快照。
 - Perplexity Pro 和 Notion AI 商业版按 1 / 12 / 24 个月拆分，Manus 按 2000 / 5000 / 10000 积分拆分，Cursor 区分 Pro / Pro+ / Ultra 以及明确月卡和期限未注明，X Premium+ 与 Premium 单独排行。质保天数不用于推断订阅期限；永久权益、多个档位共用一个起售价以及多产品全家桶不进入单一订阅排行。
 - 补充 `Max5X`、`20×`、繁体接码等明确写法；API 中转优先于标题中的 Pro / Max 号池词识别。“库存紧张”保留为可购买报价。
@@ -321,7 +325,7 @@ node radar.mjs submission-status FB-20260905-ABC234 resolved
 | 源 | 数据形态 | 更新节奏 | 备注 |
 | --- | --- | --- | --- |
 | `priceai` | PriceAI 官方公开快照流：45 产品 / 每产品 Top5+ 最低价 offer（含库存、来源店、原站 URL） | 约 5min 一代（指针 ≥1min 轮询） | 官方为脚本/Agent 发布的只读流，见 <https://priceai.cc/price-radar-api.md> |
-| `ldxp-goods` | RelayWatch 聚合的**链动小铺(LDXP) 卡网商品**：按关键词定向查询，真实 CNY 价格+库存+店铺 | 受 `min_interval_minutes`（默认 15min）节流 | relaywatch 项目 MIT；只做关键词定向轻量查询，不做全量镜像 |
+| `ldxp-goods` | RelayWatch 聚合的**链动小铺(LDXP) 卡网商品**：12 个关键词，在售筛选、有限分页和去重 | 默认 30min，每关键词最多 2 页、100 条/页，整轮最多 24 次商品请求，间隔至少 1s | 仍是第三方补充，不是独立直采；代码许可不代表数据库许可，不做全量镜像 |
 | `cardnav-official` | CardNav **官方订阅 App Store 区价**：17 产品 × 39-40 地区，本地价+折算 CNY（SSR 表格） | 官方价约每日刷新，默认 12h 拉一次 | 个人非商用低频使用；不镜像全量 |
 | `goaihop-relay` | GoAIHop **中转 API 站套餐+可用性**：12 家中转站 × 73 套餐，全 CNY；含实测 success/availability/P50 延迟快照 | 默认 6h 拉一次 | 同域公开 JSON API（见 `docs/goaihop-relay-packages-parsing-spec.md`）；含赞助站已在 extra 标注 |
 | `direct-shops` | 固定白名单内原始店铺的公开 JSON/JS/ShopApi 商品目录 | 源级 ≥30min；单目标 30min / 60min / 12h 缓存 | 独立实现；失败可沿用旧缓存并标记 `stale`；展示挂牌价而非最终结算价 |
@@ -334,6 +338,8 @@ node radar.mjs submission-status FB-20260905-ABC234 resolved
 - PriceAI 匿名档每产品只给 Top 5 offer + 最低价；任意搜索/全量报价导出不在公开流内。
 
 ### 跨源差异提醒
+
+- 链动查询的截断原因、逐词总数、页数和去重收录量保存在行情库 `meta` 的 `coverage:ldxp-goods` 中。关键词结果相互重叠，查询总数之和不是独立商品总数；达到分页预算时明确记为有限样本，不宣称全站完整。
 
 - 各源的产品 id 与商品规格体系不同（priceai 用 `chatgpt-plus-recharge` 等品类 id；ldxp-goods 用关键词 slug 如 `gpt-pro`；direct-shops 只发布可可靠分类的原店条目），跨源对比请自行在业务侧映射，工具不臆断 SKU 等价。
 - ldxp-goods 的搜索为商品名 `contains` 匹配，同词可能混入成品号/额度/会员等形态，盯盘阈值请按需收敛关键词。

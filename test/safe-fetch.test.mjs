@@ -1,5 +1,20 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { isAccessDeniedError } from '../lib/safe-fetch.mjs';
+
+test('访问拒绝附带可靠元数据，识别HTTP200 WAF和API认证', async () => {
+  const variants = [
+    () => new Response('denied', { status: 403 }),
+    () => new Response('rate limit', { status: 429 }),
+    () => new Response('<script>window._waf_is_mobile=false</script>', { headers: { 'content-type': 'text/html' } }),
+    () => new Response('challenge', { headers: { 'x-tengine-error': 'denied by http_custom' } }),
+    () => new Response(JSON.stringify({ code: 0, msg: '请先登录' }), { headers: { 'content-type': 'application/json' } }),
+  ];
+  for (const response of variants) {
+    await assert.rejects(safeFetchJson('https://example.com/api', { allowedOrigins: ['https://example.com'], fetchImpl: async () => response() }), err => isAccessDeniedError(err) && Number.isInteger(err.status));
+  }
+  await assert.rejects(safeFetchJson('https://example.com/api', { allowedOrigins: ['https://example.com'], fetchImpl: async () => new Response('down', { status: 500 }) }), err => !isAccessDeniedError(err) && err.status === 500);
+});
 
 import { safeFetchJson, safeFetchText } from "../lib/safe-fetch.mjs";
 

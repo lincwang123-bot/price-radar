@@ -8,37 +8,21 @@
     "ldxp-goods": {
       "enabled": true,
       "label": "RelayWatch·链动小铺(LDXP) 卡网商品价",
-      "keywords": ["chatgpt plus 代充", "claude pro 代充", "gpt pro 代充", "gemini pro 代充"],
-      "min_interval_minutes": 15
+      "_说明": "keywords 为 null 时继承已核验的默认关键词名单，随内置名单更新。",
+      "keywords": null,
+      "min_interval_minutes": 30,
+      "page_size": 100,
+      "max_pages_per_keyword": 2,
+      "max_requests": 24,
+      "request_delay_ms": 1000
     },
     "direct-shops": {
       "enabled": true,
       "label": "原始店铺直采",
       "min_interval_minutes": 30,
       "request_delay_ms": 500,
-      "targets": [
-        "aisou",
-        "redeemgpt",
-        "ai666",
-        "shopcardai",
-        "web3chirou",
-        "morimm",
-        "burstpro-ai",
-        "ikunlove",
-        "mooncake",
-        "lynnzee",
-        "zhanghao66",
-        "yufenggpt",
-        "google7676",
-        "tehuio",
-        "codesky",
-        "fk10886",
-        "gugugaga",
-        "flyai",
-        "whh985",
-        "aictk",
-        "ccdawang"
-      ]
+      "_说明": "targets 为 null 时继承已核验的默认原店名单，随内置名单更新。",
+      "targets": null
     }
   },
   "watch": {

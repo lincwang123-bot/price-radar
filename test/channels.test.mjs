@@ -5,6 +5,9 @@ import { openDb,storeSnapshot } from "../lib/db.mjs";
 import { createApp } from "../lib/web.mjs";
 test("渠道只按登记原站识别，不根据来源名称冒认平台",()=>{
  assert.equal(offerChannel({url:"https://16688.com.cn/goods/1"}).id,"16688");
+ assert.equal(offerChannel({url:"https://www.16688.com.cn/goods/1"}).id,"16688");
+ assert.equal(offerChannel({url:"https://www.16688.com.cn./goods/1"}).id,"16688");
+ assert.equal(offerChannel({url:"https://fake.16688.com.cn/goods/1"}).id,"unknown");
  assert.equal(offerChannel({url:"https://wzyp.cn/item/1"}).id,"ldxp");
  assert.equal(offerChannel({url:"https://morimm.com/products/1"}).framework,"Dujiao 接口");
  for(const url of ["https://16688.com.cn.evil.test/","https://evil.test/","javascript:alert(1)"])assert.equal(offerChannel({url,source_id:"16688-fake"}).id,"unknown");

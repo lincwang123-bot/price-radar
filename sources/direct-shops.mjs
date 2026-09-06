@@ -9,6 +9,7 @@ import {
 import { collectorFor, directTargets } from "../collectors/direct/registry.mjs";
 import { claimSourceAttempt } from "../lib/source-timing.mjs";
 import { metaSet } from "../lib/db.mjs";
+import { isAccessDeniedError } from '../lib/safe-fetch.mjs';
 
 export const sourceId = "direct-shops";
 export const sourceLabel = "原始店铺直采";
@@ -30,12 +31,15 @@ export async function pull(ctx) {
   const staleTargets = [];
   const health = [];
   const maxCacheAgeMinutes = positiveNumber(cfg.max_cache_age_minutes, 1440);
+  const requestDelayMs = positiveNumber(cfg.request_delay_ms, 500);
+  let attemptedTargets = 0;
+  const deniedOrigins = new Map();
 
   for (const target of targets) {
     const cachePath = path.join(cacheDir, `${target.id}.json`);
     const cached = readTargetCache(cachePath);
     const ageMinutes = cached?.fetchedAt ? (Date.now() - Date.parse(cached.fetchedAt)) / 60000 : Infinity;
-    if (cached && Number.isFinite(ageMinutes) && ageMinutes < Math.min(target.intervalMinutes, maxCacheAgeMinutes)) {
+    if (!deniedOrigins.has(target.origin) && cached && Number.isFinite(ageMinutes) && ageMinutes < Math.min(target.intervalMinutes, maxCacheAgeMinutes)) {
       allOffers.push(...withHealth(cached.offers, 'cached', maxCacheAgeMinutes));
       health.push({target:target.id,name:target.name,status:"cached",lastSuccess:cached.fetchedAt,ageMinutes:Math.round(ageMinutes)});
       ctx.log?.(`[${sourceId}] ${target.name} 命中本地缓存（${ageMinutes.toFixed(0)}min / ${target.intervalMinutes}min）。`);
@@ -43,12 +47,15 @@ export async function pull(ctx) {
     }
 
     try {
+      if (deniedOrigins.has(target.origin)) throw deniedOrigins.get(target.origin);
       const collect = collectorFor(target);
+      if (attemptedTargets > 0) await (ctx.sleep ?? ((ms) => new Promise(resolve => setTimeout(resolve, ms))))(requestDelayMs);
+      attemptedTargets += 1;
       const offers = validateTargetOffers(
         await collect(target, {
           capturedAt,
-          fetchImpl: globalThis.fetch,
-          requestDelayMs: positiveNumber(cfg.request_delay_ms, 500),
+          fetchImpl: ctx.fetchImpl ?? globalThis.fetch,
+          requestDelayMs,
         }),
         target,
       );
@@ -57,6 +64,7 @@ export async function pull(ctx) {
       health.push({target:target.id,name:target.name,status:"ok",lastSuccess:capturedAt,ageMinutes:0});
       ctx.log?.(`[${sourceId}] ${target.name}: ${offers.length} 条公开商品。`);
     } catch (error) {
+      if (isAccessDeniedError(error)) deniedOrigins.set(target.origin, error);
       staleTargets.push(target.id);
       const usable = cached && Number.isFinite(ageMinutes) && ageMinutes <= maxCacheAgeMinutes;
       if (usable) allOffers.push(...withHealth(cached.offers, 'stale', maxCacheAgeMinutes));

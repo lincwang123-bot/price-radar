@@ -6,6 +6,41 @@ const quote = (title, patch = {}) => ({ title, offer_id: title, price: 100, curr
 const list = (source, product_id, offers, name = product_id) => ({ source, stale: false, products: [{ product_id, name, currency: 'CNY', offers }] });
 const category = (lists, key) => buildProductDirectory(lists).find(row => row.key === key);
 
+test('16688 exact product URLs deduplicate changed titles/specs across sources, preferring direct', () => {
+  const entries = [
+    { list: { source: 'priceai' }, product: { currency: 'CNY' }, offer: quote('Claude Pro 旧标题', { url: 'https://16688.com.cn/goods/G69013943?utm_source=legacy', comparison_known: false }) },
+    { list: { source: 'direct-shops' }, product: { currency: 'CNY' }, offer: quote('Claude Pro 新标题', { url: 'https://www.16688.com.cn/goods/G69013943', comparison_key: 'new-spec' }) },
+  ];
+  for (const quoteEntries of [entries, [...entries].reverse()]) {
+    const result = directoryQuotes({ quoteEntries });
+    assert.equal(result.total, 1);
+    assert.equal(result.entries[0].list.source, 'direct-shops');
+    assert.equal(result.entries[0].offer.title, 'Claude Pro 新标题');
+  }
+});
+
+test('16688 deduplication does not collapse meaningful query variants, other hosts/paths, currencies or directories', () => {
+  const entry = (url, key, currency = 'CNY') => ({ list: { source: 'direct-shops' }, product: { currency }, offer: quote(`Claude Pro ${key}`, { url, currency, comparison_key: key }) });
+  for (const url of [
+    'https://16688.com.cn/goods/G123?variant=monthly',
+    'https://16688.com.cn/goods/G123?sku=one',
+    'https://other.example/goods/G123',
+    'https://16688.com.cn.evil.example/goods/G123',
+    'https://shop.16688.com.cn/goods/G123',
+    'https://16688.com.cn/goods/G123/extra',
+    'https://16688.com.cn/goods/G123suffix',
+    'https://16688.com.cn/goods/123',
+  ]) {
+    assert.equal(directoryQuotes({ quoteEntries: [entry(url, 'month'), entry(url, 'year')] }).total, 2, url);
+  }
+  const url = 'https://16688.com.cn/goods/G123';
+  assert.equal(directoryQuotes({ quoteEntries: [entry('http://16688.com.cn/goods/G123', 'month')] }).total, 0);
+  assert.equal(directoryQuotes({ quoteEntries: [entry(url, 'month'), entry(url, 'month', 'USD')] }).total, 2);
+  const directories = category([list('direct-shops', 'mixed', [quote('ChatGPT Pro 5x', { url }), quote('ChatGPT Pro 20x', { url })])], 'chatgpt').products;
+  assert.equal(directories.length, 2);
+  for (const product of directories) assert.equal(directoryQuotes(product).total, 1);
+});
+
 test('seven primary categories plus more retain known extra products', () => {
   const directory = buildProductDirectory([list('direct-shops', 'suno-pro-1m', [quote('Suno Pro 1个月')])]);
   assert.deepEqual(directory.filter(row => row.primary).map(row => row.label), ['ChatGPT', 'Claude', 'Gemini', 'Grok', 'X', 'API / 中转', '邮箱 / 接码']);

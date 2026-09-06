@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { offerSpec } from '../../lib/offer-spec.mjs';
+import { offerSpec, deliveryForm } from '../../lib/offer-spec.mjs';
 
 // 独立维护的小型明确分类表。它只覆盖当前站点实际展示的产品族；规则不确定时
 // 返回 null，避免把低价但不同形态的商品错误混入排行榜。
@@ -151,7 +151,7 @@ export function classifyDirectOffer({ title, category = "", sourceId = "" }) {
     if (has(titleText, /5\s*x|x\s*5/)) return PRODUCTS["chatgpt-pro-5x"];
   }
   if (chatgpt && has(titleText, /\bplus(?:\b|(?=\d))|g\s*\+/)) {
-    if (has(titleText, /成品|账号|共享|拼车|日抛|周抛|镜像|普号|体验|试用|trial|free\s*号|独享号/)) return PRODUCTS["chatgpt-plus"];
+    if (has(titleText, /日抛|周抛|普号|体验|试用|trial|free\s*号/) || ['成品账号', '共享'].includes(deliveryForm(titleText))) return PRODUCTS["chatgpt-plus"];
     if (singleSubscriptionMonths(titleText) === 12) return PRODUCTS["chatgpt-plus-recharge-12m"];
     return PRODUCTS["chatgpt-plus-recharge"];
   }

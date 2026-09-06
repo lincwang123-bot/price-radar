@@ -4,10 +4,14 @@ import { collectMooncake } from "./mooncake.mjs";
 import { collectShopApi } from "./shop-api.mjs";
 import { collectDujiao } from "./dujiao.mjs";
 import { collectAikaShop } from './aikashop.mjs';
+import { PLATFORM16688_SHOPS, collect16688 } from './platform16688.mjs';
+import { collectAichong } from './aichong.mjs';
 
 // 这里只登记我们逐个核验过的原站公开入口。URL 不接受运行时任意传入，
 // 避免把采集器变成通用代理或 SSRF 入口。
 const TARGETS = [
+  ...PLATFORM16688_SHOPS.map(target => ({ ...target, kind: 'platform16688', intervalMinutes: 60 })),
+  { id: 'aichong', name: 'AI补给站', kind: 'aichong', origin: 'https://aichong.xin', intervalMinutes: 60 },
   {id:'aikashop',name:'AI卡商城',kind:'aikashop',origin:'https://aikashop.com',intervalMinutes:720},
   {
     id: "aisou",
@@ -136,6 +140,8 @@ const COLLECTORS = {
   shopApi: collectShopApi,
   dujiao: collectDujiao,
   aikashop: collectAikaShop,
+  platform16688: collect16688,
+  aichong: collectAichong,
 };
 
 function shop(id, name, token) {
@@ -159,6 +165,8 @@ export const DEFAULT_DIRECT_TARGET_IDS = Object.freeze([
   "aisou", "redeemgpt", "ai666", "shopcardai", "web3chirou", "morimm", "burstpro-ai", "ikunlove", "mooncake",
   "lynnzee", "zhanghao66", "yufenggpt", "google7676", "tehuio",
   "codesky", "fk10886", "gugugaga", "flyai", "whh985", "aictk", "ccdawang",
+  ...PLATFORM16688_SHOPS.map(target => target.id),
+  'aichong',
 ]);
 
 export function directTargets(ids = DEFAULT_DIRECT_TARGET_IDS) {
