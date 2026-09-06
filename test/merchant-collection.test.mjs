@@ -74,6 +74,15 @@ test('未知系统仅探测两个公开API且WAF立即停止，无登录或挑�
   assert.ok(!JSON.stringify(result.health).includes('captcha'));
 });
 
+test('可读取空目录不代表有报价接入；审核健康展示有效条数', async t => {
+  const f=fixture(t); f.save([merchant()]);
+  const result=await collectApprovedMerchants({...f,merchantFetchFactory:()=>async()=>json({status_code:200,data:[],pagination:{total:0,total_page:1,page:1}})},
+    {manifest:readApprovedManifest(f.merchantBridgeDir),capturedAt:at()});
+  assert.equal(result.health[0].status,'no_valid_offers');
+  assert.equal(result.health[0].validCount,0);
+  assert.equal(result.offers.length,0);
+});
+
 test('新增16688与wzyp公开适配；不信任商品响应的跨源URL',async t=>{
   const f=fixture(t);f.save([merchant('https://16688.com.cn/shop/S987654','16688')]);
   let result=await collectApprovedMerchants({...f,merchantFetchFactory:()=>async()=>json({code:1,data:{list:[{goods_no:'G123',shop_no:'S987654',name:'ChatGPT Plus 月卡代充',price:100,stock_available_quantity:3}]}})}, {manifest:readApprovedManifest(f.merchantBridgeDir),capturedAt:at()});

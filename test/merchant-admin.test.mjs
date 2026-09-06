@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, writeFileSync, rmSync, renameSync, mkdirSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { openDb } from '../lib/db.mjs';
@@ -9,12 +9,12 @@ import { openSubmissionsDb } from '../lib/submissions.mjs';
 import { createAdmin, hashAdminPassword } from '../lib/admin.mjs';
 import { createMerchantApplication, getMerchantApplication, approvedMerchantBadges } from '../lib/merchant-onboarding.mjs';
 
-test('merchant admin protects private intake and confirms approval independently of collection', async () => {
+test('merchant admin protects private intake and requires tested samples before approval', async () => {
   const db = openDb(':memory:'), submissionsDb = openSubmissionsDb(':memory:');
   const bridgeDir = mkdtempSync(path.join(os.tmpdir(), 'merchant-admin-'));
   const origin = 'https://airadar.test', password = 'merchant-admin-fixture-password';
   let clock = Date.now();
-  const admin = createAdmin({ db, submissionsDb, merchantBridgeDir: bridgeDir, origin, username: 'owner', passwordHash: await hashAdminPassword(password), now: () => clock });
+  const admin = createAdmin({ db, submissionsDb, merchantBridgeDir: bridgeDir, merchantPreflightResultsDir: bridgeDir, origin, username: 'owner', passwordHash: await hashAdminPassword(password), now: () => clock });
   const server = createServer(async (req, res) => {
     try { if (!await admin(req, res, new URL(req.url, origin))) { res.statusCode = 404; res.end(); } }
     catch { res.statusCode = 500; res.end('unexpected failure'); }
@@ -48,13 +48,38 @@ test('merchant admin protects private intake and confirms approval independently
     assert.doesNotMatch(detailHtml, /<script>商店/);
     assert.match(detailHtml, /href="\/admin\/merchants">店铺审核/);
     const csrf = /name="csrf" value="([^"]+)"/.exec(detailHtml)[1];
-    const fields = { action: 'approve', note: '已通过店铺公告与联系人核实归属及采集授权', version: '1', ownershipConfirmed: 'true', permissionConfirmed: 'true', csrf };
+    const fields = { action: 'approve', note: '已通过店铺公告与联系人核实归属及采集授权', version: '1', ownershipConfirmed: 'true', permissionConfirmed: 'true', sampleReviewed: 'true', csrf };
+    const manifestPath = path.join(bridgeDir, 'preflight-requests.json');
+    renameSync(manifestPath, manifestPath + '.backup');
+    mkdirSync(manifestPath);
+    try {
+      assert.equal((await post(detailPath, { ...fields, action: 'pause' }, session)).status, 500);
+      assert.equal(getMerchantApplication(submissionsDb, id).status, 'pending', 'failed capability revocation must not change status');
+      assert.equal(getMerchantApplication(submissionsDb, id).version, 1);
+    } finally { rmSync(manifestPath, { recursive: true }); renameSync(manifestPath + '.backup', manifestPath); }
     assert.equal((await post(detailPath, fields, session, { origin: 'https://evil.test' })).status, 403);
     assert.equal((await post(detailPath, { ...fields, csrf: 'forged' }, session)).status, 403);
     assert.equal((await post(detailPath, { ...fields, ownershipConfirmed: 'false' }, session)).status, 422);
     assert.equal((await post(detailPath, { ...fields, permissionConfirmed: '1' }, session)).status, 422);
     assert.equal((await post(detailPath, { ...fields, note: 'yes' }, session)).status, 422);
     assert.equal(getMerchantApplication(submissionsDb, id).actions.length, 0);
+    assert.equal((await post(detailPath, fields, session)).status, 422, 'cannot bypass test by submitting approve directly');
+    const finishPreflight = async version => {
+      const testing = { ...fields, action: 'test', version: String(version), note: '' };
+      assert.equal((await post(detailPath, testing, session, { origin: 'https://evil.test' })).status, 403);
+      assert.equal((await post(detailPath, { ...testing, csrf: 'forged' }, session)).status, 403);
+      assert.equal((await post(detailPath, { ...testing, permissionConfirmed: 'false' }, session)).status, 422);
+      assert.equal((await post(detailPath, testing, session)).status, 303, 'test does not require review note');
+      assert.equal((await post(detailPath, testing, session)).status, 429);
+      const request = JSON.parse(readFileSync(path.join(bridgeDir, 'preflight-requests.json'))).requests[0];
+      const result = { schemaVersion: 1, id: request.id, applicationId: id, applicationVersion: version,
+        identity: request.identity, startedAt: request.requestedAt, checkedAt: request.requestedAt, status: 'ready',
+        rawCount: 1, validCount: 1, samples: [{ title: 'ChatGPT 月付', price: 20, currency: 'USD', url: 'https://merchant-fixture.com/item/1' }], message: '已获得有效商品样例' };
+      writeFileSync(path.join(bridgeDir, request.id + '.json'), JSON.stringify(result));
+    };
+    await finishPreflight(1);
+    assert.equal((await post(detailPath, { ...fields, sampleReviewed: 'false' }, session)).status, 422);
+    assert.equal((await post(detailPath, { ...fields, note: 'yes' }, session)).status, 422);
     assert.equal((await post(detailPath, fields, session)).status, 303);
     const approved = getMerchantApplication(submissionsDb, id);
     assert.equal(approved.version, 2);
@@ -95,7 +120,9 @@ test('merchant admin protects private intake and confirms approval independently
     db.prepare('INSERT OR REPLACE INTO meta(key,value) VALUES(?,?)').run('health:merchant-onboarding', JSON.stringify({ manifestValid: true, targets: [
       { identity: approved.identity, status: 'active', checkedAt: new Date(clock).toISOString() },
     ] }));
-    clock += 1000;
+    clock += 60_001;
+    assert.equal((await post(detailPath, { ...fields, version: '3' }, session)).status, 422, 'old version samples cannot reapprove');
+    await finishPreflight(3);
     assert.equal((await post(detailPath, { ...fields, version: '3' }, session)).status, 303);
     for (const target of [detailPath, '/admin/merchants?status=approved']) {
       const reapproved = await (await get(target)).text();

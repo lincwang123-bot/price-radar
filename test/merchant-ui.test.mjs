@@ -57,5 +57,9 @@ test('approval is separate from collection and verified badge requires approval 
   assert.ok(!render('pending',{}).includes('class="badge">店主已核验'));
   assert.match(render('approved',{}),/class="badge">店主已核验/);
   assert.match(render('approved',{}),/class="badge">等待采集/);
-  for(const [status,label] of [['ok','已接入'],['unsupported','待适配'],['waiting_adapter','待适配'],['failed','采集暂不可用']])assert.ok(render('approved',{status}).includes('class="badge">'+label));
+  for(const [status,label] of [['ok','目录可读取 / 暂无有效报价'],['unsupported','待适配'],['waiting_adapter','待适配'],['failed','采集暂不可用']])assert.ok(render('approved',{status}).includes('class="badge">'+label));
+  assert.match(render('approved',{status:'active',offerCount:1}),/class="badge">已接入/);
+  assert.doesNotMatch(render('approved',{status:'active',offerCount:0}),/class="badge">已接入/);
+  assert.doesNotMatch(render('approved',{status:'active',offerCount:9,validCount:0}),/class="badge">已接入/);
+  assert.match(render('approved',{status:'no_valid_offers',offerCount:9}),/class="badge">目录可读取 \/ 暂无有效报价/);
 });
