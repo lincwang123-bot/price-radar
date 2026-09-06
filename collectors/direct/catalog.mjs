@@ -64,6 +64,9 @@ export function classifyDirectOffer({ title, category = "", sourceId = "" }) {
   const categoryText = normalized(category);
   const text = normalized(`${category} ${title}`);
   if (!text) return null;
+  // 推广返利邀请、无交付公告不是零售商品，不能形成接码/API 起价。
+  if (/^(?:邀请推广|接马推广|推广)/.test(titleText) && has(titleText, /返利/) && has(titleText, /可提现/)) return null;
+  if (titleText === 'codex api 更变') return null;
   // Verified retail spelling of GPT. Do not let this new alias turn an
   // explicitly mixed-brand subscription bundle into a single GPT quote.
   const dottedGpt = /\bgp\.t\b/i.test(String(title ?? '').normalize('NFKC'));
@@ -80,6 +83,11 @@ export function classifyDirectOffer({ title, category = "", sourceId = "" }) {
       has(titleText, /(?:少量|部分|随机|概率|不保证|不保障).{0,16}(?:plus|pro|premium|付费|会员)/)) return null;
   // 主商品是 Leonardo 积分账号；兼容 Gemini 图片模型不是 Gemini 订阅。
   if (/^leonardo\b/.test(titleText)) return null;
+  // 额度恢复/重置是账号维护服务；宣传中的 Plus / Pro 不代表套餐交付。
+  // 明确月卡等套餐附带的周期重置说明仍保留，不使用价格作为判断依据。
+  if (has(titleText, /额度\s*(?:自动\s*)?(?:重置|恢复)/) &&
+      !has(titleText, /月卡|年卡|季卡|周卡|日卡|\d+\s*(?:个?月|年|天)\s*(?:订阅|会员|套餐)/) &&
+      has(titleText, /(?:重置|恢复)\s*服务|联系客服|确认.*资格/)) return null;
 
   // 邮箱标题经常带有“已注册 OpenAI”等用途说明，需先于订阅关键词判断。
   if (has(titleText, /gmail|outlook|hotmail|微软邮箱|谷歌邮箱|邮箱账号|邮箱老号|域名邮箱/) ||
@@ -127,6 +135,8 @@ export function classifyDirectOffer({ title, category = "", sourceId = "" }) {
     return amounts.length === 1 ? PRODUCTS[`manus-${amounts[0]}-credits`] ?? null : null;
   }
   if (has(titleText, /cursor/)) {
+    if (has(titleText, /邀请链接/) && has(titleText, /半价|折扣|优惠/)) return null;
+    if (/^api\s+cursor\b/.test(titleText) && has(titleText, /积分|额度/)) return PRODUCTS["api-cdk-credits"];
     if (has(titleText, /\bfree\b|普号|白号|试用/)) return null;
     const tier = has(titleText, /ultra|ulrta/) ? "ultra"
       : has(titleText, /pro\s*(?:\+|plus|➕)/) ? "pro-plus"
