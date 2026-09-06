@@ -20,6 +20,7 @@ test('only a renderer-confirmed selected product gets a product directory canoni
  const html=render('?family=claude&product=claude-pro&sort=price&channel=all',attrs);
  assert.equal(canonical(html),'https://airadar.vip/?family=claude&amp;product=claude-pro');
  assert.match(html,/<title>Claude Pro公开报价与规格/);
+ assert.match(html,/<meta name="description" content="查看Claude Pro多家店铺的公开报价/);
  assert.equal(schema(html)[1].url,'https://airadar.vip/?family=claude&product=claude-pro');
  assert.equal(canonical(render('?family=claude&product=missing',attrs)),'https://airadar.vip/?family=claude');
  assert.equal(canonical(render('?family=claude&product=claude-pro','data-directory-family="claude"')),'https://airadar.vip/?family=claude');

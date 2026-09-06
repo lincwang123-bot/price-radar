@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildProductDirectory } from '../lib/product-directory.mjs';
+import { buildProductDirectory, directoryQuotes } from '../lib/product-directory.mjs';
 
 const quote = (title, patch = {}) => ({ title, offer_id: title, price: 100, currency: 'CNY', status: 'in_stock', stock_count: 2, quote_stale: false, comparison_known: true, comparison_key: 'month:recharge:CNY', url: 'https://16688.com.cn/goods/1', ...patch });
 const list = (source, product_id, offers, name = product_id) => ({ source, stale: false, products: [{ product_id, name, currency: 'CNY', offers }] });
@@ -90,4 +90,93 @@ test('trusted canonical product keeps reference when every offer title lacks bra
   assert.equal(products[0].entries.length, 0);
   assert.equal(products[0].variants.length, 0);
   assert.equal(category([list('ldxp-goods', 'chatgpt-plus-recharge', [quote('【自营】Plus 已接码')])], 'chatgpt').products.length, 0);
+});
+
+test('complete directory quotes combine all sources and retain unknown specifications', () => {
+  const lists = [
+    list('direct-shops', 'chatgpt-plus-recharge', [quote('ChatGPT Plus 月卡', { offer_id: 'd1', url: 'https://a.example/goods/1' }), quote('ChatGPT Plus 年卡', { offer_id: 'd2', url: 'https://b.example/goods/1', comparison_key: 'year' })]),
+    list('priceai', 'chatgpt-plus', [quote('【自营】Plus 已接码', { offer_id: 'p1', url: 'https://c.example/goods/1', comparison_known: false, comparison_key: 'mixed' })]),
+    list('ldxp-goods', 'search-plus', [quote('ChatGPT Plus 月卡', { offer_id: 'l1', url: 'https://wzyp.cn/goods/1' }), quote('Claude Pro 月卡', { offer_id: 'other', url: 'https://wzyp.cn/goods/2' })]),
+  ];
+  const before = JSON.stringify(lists);
+  const product = category(lists, 'chatgpt').products[0];
+  const quotes = directoryQuotes(product);
+  assert.equal(quotes.total, 4);
+  assert.equal(quotes.shopCount, 3);
+  assert.equal(quotes.unresolvedQuoteCount, 1);
+  assert.equal(quotes.entries.find(entry => entry.offer.offer_id === 'p1').offer.comparison_known, false);
+  assert.equal(quotes.entries.find(entry => entry.offer.offer_id === 'l1').product.product_id, 'search-plus');
+  assert.equal(directoryQuotes(product, { spec: 'year' }).total, 1);
+  assert.equal(directoryQuotes(product, { channel: 'ldxp' }).total, 1);
+  assert.equal(JSON.stringify(lists), before);
+});
+
+test('deduplication retains different shops and products while preferring original source', () => {
+  const canonical = quote('ChatGPT Plus 月卡', { url: 'https://shop.example/goods/1', offer_id: 'direct', price: 120 });
+  const product = category([
+    list('priceai', 'chatgpt-plus', [quote('ChatGPT Plus 月卡', { url: 'https://shop.example/goods/1?utm_source=mirror', offer_id: 'mirror', price: 99 }), quote('ChatGPT Plus 月卡', { url: 'https://shop.example/goods/2', offer_id: 'other-product', price: 120 })]),
+    list('direct-shops', 'chatgpt-plus-recharge', [canonical]),
+    list('ldxp-goods', 'search-plus', [quote('ChatGPT Plus 月卡', { url: 'https://16688.com.cn/goods/1', offer_id: 'shop1' }), quote('ChatGPT Plus 月卡', { url: 'https://16688.com.cn/goods/2', offer_id: 'shop2' })]),
+  ], 'chatgpt').products[0];
+  const result = directoryQuotes(product);
+  assert.equal(result.total, 4);
+  assert.equal(result.shopCount, 1);
+  assert.equal(result.unresolvedQuoteCount, 2);
+  assert.equal(result.entries.some(entry => entry.offer.offer_id === 'mirror'), false);
+  assert.equal(result.entries.find(entry => entry.offer.offer_id === 'direct').offer, canonical);
+});
+
+test('complete quotes exclude unsafe destinations, no warranty, stale and unavailable offers', () => {
+  const invalid = [{ url: 'http://a.example/1' }, { url: 'https://127.0.0.1/1' }, { url: 'javascript:alert(1)' }, { title: 'ChatGPT Plus 无质保' }, { quote_stale: true }, { status: 'sold_out' }, { stock_count: '0' }, { price: 0 }, { currency: 'ZZZ' }];
+  const product = category([list('priceai', 'chatgpt-plus', [...invalid.map(patch => quote('ChatGPT Plus 月卡', patch)), quote('ChatGPT Plus 月卡', { offer_id: 'valid', comparison_known: false })])], 'chatgpt').products[0];
+  assert.deepEqual(directoryQuotes(product).entries.map(entry => entry.offer.offer_id), ['valid']);
+});
+
+test('currencies stay in fixed groups for both sorts and references do not count as shops', () => {
+  const product = category([
+    list('direct-shops', 'chatgpt-plus', [quote('ChatGPT Plus 月卡', { offer_id: 'c1', price: 100, url: 'https://a.example/1' }), quote('ChatGPT Plus 月卡', { offer_id: 'c2', price: 200, url: 'https://b.example/1' }), quote('ChatGPT Plus 月卡', { offer_id: 'u1', price: 5, currency: 'USD', url: 'https://c.example/1' }), quote('ChatGPT Plus 月卡', { offer_id: 'u2', price: 20, currency: 'USD', url: 'https://d.example/1' })]),
+    list('cardnav-official', 'chatgpt-plus', [quote('Plus', { offer_id: 'reference', price: 0, currency: 'USD', status: 'official', url: 'https://openai.com/chatgpt' })]),
+  ], 'chatgpt').products[0];
+  assert.deepEqual(directoryQuotes(product).entries.map(entry => entry.offer.price), [100, 200, 0, 5, 20]);
+  assert.deepEqual(directoryQuotes(product, { sort: 'price_desc' }).entries.map(entry => entry.offer.price), [200, 100, 20, 5, 0]);
+  assert.deepEqual(directoryQuotes(product).currencies, ['CNY', 'USD']);
+  assert.equal(directoryQuotes(product).shopCount, 4);
+  assert.equal(directoryQuotes(product, { currency: 'USD' }).total, 3);
+});
+
+test('trusted fallback never assigns an explicit different brand to Plus', () => {
+  const product = category([list('priceai', 'chatgpt-plus', [quote('Gemini Plus 月卡'), quote('Claude Pro 月卡'), quote('Plus 月卡', { offer_id: 'bare-plus' })])], 'chatgpt').products[0];
+  assert.deepEqual(directoryQuotes(product).entries.map(entry => entry.offer.offer_id), ['bare-plus']);
+});
+
+test('unverified shop names never affect shared-platform deduplication or merchant counts', () => {
+  const product = category([
+    { ...list('priceai', 'chatgpt-plus', [quote('ChatGPT Plus 月卡', { offer_id: 'old', store_name: '名字一' })]), fetchedAt: '2026-09-01T00:00:00Z' },
+    { ...list('ldxp-goods', 'search-plus', [quote('ChatGPT Plus 月卡', { offer_id: 'new', store_name: '名字二' }), quote('ChatGPT Plus 月卡', { offer_id: 'different', store_name: '名字二', url: 'https://16688.com.cn/goods/2' })]), fetchedAt: '2026-09-02T00:00:00Z' },
+  ], 'chatgpt').products[0];
+  const result = directoryQuotes(product);
+  assert.equal(result.total, 2);
+  assert.equal(result.shopCount, 0);
+  assert.equal(result.unresolvedQuoteCount, 2);
+  assert.equal(result.entries.some(entry => entry.offer.offer_id === 'new'), true);
+  assert.equal(result.entries.some(entry => entry.offer.offer_id === 'old'), false);
+});
+
+test('mixed subscription brands and unknown-brand tier fallbacks are excluded', () => {
+  const directory = buildProductDirectory([list('priceai', 'chatgpt-plus', [
+    quote('Plus / Midjourney'), quote('Plus Canva'), quote('Plus UnknownBrand'),
+    quote('Claude Pro + Gemini Pro'), quote('ChatGPT Plus + Claude Pro'),
+    quote('ChatGPT Plus 月卡 Google邮箱登录', { offer_id: 'valid', url: 'https://a.example/1' }),
+  ])]);
+  const entries = directory.flatMap(category => category.products.flatMap(product => directoryQuotes(product).entries));
+  assert.deepEqual(entries.map(entry => entry.offer.offer_id), ['valid']);
+});
+
+test('trusted bare Plus retains actual CDK and app delivery terms without allowing foreign brands', () => {
+  const titles = ['【自营】Plus 已接码 仅反代，发CDK 不可网页 不可回', 'Plus iOS Android App 月卡', 'Plus CDKey web code key recharge account'];
+  const product = category([list('priceai', 'chatgpt-plus', [
+    ...titles.map((title, index) => quote(title, { offer_id: `valid-${index}`, url: `https://shop.example/goods/${index}`, comparison_known: false })),
+    quote('Plus Canva CDK'), quote('Plus Midjourney iOS'), quote('Plus API 额度'),
+  ])], 'chatgpt').products[0];
+  assert.deepEqual(directoryQuotes(product).entries.map(entry => entry.offer.offer_id), ['valid-0', 'valid-1', 'valid-2']);
 });

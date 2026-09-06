@@ -3,6 +3,26 @@ import assert from 'node:assert/strict';
 import { openDb, storeSnapshot } from '../lib/db.mjs';
 import { createApp, fmtPrice } from '../lib/web.mjs';
 import { filterFramework } from '../lib/channels.mjs';
+test('跨源店铺一页20条，升降序与所有筛选贯穿分页，安全外链仍进入确认页',async()=>{
+ const db=openDb(':memory:'),app=createApp({db});
+ try{
+  for(const [source,offset] of [['priceai',0],['ldxp-goods',12]])storeSnapshot(db,{source,snapshotId:'multi-'+source,products:[{productId:source==='priceai'?'claude-pro-month':'claude-pro-代充',name:'Claude Pro',platform:'Claude',currency:'CNY',offers:Array.from({length:12},(_,i)=>({offerId:'offer-'+(offset+i),title:'Claude Pro 代充 1个月',storeName:'店铺'+(offset+i),price:100+offset+i,status:'in_stock',stockCount:1,url:'https://16688.com.cn/goods/'+(offset+i)}))}]});
+  await new Promise(r=>app.listen(0,'127.0.0.1',r));const base='http://127.0.0.1:'+app.address().port;
+  const route='/?family=claude&product=claude-pro',links=html=>[...html.matchAll(/href="([^\"]+)"/g)].map(m=>m[1].replaceAll('&amp;','&')),prices=html=>[...html.matchAll(/data-directory-quote data-price="([^\"]+)"/g)].map(m=>Number(m[1]));
+  const first=await(await fetch(base+route)).text();assert.deepEqual(prices(first),Array.from({length:20},(_,i)=>100+i));assert.match(first,/24 条店铺报价/);assert.match(first,/第 1 \/ 2 页/);assert.doesNotMatch(first,/24 家店|aria-label="价格排序"|价格低 → 高|价格高 → 低/);assert.match(first,/aria-label="交易平台"/);
+  const catalog=await(await fetch(base+'/')).text();assert.doesNotMatch(catalog,/24 家店/);assert.match(catalog,/24 条报价/);
+  const next=links(first).find(h=>h.startsWith('/?')&&new URL(h,base).searchParams.get('page')==='2');assert.ok(next);const second=await(await fetch(base+next)).text();assert.deepEqual(prices(second),[120,121,122,123]);
+  const descending=await(await fetch(base+route+'&sort=price_desc')).text();assert.deepEqual(prices(descending),Array.from({length:20},(_,i)=>123-i));
+  const specification=links(first).find(h=>h.startsWith('/product?')&&new URL(h,base).searchParams.has('spec'));assert.ok(specification);
+  const spec=new URL(specification,base).searchParams.get('spec'),filteredRoute=route+'&sort=price_desc&channel=16688&currency=CNY&spec='+encodeURIComponent(spec);
+  const filtered=await(await fetch(base+filteredRoute)).text(),filteredNext=links(filtered).find(h=>h.startsWith('/?')&&new URL(h,base).searchParams.get('page')==='2');assert.ok(filteredNext);
+  for(const key of ['family','product','sort','channel','spec','currency'])assert.equal(new URL(filteredNext,base).searchParams.get(key),new URL(filteredRoute,base).searchParams.get(key));
+  const pageTwo=await(await fetch(base+filteredNext)).text();assert.deepEqual(prices(pageTwo),[103,102,101,100]);const changedChannel=links(pageTwo).find(h=>h.startsWith('/?')&&new URL(h,base).searchParams.get('channel')==='independent');assert.equal(new URL(changedChannel,base).searchParams.has('page'),false);
+  const go=links(first).find(h=>h.startsWith('/go?'));assert.ok(go);for(const key of ['family','sort','channel','spec','currency'])assert.equal(new URL(go,base).searchParams.has(key),false);assert.equal(new URL(go,base).searchParams.get('product'),'claude-pro-month');
+  const confirmation=await fetch(base+go,{redirect:'manual'});assert.equal(confirmation.status,200);assert.match(await confirmation.text(),/第三方|继续前往/);
+  const empty=await(await fetch(base+route+'&channel=independent')).text();assert.equal(prices(empty).length,0);assert.match(empty,/暂无可用报价/);
+ }finally{if(app.listening)await new Promise(r=>app.close(r));db.close();}
+});
 test('独立站框架只使用登记证据',()=>{
  const offers=[{url:'https://morimm.com/products/1'},{url:'https://16688.com.cn/goods/1'},{url:'https://unknown.test/kami'}];
  assert.equal(filterFramework(offers,'dujiao').length,1);assert.equal(filterFramework(offers,'kami').length,0);
@@ -52,14 +72,14 @@ test('详情规格与筛选贯穿翻页，无匹配渠道不泄漏全部报价',
   const empty=await(await fetch(base+'/product?source=priceai&id=claude-pro-month&channel=ldxp')).text();assert.match(empty,/共 0 条公开报价/);assert.doesNotMatch(empty,/data-store-risk[^>]*href="https:\/\/16688/);
  }finally{if(app.listening)await new Promise(r=>app.close(r));db.close();}
 });
-test('分类到产品到规格逐层展开，切换期限不会混价或覆盖目标规格',async()=>{
+test('首页直接列产品，一步展示全部规格店铺，旧详情仍可切换规格',async()=>{
  const db=openDb(':memory:'),app=createApp({db});
  try{
   storeSnapshot(db,{source:'priceai',snapshotId:'directory-specs',products:[{productId:'chatgpt-plus-recharge',name:'ChatGPT Plus',platform:'ChatGPT',currency:'CNY',offers:[{offerId:'year',title:'ChatGPT Plus 代充 12个月',price:90,status:'in_stock',stockCount:1,url:'https://16688.com.cn/goods/year'},{offerId:'month',title:'ChatGPT Plus 代充 1个月',price:100,status:'in_stock',stockCount:1,url:'https://16688.com.cn/goods/month'}]}]});
   await new Promise(r=>app.listen(0,'127.0.0.1',r));const base='http://127.0.0.1:'+app.address().port;
-  const home=await(await fetch(base+'/')).text();assert.doesNotMatch(home,/<table|data-directory-product=|name="q"|quote-provenance">/);assert.match(home,/<details class="category-more">/);assert.match(home,/data-family-filter="x"/);
+  const home=await(await fetch(base+'/')).text();assert.doesNotMatch(home,/<table|name="q"|quote-provenance">/);assert.equal((home.match(/<article[^>]*data-directory-product="chatgpt-plus"/g)||[]).length,1);assert.match(home,/<details class="category-more">/);assert.match(home,/data-family-filter="x"/);
   const category=await(await fetch(base+'/?family=chatgpt')).text();assert.equal((category.match(/<article[^>]*data-directory-product="chatgpt-plus"/g)||[]).length,1);assert.doesNotMatch(category,/>¥(?:100|90)</);
-  const variants=await(await fetch(base+'/?family=chatgpt&product=chatgpt-plus')).text();assert.equal((variants.match(/data-product-variant/g)||[]).length,2);assert.match(variants,/¥100/);assert.match(variants,/¥90/);
+  const variants=await(await fetch(base+'/?family=chatgpt&product=chatgpt-plus')).text();assert.equal((variants.match(/data-directory-quote /g)||[]).length,2);assert.match(variants,/¥100/);assert.match(variants,/¥90/);assert.doesNotMatch(variants,/选择规格，再/);assert.match(variants,/前往店铺/);
   const detail=await(await fetch(base+'/product?source=priceai&id=chatgpt-plus-recharge')).text();assert.match(detail,/aria-label="选择规格"/);assert.match(detail,/price-display">¥100</);assert.match(detail,/共 1 条公开报价/);
   const links=[...detail.matchAll(/class="spec-choice" aria-current="false" href="([^\"]+)"/g)].map(match=>match[1].replaceAll('&amp;','&'));assert.equal(links.length,1);
   const year=await(await fetch(base+links[0])).text();assert.match(year,/price-display">¥90</);assert.match(year,/共 1 条公开报价/);assert.doesNotMatch(year,/quote-provenance">|原店采集|第三方采集/);
@@ -76,10 +96,12 @@ test('官方和API参考零价可从目录进入详情，不携带商店合成�
   }
   await new Promise(r=>app.listen(0,'127.0.0.1',r));const base='http://127.0.0.1:'+app.address().port;
   for(const [family,product,source,id,label] of [['claude','claude-pro','cardnav-official','claude-pro','官方参考'],['relay','relay-demo','goaihop-relay','relay-demo','API 服务商']]){
-   const page=await(await fetch(base+'/?family='+family+'&product='+product)).text();assert.match(page,/>¥0</);assert.ok(page.includes(label));
+   const page=await(await fetch(base+'/?family='+family+'&product='+product)).text();assert.match(page,/>¥0</);assert.ok(page.includes(label));assert.match(page,/<p>1 条参考报价<\/p>/);assert.doesNotMatch(page,/0 家店|0 条店铺报价|每页 20 条|暂无可用报价，请调整/);
+   const category=await(await fetch(base+'/?family='+family)).text();const row=category.match(new RegExp('<article[^>]*data-directory-product="'+product+'"[\\s\\S]*?<\\/article>'))[0];assert.match(row,/1 条参考报价/);assert.match(row,/查看参考/);assert.doesNotMatch(row,/0 家店|0 条报价|查看店铺/);
+   if(source==='cardnav-official'){const reference=page.match(/<section class="directory-references">[\s\S]*?<\/section>/)[0];assert.match(reference,/仅作价格参考/);assert.doesNotMatch(reference,/href="\/go|data-store-risk/);}
    const link=[...page.matchAll(/href="(\/product\?[^\"]+)"/g)].map(m=>m[1].replaceAll('&amp;','&')).find(h=>new URL(h,base).searchParams.get('source')===source);assert.ok(link);assert.equal(new URL(link,base).searchParams.get('spec'),null);
    const detail=await(await fetch(base+link)).text();assert.match(detail,/price-display">¥0</);assert.match(detail,/共 1 条公开报价/);assert.match(detail,/data-store-risk/);
   }
-  const missing=await(await fetch(base+'/?family=relay&product=relay-missing')).text();assert.doesNotMatch(missing,/>¥0</);assert.match(missing,/暂无可用报价/);assert.match(missing,/查看 缺价套餐 的报价记录/);
+  const missing=await(await fetch(base+'/?family=relay&product=relay-missing')).text();assert.doesNotMatch(missing,/>¥0</);assert.match(missing,/暂无有效报价/);assert.match(missing,/暂无可用报价/);assert.match(missing,/查看 缺价套餐 的报价记录/);
  }finally{if(app.listening)await new Promise(r=>app.close(r));db.close();}
 });
