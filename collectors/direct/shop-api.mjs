@@ -68,6 +68,9 @@ export async function collectShopApi(target, options = {}) {
   const goodsEndpoint = new URL(target?.endpoint ?? GOODS_LIST_PATH, `${source.origin}/`).href;
 
   for (const category of categories) {
+    let received = 0;
+    const pageFingerprints = new Set();
+    const categoryIds = new Set();
     for (let page = 1; page <= maxPages; page += 1) {
       if (requestCount > 0) await delay(requestDelayMs);
       requestCount += 1;
@@ -94,8 +97,22 @@ export async function collectShopApi(target, options = {}) {
       }
 
       const rawCount = payload.data.list.length;
+      for (const item of payload.data.list) {
+        const id = identifier(item?.goods_key ?? item?.id ?? item?.goods_id);
+        if (id && categoryIds.has(id)) throw new Error('ShopApi 分页商品 ID 重复，目录完整性无法确认');
+        if (id) categoryIds.add(id);
+      }
+      const fingerprint = JSON.stringify(payload.data.list);
+      if (rawCount && pageFingerprints.has(fingerprint)) throw new Error('ShopApi 分页重复，目录完整性无法确认');
+      pageFingerprints.add(fingerprint);
+      received += rawCount;
       const total = nonNegativeInteger(payload.data.total);
-      if (rawCount < pageSize || (total !== null && page * pageSize >= total)) break;
+      if (total !== null && received >= total) break;
+      if (rawCount < pageSize) {
+        if (total !== null && received < total) throw new Error('ShopApi 分页未完整：返回数量与 total 不一致');
+        break;
+      }
+      if (page === maxPages) throw new Error('ShopApi 分页未完整：达到 maxPages，不能发布截断目录');
     }
   }
   return offers;
@@ -144,7 +161,8 @@ function selectCategories(payload, maxCategories) {
   if (allCategory) return [allCategory];
 
   const nonEmpty = candidates.filter((category) => category.goodsCount === null || category.goodsCount > 0);
-  return nonEmpty.slice(0, maxCategories);
+  if (nonEmpty.length > maxCategories) throw new Error('ShopApi 分类未完整：达到 maxCategories');
+  return nonEmpty;
 }
 
 function goodsOffer(item, source, capturedAt) {

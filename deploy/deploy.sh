@@ -18,18 +18,28 @@ CODE_BACKUP="${BACKUP_DIR}/code-before-${REVISION}-$(date -u +%Y%m%dT%H%M%SZ).ta
 ssh "$REMOTE" "sudo mkdir -p ${BACKUP_DIR}/submissions ${BACKUP_DIR}/analytics && sudo chown deploy:deploy ${BACKUP_DIR} ${BACKUP_DIR}/submissions ${BACKUP_DIR}/analytics && sudo chmod 700 ${BACKUP_DIR} ${BACKUP_DIR}/submissions ${BACKUP_DIR}/analytics"
 # This standalone module can back up the old deployment before its first upgrade.
 REMOTE_TEMP="$(ssh "$REMOTE" 'mktemp -d /tmp/price-radar-deploy.XXXXXX')"
+[[ "$REMOTE_TEMP" =~ ^/tmp/price-radar-deploy\.[A-Za-z0-9]+$ ]] || { echo 'Unexpected remote temporary path' >&2; exit 1; }
 CHANGED=0
 cleanup() {
   result=$?
+  trap - EXIT
   if [ "$result" -ne 0 ] && [ "$CHANGED" -eq 1 ]; then
     echo 'Deployment failed; restoring previous code and service units.' >&2
-    ssh "$REMOTE" "sudo systemctl stop price-radar-web price-radar-collect && sudo tar -xzf ${CODE_BACKUP} -C ${APP_DIR} && for u in price-radar-web price-radar-collect; do sudo install -m 644 ${APP_DIR}/deploy/\$u.service /etc/systemd/system/\$u.service; done && sudo systemctl daemon-reload && sudo systemctl restart price-radar-web price-radar-collect && sudo systemctl start price-radar-named-tunnel && curl -A PriceRadarQA --retry 5 --retry-connrefused --retry-delay 1 -fsS --max-time 10 http://127.0.0.1:18090/ >/dev/null" || true
+    if ! ssh "$REMOTE" "sudo systemctl stop price-radar-web price-radar-collect && sudo bash ${REMOTE_TEMP}/restore-code.sh ${CODE_BACKUP} ${APP_DIR} && sudo bash ${REMOTE_TEMP}/rollback-units.sh restore ${REMOTE_TEMP}/units && curl -A PriceRadarQA --retry 5 --retry-connrefused --retry-delay 1 -fsS --max-time 10 http://127.0.0.1:18090/ >/dev/null"; then
+      echo "ROLLBACK FAILED: retain ${CODE_BACKUP} and ${REMOTE_TEMP} for manual recovery." >&2
+      exit 70
+    fi
   fi
-  ssh "$REMOTE" "rm -f ${REMOTE_TEMP}/backup.mjs && rmdir ${REMOTE_TEMP}" || true
+  if ! ssh "$REMOTE" "sudo rm -rf -- ${REMOTE_TEMP}"; then
+    echo "Deployment temporary-file cleanup failed: ${REMOTE_TEMP}" >&2
+    exit 71
+  fi
   exit "$result"
 }
 trap cleanup EXIT
 scp -q "$LOCAL_DIR/lib/backup.mjs" "${REMOTE}:${REMOTE_TEMP}/backup.mjs"
+scp -q "$LOCAL_DIR/deploy/restore-code.sh" "$LOCAL_DIR/deploy/rollback-units.sh" "${REMOTE}:${REMOTE_TEMP}/"
+ssh "$REMOTE" "sudo bash ${REMOTE_TEMP}/rollback-units.sh snapshot ${REMOTE_TEMP}/units"
 ssh "$REMOTE" "node --input-type=module -e 'import {backupSubmissions} from \"${REMOTE_TEMP}/backup.mjs\"; console.log(JSON.stringify(await backupSubmissions(\"${APP_DIR}/submissions/submissions.sqlite\",\"${BACKUP_DIR}/submissions\")))'"
 ssh "$REMOTE" "if test -f ${APP_DIR}/analytics/analytics.sqlite; then node --input-type=module -e 'import {backupSubmissions} from \"${REMOTE_TEMP}/backup.mjs\"; console.log(JSON.stringify(await backupSubmissions(\"${APP_DIR}/analytics/analytics.sqlite\",\"${BACKUP_DIR}/analytics\",{kind:\"analytics\"})))'; fi"
 ssh "$REMOTE" "tar --exclude='./data' --exclude='./submissions' --exclude='./analytics' --exclude='./backups' --exclude='./.env' --exclude='./config.json' --exclude='./.git' -czf ${CODE_BACKUP} -C ${APP_DIR} . && chmod 600 ${CODE_BACKUP} && tar -tzf ${CODE_BACKUP} >/dev/null"

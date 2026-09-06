@@ -129,7 +129,7 @@ test("售罄报价不进入公开聚合", () => {
     offer("c", "GPT PLUS 充值卡密", 110, "in_stock"),
   ]);
   assert.equal(products.length, 1);
-  assert.equal(products[0].lowestPrice, 110);
+  assert.equal(products[0].lowestPrice, null); // 期限未注明，仅展示原始报价。
   assert.equal(products[0].offerCount, 2);
   assert.equal(products[0].inStockCount, 2);
   assert.deepEqual(products[0].offers.map((item) => item.offerId), ["c", "a"]);
@@ -143,7 +143,7 @@ test("明确无质保或无售后的报价不进入公开排行", () => {
   ]);
   assert.equal(products.length, 1);
   assert.equal(products[0].productId, "chatgpt-pro-20x");
-  assert.equal(products[0].lowestPrice, 1050);
+  assert.equal(products[0].lowestPrice, null); // 一个月代充不能与未注明周期的囤卡商品比总价。
   assert.deepEqual(products[0].offers.map((item) => item.offerId), ["b", "c"]);
 });
 

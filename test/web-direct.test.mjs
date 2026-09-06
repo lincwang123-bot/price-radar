@@ -66,7 +66,7 @@ test("原店历史走势排除售罄与无质保低价，但保留库存紧张�
     const { port } = server.address();
     const html = await fetch(`http://127.0.0.1:${port}/product?source=direct-shops&id=chatgpt-pro-20x`).then((response) => response.text());
 
-    assert.match(html, /最近 2 个快照/);
+    assert.match(html, /最近 2 次记录/);
     assert.match(html, /从 09\/05 08:00 的 ¥1050 到 09\/05 09:00 的 ¥1060/);
     assert.doesNotMatch(html, /¥348|¥99/);
   } finally {
@@ -113,10 +113,10 @@ test("首页为已采集的新品牌生成独立分类，详情可返回对应�
   try {
     const data = snapshot("direct-shops", "category-fixture", "2026-09-05T00:00:00.000Z", 1, 1);
     data.products = [
-      ["cursor-pro", "Cursor"], ["perplexity-pro-1m", "Perplexity"],
+      ["cursor-pro-1m", "Cursor"], ["perplexity-pro-1m", "Perplexity"],
       ["notion-ai-business-1m", "Notion AI"], ["manus-2000-credits", "Manus"],
       ["relay-cdk", "API/CDK"],
-    ].map(([productId, platform]) => ({ ...data.products[0], productId, platform, name: productId }));
+    ].map(([productId, platform]) => ({ ...data.products[0], productId, platform, name: productId, offers:[{...data.products[0].offers[0],title:productId==='cursor-pro-1m'?'Cursor Pro 成品账号 1个月':productId==='perplexity-pro-1m'?'Perplexity Pro 成品账号 1个月':productId==='notion-ai-business-1m'?'Notion AI Business 成品账号 1个月':productId==='manus-2000-credits'?'Manus 2000积分':'API CDK 100额度'}] }));
     storeSnapshot(db, data);
     server.listen(0, "127.0.0.1");
     await once(server, "listening");
@@ -124,12 +124,12 @@ test("首页为已采集的新品牌生成独立分类，详情可返回对应�
     const html = await fetch(base + "/?family=cursor").then((res) => res.text());
     for (const key of ["cursor", "perplexity", "notion", "manus", "relay"]) {
       assert.match(html, new RegExp(`data-family-filter="${key}"`));
-      assert.match(html, new RegExp(`<div data-family="${key}" data-catalog-group`));
+      if(key==='cursor')assert.match(html, new RegExp(`<div data-family="${key}" data-catalog-group`));else assert.doesNotMatch(html,new RegExp(`<div data-family="${key}" data-catalog-group`));
     }
-    assert.doesNotMatch(html, /data-family-filter="mail"/);
+    assert.match(html, /data-family-filter="mail"/);
     assert.match(html, /\[data-family\]\[hidden\]\{display:none!important\}/);
-    const detail = await fetch(base + "/product?source=direct-shops&id=cursor-pro").then((res) => res.text());
-    assert.match(detail, /class="breadcrumb" href="\/\?family=cursor"/);
+    const detail = await fetch(base + "/product?source=direct-shops&id=cursor-pro-1m").then((res) => res.text());
+    assert.match(detail, /class="breadcrumb" href="\/\?family=cursor(?:&amp;[^"]*)?"/);
   } finally {
     if (server.listening) await new Promise((resolve) => server.close(resolve));
     db.close();

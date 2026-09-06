@@ -2,6 +2,10 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { once } from "node:events";
 import { request } from "node:http";
+import { mkdtempSync, rmSync } from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
 
 import { openDb, storeSnapshot } from "../lib/db.mjs";
 import { createApp } from "../lib/web.mjs";
@@ -24,6 +28,20 @@ async function withServer(run) {
     db.close();
   }
 }
+
+test('真实写锁通过HTTP返回503与Retry-After，释放后可重试',async()=>{
+  const directory=mkdtempSync(path.join(os.tmpdir(),'radar-http-lock-'));
+  const file=path.join(directory,'submissions.sqlite'),db=openDb(':memory:'),submissionsDb=openSubmissionsDb(file),blocker=new DatabaseSync(file),server=createApp({db,submissionsDb});
+  let locked=false;
+  try{
+    server.listen(0,'127.0.0.1');await once(server,'listening');const base='http://127.0.0.1:'+server.address().port;
+    const payload={kind:'feedback',topic:'price_wrong',subject:'锁测试价格',details:'这是一条验证数据库写锁处理的虚构价格反馈。'};
+    blocker.exec('BEGIN IMMEDIATE');locked=true;
+    const response=await submit(base,payload);assert.equal(response.status,503);assert.equal(response.headers.get('retry-after'),'3');assert.match((await response.json()).error,/繁忙/);
+    blocker.exec('ROLLBACK');locked=false;
+    const retry=await submit(base,payload);assert.equal(retry.status,201);await retry.body?.cancel();
+  }finally{if(locked)blocker.exec('ROLLBACK');if(server.listening)await new Promise(r=>server.close(r));blocker.close();submissionsDb.close();db.close();rmSync(directory,{recursive:true,force:true});}
+});
 
 async function csrfSession(base) {
   const formResponse = await fetch(`${base}/submit`);
@@ -282,7 +300,7 @@ test("提交页提供两条原创流程，并可从产品页携带上下文进�
     });
 
     const page = await fetch(`${base}/submit?type=feedback&source=direct-shops&product=chatgpt-pro-20x`).then((response) => response.text());
-    assert.match(page, /提交与合作/);
+    assert.match(page, /反馈与合作/);
     assert.match(page, /纠正公开数据/);
     assert.match(page, /供需合作/);
     assert.match(page, /价格有误/);
@@ -290,7 +308,7 @@ test("提交页提供两条原创流程，并可从产品页携带上下文进�
     assert.match(page, /\/api\/submissions/);
     assert.match(page, /direct-shops/);
     assert.match(page, /chatgpt-pro-20x/);
-    assert.match(page, /aria-current="page">提交</);
+    assert.match(page, /aria-current="page">反馈与合作</);
     assert.match(page, /data-submission-mode="feedback" aria-pressed="true"/);
 
     const product = await fetch(`${base}/product?source=direct-shops&id=chatgpt-pro-20x`).then((response) => response.text());

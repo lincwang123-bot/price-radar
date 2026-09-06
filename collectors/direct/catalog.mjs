@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { offerSpec } from '../../lib/offer-spec.mjs';
 
 // 独立维护的小型明确分类表。它只覆盖当前站点实际展示的产品族；规则不确定时
 // 返回 null，避免把低价但不同形态的商品错误混入排行榜。
@@ -190,7 +191,7 @@ export function classifyDirectOffer({ title, category = "", sourceId = "" }) {
 // 只识别商品明示的单一期限；不把质保期或多期限选择框当作订阅期限。
 function singleSubscriptionMonths(text) {
   const numeral = { 一: 1, 两: 2, 二: 2, 三: 3, 六: 6, 十二: 12 };
-  const value = text.replace(/质保\s*(?:\d+|十二|一|两|二|三|六)\s*(?:天|日|个月|月|年)/g, "");
+  const value = text.replace(/(?:质保|保修|售后)\s*(?:\d+|十二|一|两|二|三|六)\s*(?:天|日|个月|月|年)/g, "").replace(/(?:\d+|十二|一|两|二|三|六)\s*(?:个)?(?:天|日|月|年)\s*(?:质保|保修|售后)/g, '');
   if (/永久|终身|lifetime/.test(value)) return null;
   const months = new Set([...value.matchAll(/(?<![\d])(?:(\d+|十二|一|两|二|三|六)\s*(?:个)?)?(月|年)(?:卡)?/g)]
     .map((match) => (numeral[match[1]] ?? Number(match[1] || 1)) * (match[2] === "年" ? 12 : 1)));
@@ -246,13 +247,15 @@ export function groupDirectOffers(rawOffers) {
   return [...groups.values()].map(({ canonical, offers }) => {
     offers.sort(compareOffers);
     const available = offers.filter((offer) => isAvailable(offer.status));
+    const dimensions = offers.map(offer => offerSpec(offer,canonical));
+    const comparable = dimensions.every(d=>d.known) && new Set(dimensions.map(d=>d.key)).size === 1;
     return {
       productId: canonical.id,
       name: canonical.name,
       platform: canonical.platform,
       productType: canonical.productType,
       spec: canonical.spec,
-      lowestPrice: available.length ? available[0].price : null,
+      lowestPrice: comparable && available.length ? available[0].price : null,
       currency: offers[0]?.currency || "CNY",
       offerCount: offers.length,
       inStockCount: available.length,

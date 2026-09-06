@@ -18,6 +18,7 @@ import { loadConfig } from "./lib/config.mjs";
 import { runPull } from "./lib/pull.mjs";
 import { runWatch } from "./lib/watch.mjs";
 import { notify } from "./lib/notify.mjs";
+import { projectProduct, productQuoteGroups, quoteSeries } from './lib/quote-policy.mjs';
 import {
   lastSnapshotId, productsOfSnapshot, offersOfProduct, priceSeries,
   recentSnapshots,
@@ -85,7 +86,8 @@ async function cmdProducts(config, db) {
   const sid = lastSnapshotId(db, source);
   if (!sid) return console.log(`[${source}] 尚无快照，先运行 node radar.mjs pull`), 0;
   console.log(`\n[${source}] 最新快照 ${sid} 产品一览（按 offer 数排序 Top 30）:`);
-  const rows = productsOfSnapshot(db, source, sid);
+  const snapshot = recentSnapshots(db,source,1)[0];
+  const rows = productsOfSnapshot(db, source, sid).flatMap(p=>productQuoteGroups(projectProduct(db,source,snapshot,p)));
   const sorted = [...rows].sort((a, b) => (b.offer_count ?? 0) - (a.offer_count ?? 0));
   console.log(
     pad("product_id", 26) + pad("名称", 24) + pad("平台", 10) + pad("品类", 8) + pad("最低价", 9) + pad("有货", 6) + "offer数"
@@ -93,8 +95,8 @@ async function cmdProducts(config, db) {
   for (const r of sorted.slice(0, 30)) {
     console.log(
       pad(r.product_id, 26) + pad(r.name ?? "", 24) + pad(r.platform ?? "", 10) +
-      pad(r.product_type ?? "", 8) + pad(r.lowest_price ?? "-", 9) +
-      pad(r.in_stock_count ?? 0, 6) + (r.offer_count ?? 0)
+      pad(r.product_type ?? "", 8) + pad(r.lowest_price ?? "待确认", 9) +
+      pad(r.in_stock_count ?? 0, 6) + (r.offer_count ?? 0) + ' ' + (r.comparison_label || '')
     );
   }
   return 0;
@@ -104,12 +106,13 @@ async function cmdOffers(config, db, productId) {
   const source = arg("--source", "priceai");
   const sid = lastSnapshotId(db, source);
   if (!sid) return console.log(`[${source}] 尚无快照。`), 0;
-  const offers = offersOfProduct(db, source, sid, productId).sort((a, b) => (a.price ?? 1e9) - (b.price ?? 1e9));
+  const product = productsOfSnapshot(db,source,sid).find(p=>p.product_id===productId);
+  const offers = product ? projectProduct(db,source,recentSnapshots(db,source,1)[0],product).offers : [];
   console.log(`\n[${source}] ${productId} @ ${sid} —— ${offers.length} 条报价（价格升序）:`);
   for (const o of offers.slice(0, 20)) {
     console.log(
       `${pad(o.price ?? "-", 8)} ${pad(o.status ?? "", 12)} ${pad(o.store_name ?? "", 18)} ` +
-      `${o.title ?? ""}  ${o.url ?? ""}`
+      `${o.title ?? ""}  ${o.url ?? ""}  ${o.comparison_label || ''}${o.quote_stale?' · 待核验':''}`
     );
   }
   return 0;
@@ -118,7 +121,7 @@ async function cmdOffers(config, db, productId) {
 async function cmdHistory(config, db, productId) {
   const source = arg("--source", "priceai");
   const n = Number(arg("--n", "20")) || 20;
-  const series = priceSeries(db, { source, productId });
+  const series = quoteSeries(db, { source, productId });
   if (!series.length) return console.log(`[${source}] 无 ${productId} 历史。`);
   const tail = series.slice(-n);
   console.log(`\n[${source}] ${productId} 最近 ${tail.length} 个快照最低价走势:`);

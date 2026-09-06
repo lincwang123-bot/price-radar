@@ -36,7 +36,7 @@ export async function pull(ctx) {
     const cached = readTargetCache(cachePath);
     const ageMinutes = cached?.fetchedAt ? (Date.now() - Date.parse(cached.fetchedAt)) / 60000 : Infinity;
     if (cached && Number.isFinite(ageMinutes) && ageMinutes < Math.min(target.intervalMinutes, maxCacheAgeMinutes)) {
-      allOffers.push(...cached.offers);
+      allOffers.push(...withHealth(cached.offers, 'cached', maxCacheAgeMinutes));
       health.push({target:target.id,name:target.name,status:"cached",lastSuccess:cached.fetchedAt,ageMinutes:Math.round(ageMinutes)});
       ctx.log?.(`[${sourceId}] ${target.name} 命中本地缓存（${ageMinutes.toFixed(0)}min / ${target.intervalMinutes}min）。`);
       continue;
@@ -53,13 +53,13 @@ export async function pull(ctx) {
         target,
       );
       writeTargetCache(cachePath, { targetId: target.id, fetchedAt: capturedAt, offers });
-      allOffers.push(...offers);
+      allOffers.push(...withHealth(offers, 'ok', maxCacheAgeMinutes));
       health.push({target:target.id,name:target.name,status:"ok",lastSuccess:capturedAt,ageMinutes:0});
       ctx.log?.(`[${sourceId}] ${target.name}: ${offers.length} 条公开商品。`);
     } catch (error) {
       staleTargets.push(target.id);
       const usable = cached && Number.isFinite(ageMinutes) && ageMinutes <= maxCacheAgeMinutes;
-      if (usable) allOffers.push(...cached.offers);
+      if (usable) allOffers.push(...withHealth(cached.offers, 'stale', maxCacheAgeMinutes));
       health.push({target:target.id,name:target.name,status:usable?"stale":"unavailable",lastSuccess:cached?.fetchedAt||null,ageMinutes:Number.isFinite(ageMinutes)?Math.round(ageMinutes):null});
       ctx.log?.(`[${sourceId}] ${target.name} 采集失败，${usable?"暂用有效期内缓存":"无有效缓存，暂不参与当前报价"}: ${error.message}`);
     }
@@ -120,6 +120,10 @@ function validateTargetOffers(offers, target) {
     if (offer.sourceId !== target.id) throw new Error(`商品 ${offer.offerId} 来源标识不一致`);
   }
   return offers;
+}
+
+function withHealth(offers,status,maxAgeMinutes) {
+  return offers.map(offer=>({...offer,extra:{...offer.extra,quoteHealth:{status,maxAgeMinutes}}}));
 }
 
 function readTargetCache(file) {
