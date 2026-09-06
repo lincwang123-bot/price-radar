@@ -74,6 +74,12 @@ export function classifyDirectOffer({ title, category = "", sourceId = "" }) {
   }
   // 注册邮箱只是免费 AI 账号的附带属性，不应被当成独立邮箱报价。
   if (/^(?:chat\s*gpt|gpt)\s*[- ]*(?:free\b|普号|账号免费版)/.test(titleText)) return null;
+  // 免费账号偶尔附带的付费试用不是保证交付的订阅权益。
+  // 限定为免费账号 + 权益不确定，不能误伤随机地区或真实短期 Plus。
+  if (has(titleText, /\bfree\b|免费(?:版|账号|号)/) &&
+      has(titleText, /(?:少量|部分|随机|概率|不保证|不保障).{0,16}(?:plus|pro|premium|付费|会员)/)) return null;
+  // 主商品是 Leonardo 积分账号；兼容 Gemini 图片模型不是 Gemini 订阅。
+  if (/^leonardo\b/.test(titleText)) return null;
 
   // 邮箱标题经常带有“已注册 OpenAI”等用途说明，需先于订阅关键词判断。
   if (has(titleText, /gmail|outlook|hotmail|微软邮箱|谷歌邮箱|邮箱账号|邮箱老号|域名邮箱/) ||
@@ -103,7 +109,7 @@ export function classifyDirectOffer({ title, category = "", sourceId = "" }) {
     /\d+(?:\.\d+)?\s*(?:刀|美元|美金|usd)\s*额度|额度\s*\d+(?:\.\d+)?\s*(?:刀|美元|美金|usd)/);
   // 镜像站通行卡和中转余额是第三方服务；CDK本身仅说明交付方式，
   // 不能据此把真实原厂订阅代充一并移出订阅分类。
-  if (((has(titleText, /\bapi\b|中转|镜像站/i) || balanceProduct || monetaryCredits) && has(titleText, aiService)) || has(titleText, /api\s*中转|中转\s*api|api中转站|中转站/i)) {
+  if (((has(titleText, /\bapi\b|中转|镜像站|网页镜像/i) || balanceProduct || monetaryCredits) && has(titleText, aiService)) || has(titleText, /api\s*中转|中转\s*api|api中转站|中转站/i)) {
     return PRODUCTS["api-cdk-credits"];
   }
 
