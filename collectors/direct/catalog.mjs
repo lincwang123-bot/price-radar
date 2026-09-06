@@ -93,9 +93,12 @@ export function classifyDirectOffer({ title, category = "", sourceId = "" }) {
   const originalSubscription = has(titleText, /(?:官方|原厂).*?(?:月订阅|订阅|月卡).*?(?:代充|直充|充值)/);
   const balanceProduct = !originalSubscription && has(titleText,
     /余额\s*(?:充值|兑换|额度)|(?:充值|兑换)\s*余额|\d+(?:\.\d+)?\s*(?:刀|美元|美金|usd)\s*余额(?!\s*(?:支付|不足))|余额\s*\d+(?:\.\d+)?\s*(?:刀|美元|美金|usd)/);
+  // 金额额度是服务计费单位；“Max 5x额度”不含货币金额，仍按订阅档位判断。
+  const monetaryCredits = has(titleText,
+    /\d+(?:\.\d+)?\s*(?:刀|美元|美金|usd)\s*额度|额度\s*\d+(?:\.\d+)?\s*(?:刀|美元|美金|usd)/);
   // 镜像站通行卡和中转余额是第三方服务；CDK本身仅说明交付方式，
   // 不能据此把真实原厂订阅代充一并移出订阅分类。
-  if (((has(titleText, /\bapi\b|中转|镜像站/i) || balanceProduct) && has(titleText, aiService)) || has(titleText, /api\s*中转|中转\s*api|api中转站|中转站/i)) {
+  if (((has(titleText, /\bapi\b|中转|镜像站/i) || balanceProduct || monetaryCredits) && has(titleText, aiService)) || has(titleText, /api\s*中转|中转\s*api|api中转站|中转站/i)) {
     return PRODUCTS["api-cdk-credits"];
   }
 

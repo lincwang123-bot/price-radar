@@ -11,6 +11,9 @@ test('真实镜像站与余额报价归开发服务，不冒充原厂订阅', ()
     'GPT Pro 中转余额 5x',
     'api G plus月订阅',
     'api Gplus月订阅',
+    'G plus 日卡50刀额度',
+    'Claude Pro 额度10美元',
+    'Gplus 20 USD 额度',
   ]) assert.equal(classify(title), 'api-cdk-credits', title);
 });
 test('小数倍率和更长倍率不冒充5x或20x订阅', () => {
@@ -23,6 +26,7 @@ test('小数倍率和更长倍率不冒充5x或20x订阅', () => {
 test('保留真实Max5x20x及Plus原订阅和CDK交付', () => {
   for (const [title, id] of [
     ['Claude Max 5x 代充月卡', 'claude-max-5x'],
+    ['Claude Max 5x 代充月卡 Max 5x额度', 'claude-max-5x'],
     ['Claude Max 20x 代充月卡', 'claude-max-20x'],
     ['Claude Max x5 代充月卡', 'claude-max-5x'],
     ['ChatGPT Pro 20x 月卡', 'chatgpt-pro-20x'],
