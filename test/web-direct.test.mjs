@@ -19,7 +19,8 @@ test("原店直采报价支持翻页，PriceAI Top 5 可跳转完整直采排行
 
     const homeHtml = await fetch(`http://127.0.0.1:${port}/`).then((response) => response.text());
     assert.match(homeHtml, /AI 订阅报价/);
-    assert.match(homeHtml, /店铺产品/);
+    assert.match(homeHtml, /data-category="chatgpt"/);
+    assert.doesNotMatch(homeHtml, /<table/);
 
     const directHtml = await fetch(`http://127.0.0.1:${port}/product?source=direct-shops&id=chatgpt-plus-recharge&page=2`).then((response) => response.text());
     assert.match(directHtml, /共 23 条公开报价/);
@@ -124,7 +125,7 @@ test("首页为已采集的新品牌生成独立分类，详情可返回对应�
     const html = await fetch(base + "/?family=cursor").then((res) => res.text());
     for (const key of ["cursor", "perplexity", "notion", "manus", "relay"]) {
       assert.match(html, new RegExp(`data-family-filter="${key}"`));
-      if(key==='cursor')assert.match(html, new RegExp(`<div data-family="${key}" data-catalog-group`));else assert.doesNotMatch(html,new RegExp(`<div data-family="${key}" data-catalog-group`));
+      if(key==='cursor')assert.match(html, /data-directory-family="cursor"/);else assert.doesNotMatch(html,new RegExp(`data-directory-family="${key}"`));
     }
     assert.match(html, /data-family-filter="mail"/);
     assert.match(html, /\[data-family\]\[hidden\]\{display:none!important\}/);
