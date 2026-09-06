@@ -3,10 +3,12 @@ import { collectIkunLove } from "./ikunlove.mjs";
 import { collectMooncake } from "./mooncake.mjs";
 import { collectShopApi } from "./shop-api.mjs";
 import { collectDujiao } from "./dujiao.mjs";
+import { collectAikaShop } from './aikashop.mjs';
 
 // 这里只登记我们逐个核验过的原站公开入口。URL 不接受运行时任意传入，
 // 避免把采集器变成通用代理或 SSRF 入口。
 const TARGETS = [
+  {id:'aikashop',name:'AI卡商城',kind:'aikashop',origin:'https://aikashop.com',intervalMinutes:720},
   {
     id: "aisou",
     name: "AI搜",
@@ -133,6 +135,7 @@ const COLLECTORS = {
   mooncake: collectMooncake,
   shopApi: collectShopApi,
   dujiao: collectDujiao,
+  aikashop: collectAikaShop,
 };
 
 function shop(id, name, token) {
@@ -152,6 +155,7 @@ function shop(id, name, token) {
 // wzyp.cn 的公开 ShopApi 在普通家庭网络可用，但当前会对本项目
 // 生产 VPS 返回 WAF 挑战页。它们保留为显式可选目标，不在默认列表中启用。
 export const DEFAULT_DIRECT_TARGET_IDS = Object.freeze([
+  'aikashop', 'otaor',
   "aisou", "redeemgpt", "ai666", "shopcardai", "web3chirou", "morimm", "burstpro-ai", "ikunlove", "mooncake",
   "lynnzee", "zhanghao66", "yufenggpt", "google7676", "tehuio",
   "codesky", "fk10886", "gugugaga", "flyai", "whh985", "aictk", "ccdawang",

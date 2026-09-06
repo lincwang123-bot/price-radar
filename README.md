@@ -3,6 +3,8 @@
 把「AI 订阅 / 中转 API / 卡网渠道」的**比价聚合站**（如 PriceAI、OpenPrice 等）与固定登记的原始店铺公开目录当作数据源，
 统一拉取 → 存 SQLite 历史 → 规则化盯盘提醒。零第三方依赖（Node ≥ 22 内置 `fetch` + `node:sqlite`）。
 
+> 2026-09-06 工作区更新：以下新增扩源、覆盖验收、报价来源字段、P0 商业化入口和 Mac 回执属于待发布实现；本说明不代表已上线。既有历史记录继续保留。
+
 ## 联系方式
 
 - X：[ @superwang](https://x.com/superwang)
@@ -101,6 +103,8 @@ node radar.mjs import <raw.json>                # 历史 raw 快照回填（幂�
 
 | 目标 id | 店铺/目录 | 类型与公开入口 | 单目标缓存周期 |
 | --- | --- | --- | --- |
+| `aikashop` | AikaShop | 固定 Suno 页面：`aikashop.com/products/suno.html` | 12h |
+| `otaor` | OTAOR | Dujiao：`acc.otaor.com/api/v1/public/products` | 30min |
 | `aisou` | AI搜 | Kami：`aisou.pro/user/api/index/commodity` | 30min |
 | `redeemgpt` | RedeemGPT | Kami：`faka.redeemgpt.com/user/api/index/commodity` | 30min |
 | `ai666` | AI666 | Kami：`ai666.id/user/api/index/commodity` | 30min |
@@ -124,9 +128,9 @@ node radar.mjs import <raw.json>                # 历史 raw 快照回填（幂�
 | `mooncake` | Mooncake | Mooncake JS 目录：`fk1.ybkjs.top/mooncake-official-media/catalog.js` | 12h |
 | `wzyp-harvey`、`wzyp-paimon`、`wzyp-ai-choice`、`wzyp-direct`、`wzyp-lightyear` | 派大星、派蒙AI、AI优选站、GPTplus直营、光年AI | ShopApi：固定登记的 `wzyp.cn` 店铺，读取 `/shopApi/Shop/categoryList` 与 `/shopApi/Shop/goodsList` | 60min，非默认 |
 
-以上 21 个默认店铺均已在生产 VPS 验证可达。`web3chirou` 的 Kami 目录会出现“请求 100 条但首页仅返回 96 条”的情况；采集器在存在 `total` 时不再以单页长度提前结束，并用唯一 ID、重复页、连续空页和最大页数共同限定请求。Dujiao 多规格商品按 SKU 独立生成报价，只补充已确认的品牌名，不把父商品中的 Plus / Pro 5x / Pro 20x 混入每个 SKU。自动生成的 `SKU-1` 仅在单规格商品中回退到父标题，多规格仍不猜测。
+工作区默认目标由 21 个扩为 23 个；两项新增原站入口已在本机和生产 VPS 只读核验可达，不等于采集代码已经部署。AikaShop 的 6 条 Suno 套餐没有明确库存证据，均为“待核验”，不参与可售起价或覆盖成绩。`web3chirou` 的 Kami 目录会出现“请求 100 条但首页仅返回 96 条”的情况；采集器在存在 `total` 时不再以单页长度提前结束，并用唯一 ID、重复页、连续空页和最大页数共同限定请求。Dujiao 多规格商品按 SKU 独立生成报价，只补充已确认的品牌名，不把父商品中的 Plus / Pro 5x / Pro 20x 混入每个 SKU。自动生成的 `SKU-1` 仅在单规格商品中回退到父标题，多规格仍不猜测。
 
-`otaor`（`acc.otaor.com`）仅登记为可选候选：2026-09-05 核验时所有商品都明确标为售罄，因此未加入默认来源；旧地址 `xtacc.top` 不重复计入。无法正常访问、返回挑战页或已不再是商品站的候选不启用。
+`otaor`（`acc.otaor.com`）在 2026-09-05 核验时全部售罄，曾仅登记为候选；2026-09-06 复核 41 条 SKU 中 1 条 Gemini 权益兑换链接标有库存，其余 40 条售罄，故本次恢复默认目标。兑换链接不是完整订阅，不能计作订阅覆盖；旧地址 `xtacc.top` 不重复计入。无法正常访问、返回挑战页或已不再是商品站的候选不启用。
 
 `wzyp.cn` 的 ShopApi 目标仍可在 `config.json` 中显式启用，但当前会对 airadar.vip 生产 VPS 返回 WAF 挑战页，因此不纳入生产默认列表，也不尝试绕过。
 
@@ -134,7 +138,7 @@ node radar.mjs import <raw.json>                # 历史 raw 快照回填（幂�
 
 - 只请求固定白名单内无需登录即可读取的公开商品目录；不提交账号凭据，不绕过登录、验证码或 WAF，不把采集器当通用代理。ShopApi 路径中的店铺 token 是公开店铺标识，不是登录凭据。
 - 源级最短请求间隔默认 30min；单目标另按上表复用缓存，分页请求默认间隔 500ms，并限制页数/分类数。即使 daemon 运行更频繁，也不会据此提高原站请求频率。
-- 每个目标成功后原子更新本地缓存。某目标首次采集失败且没有可用缓存时，整轮 `direct-shops` 不发布不完整快照；已有缓存时沿用该目标上次的完整结果，并把汇总快照标记为 `stale: true`。请求失败不等同于商品下架或无货。
+- 每个目标成功后原子更新本地缓存。失败目标单独记录健康状态，已有缓存可在期限内保留；健康店铺仍可发布和比价。报价是否可用按对应目标判断，不能只凭汇总 `stale` 字段把所有店铺一起禁用。缺失/超龄目标不冒充在售，请求失败不等同于商品下架或无货。
 - 原始缓存会保留店铺返回的完整商品状态，便于核对采集结果；公开快照会排除售罄商品，以及标题明确标注“无质保 / 无售后”的商品。它们不参与最低价、报价排行或产品计数，避免用不可购买或无保障的异常低价误导用户。
 - 只发布能可靠归入本项目商品分类的条目；无法确认分类的商品保留在采集统计中，但不进入报价快照。
 - Perplexity Pro 和 Notion AI 商业版按 1 / 12 / 24 个月拆分，Manus 按 2000 / 5000 / 10000 积分拆分，Cursor 区分 Pro / Pro+ / Ultra 以及明确月卡和期限未注明，X Premium+ 与 Premium 单独排行。质保天数不用于推断订阅期限；永久权益、多个档位共用一个起售价以及多产品全家桶不进入单一订阅排行。
@@ -161,7 +165,7 @@ node radar.mjs import <raw.json>                # 历史 raw 快照回填（幂�
 
 公开页有清洁 canonical、描述和与页面类型相符的 JSON-LD；UTM/渠道筛选不另建索引页，报价分页保留规范页码。不存在的产品返回真实 404。源站仅对可信本机 Tunnel 传入的 HTTP 协议标记重定向至固定 HTTPS 主域；不会为 SEO 修改后台鉴权或共享缓存私人内容。
 
-Google Search Console 与百度搜索资源平台仍需真实账号验证和提交。可在服务器配置 `GOOGLE_SITE_VERIFICATION`、`BAIDU_SITE_VERIFICATION` 的官方公开验证值；缺省为空，不伪造验证。技术可索引不等于已收录，也不保证收录时间。`www.airadar.vip` 的 DNS/跳转需另行在域名控制台核实配置。第一方统计要求公开页到达源站，当前保留 `no-store`，不盲目开启 HTML 边缘缓存。
+本站已完成 Google Search Console 和百度搜索资源平台的所有权验证；先前 Google Sitemap 已成功读取，但不是全部页面收录的证明，百度提交仍受账号实际配额与平台状态限制。新部署者须使用自己的真实账号验证和提交，可配置 `GOOGLE_SITE_VERIFICATION`、`BAIDU_SITE_VERIFICATION` 的官方公开验证值；缺省为空，不伪造验证。技术可索引不等于已收录，也不保证收录时间。`www.airadar.vip` 的 DNS/跳转需另行在域名控制台核实配置。第一方统计要求公开页到达源站，当前保留 `no-store`，不盲目开启 HTML 边缘缓存。
 
 ### 第一方访问统计（2026-09-05）
 
@@ -177,7 +181,7 @@ Google Search Console 与百度搜索资源平台仍需真实账号验证和提�
 
 使用 `node radar.mjs backup-submissions` 执行 SQLite 在线备份，包含已提交的 WAL。`SUBMISSIONS_BACKUP_DIR` 必须是独立绝对路径；生产模板使用 `/opt/linc/backups/price-radar/submissions`，备份文件 0600、目录 0700，默认保留最近 14 份。每份在临时目录恢复并执行 `quick_check` 与表计数，再成为可用备份。此过程不覆盖生产数据库，也不输出投稿正文。`price-radar-backup.timer` 每天 UTC 19:40 左右运行（北京时间次日 03:40），掉线期间错过的任务在恢复后补跑。
 
-服务器备份与异机备份分开管理。后台“采集与备份”仅报告服务器副本的文件、大小、SHA-256 和新鲜度；旧版本没有 SHA-256 的副本明确标为仅大小校验，不能据此声称完整校验或 Mac 已同步。
+服务器备份与异机备份分开管理。后台分别报告服务器副本与 Mac 确认回执；没有回执时不能声称 Mac 已同步。旧版本没有 SHA-256 的服务器副本明确标为仅大小校验。
 
 ### Mac 加密异机备份
 
@@ -192,12 +196,28 @@ node --disable-warning=ExperimentalWarning scripts/mac-backup.mjs restore /绝�
 - 通过既有 SSH 拉取行情历史、私人投稿、访问统计三个 SQLite 在线一致副本；每个数据库包含已提交 WAL，但不宣称跨库同一瞬间的原子快照。不开通第三方云存储，不采集更多访客信息。
 - 默认档案位于 Mac 用户目录的 `Backups/Airadar`，AES-256-GCM 密钥单独保存在 `Library/Application Support/Airadar Backup/backup.key`。目录 0700，文件 0600；密钥和档案均不进入仓库。密钥丢失/变更会停止操作，不能通过重建密钥恢复旧备份。
 - 每次保存独立加密版本，不覆盖、不自动删除旧档案；解密验证、SHA-256 与 SQLite 恢复检查全部通过才更新 `status.json`。备份失败保留上次有效副本。
+- 新版本验证成功后通过既有 SSH 上传白名单元数据回执到服务器 `/opt/linc/backups/price-radar/mac-receipt.json`，只含版本、创建/检查/接收时间、加密文件大小与校验等级，不上传密钥、档案或私人正文。超过 36 小时标为过期；回执上传失败不会删除已验证的 Mac 副本，并明确报告同步异常。回执表示曾完成检查，不保证当前 Mac 文件仍存在或硬件无故障。
 - 不备份原始网页缓存、服务器环境文件、Tunnel/管理员凭据。环境配置需另行安全保管，代码从 GitHub 恢复。需要恢复时只解密到一个新目录，不自动覆盖线上数据库。
 - Mac 的每日执行由 Codex 本任务中的“Airadar 每日 Mac 异机备份”管理，当前北京时间 09:00；成功不通知，异常报告。Mac/Codex 不可运行或服务器不可达时不能保证完成，应核对 `status.json` 的最后成功时间。
 - 按站长选择保留所有历史版本，空间会随运行时间增长。统计摘要在线保留 31 天，服务器备份最多 14 份；加密异机历史可能长期保留，仅用于灾难恢复，不用于延长访问追踪。
 - 正常中断会清理临时目录并等待子进程退出；断电或 SIGKILL 无法执行清理，遗留 `.running` 锁需先确认没有活动备份后人工处理，不自动猜测解锁。
 
-### 报价一致性与页面体验
+### 本轮覆盖验收与 P0 边界（待发布）
+
+```sh
+node scripts/source-coverage.mjs --db /绝对路径/radar.sqlite --json
+node scripts/source-coverage.mjs --db /绝对路径/radar.sqlite --report /尚不存在的报告.md
+```
+
+采集轮次结束后轻量评估同产品、同规格/周期/币种及质保口径的有效在售报价，按 UTC 日原子保存到 `data/source-coverage-ledger.json`，最多 90 日，同一快照重复评估不堆叠。初次不可判定可由随后有效样本补齐，但同日有效失败不能被稍后通过擦除。至少连续 7 个不同日、相同验收范围内，每个 PriceAI 有效组均有直采覆盖且最低价不劣于基线，才建议人工复核停用；不自动关源。PriceAI 自身 stale 或源发布时间过旧时一律不可判定，不能用刚下载的时间伪造新鲜度。当前 gate 未达标，不能删除 PriceAI 或原始历史。过去的抽样数量对比不等于全站同 SKU 覆盖证明，23 个目标也不等于 23 个有效供货店。详见 [覆盖政策](docs/source-coverage-policy.md) 与 [扩源核验](docs/source-coverage-expansion.md)。
+
+新报价持久化 `source_type/source_name/source_url/merchant_id/last_updated_at/last_verified_at/recorded_at`。来源由适配器决定，不能由第三方 payload 自报：`direct-shops` 是 `original_crawl`（原店采集），不是 `merchant_direct`（商家主动提交/API）；现有第三方转录的“官方区价”也不是官方直连。目前没有商家直连接入。更新时刻与最近抓取核验时刻分开，核验不代表购买认证；相同价格继续记录观察，A→B→A 不丢失。writer 幂等迁移新增列，旧库只读仍兼容，旧记录不伪造回填。详见 [来源与历史语义](docs/source-coverage-provenance.md)。
+
+本轮 P0 还包含统一 `/go` 店铺跳转及最小点击统计、独立 Sponsored 广告模型/展示、`/advertise` 合作申请和商家认领申请入口。广告不改变自然价格排序；申请不自动通过身份认证、开通商家权限或上架广告。P1 的完整认领验证、商家后台/报价编辑/API、第一方占比 Dashboard、用户价格有效性反馈及专门的 30 日价格统计尚未实现；P2 信用体系也未做，不能把现有访问统计、历史曲线或覆盖验收页称为这些功能。上述均为工作区实现范围，不是上线证明。
+
+2026-09-06 只读核验生产 `/opt/linc/apps/price-radar/config.json` 不存在，旧版 21 个目标来自内置默认；因此发布新版代码即可采用 23 个默认目标，无需创建或覆盖配置。若其他环境显式设置 `sources.direct-shops.targets`，默认数组不会覆盖自定义选择，应先将完整配置备份至 Git 忽略的 `backups/`（目录 0700、文件 0600），只合并经确认的新目标，保留其余字段和通知秘密，禁止打印完整配置。现有显式旧提醒规则另用 `scripts/migrate-watch-defaults.mjs --config /绝对路径/config.json` 先 dry-run，确认后才加 `--apply`。
+
+### 报价展示口径
 
 目录 ID 只是产品族，不代表所有报价属于同一 SKU。公开报价根据实际商品描述区分期限、交付方式、地区、优惠类型、数量/容量及币种；未知或多选规格保留原始说明，不生成有误导性的统一最低价。行情、网页排行、历史和提醒复用 `offer-spec.mjs` / `quote-policy.mjs`，统一排除售罄和明确无质保报价。历史按查询重算，原始记录与旧链接保留。
 

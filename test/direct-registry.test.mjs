@@ -5,11 +5,12 @@ import { DEFAULT_DIRECT_TARGET_IDS, directTargets } from "../collectors/direct/r
 
 test("默认直采列表只启用生产 VPS 已验证可达的目标", () => {
   assert.deepEqual(DEFAULT_DIRECT_TARGET_IDS, [
+    'aikashop', 'otaor',
     "aisou", "redeemgpt", "ai666", "shopcardai", "web3chirou", "morimm", "burstpro-ai", "ikunlove", "mooncake",
     "lynnzee", "zhanghao66", "yufenggpt", "google7676", "tehuio",
     "codesky", "fk10886", "gugugaga", "flyai", "whh985", "aictk", "ccdawang",
   ]);
-  assert.equal(directTargets().length, 21);
+  assert.equal(directTargets().length, 23);
   assert.equal(directTargets(["wzyp-harvey"])[0].token, "harvey");
 });
 
@@ -53,11 +54,11 @@ test("未登记目标不能把直采器当作任意代理", () => {
   assert.throws(() => directTargets(["https://example.com"]), /未登记/);
 });
 
-test("第二轮新原站登记准确，旧跳转域名与全售罄候选不计入默认来源", () => {
+test("新原站登记准确，旧跳转域名不启用，otaor恢复有货后明确登记", () => {
   const origins = directTargets().map(t => t.origin);
-  assert.equal(new Set(origins).size, 21);
+  assert.equal(new Set(origins).size, 23);
   assert.ok(!origins.includes("https://xtacc.top"));
-  assert.ok(!DEFAULT_DIRECT_TARGET_IDS.includes("otaor"));
+  assert.ok(DEFAULT_DIRECT_TARGET_IDS.includes("otaor"));
   for (const t of directTargets(["codesky", "fk10886", "gugugaga"])) {
     assert.equal(t.endpoint, "/user/api/index/commodity");
     assert.equal(t.maxPages, 5);

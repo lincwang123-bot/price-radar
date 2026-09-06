@@ -20,6 +20,12 @@ test('Mac backup encrypts, authenticates and restores three databases without ex
     }
     const tar = path.join(root, 'input.tar.gz');
     await exportBackup(root, createWriteStream(tar, { mode: 0o600 }));
+    const pullDir=path.join(root,'pulled');
+    const pulled=await pullMacBackup({directory:pullDir,keyPath:path.join(root,'pull-key'),
+      spawnRemote:()=>spawn(process.execPath,['-e','require("node:fs").createReadStream(process.argv[1]).pipe(process.stdout)',tar],{stdio:['ignore','pipe','pipe']}),
+      sendReceipt:async()=>{throw new Error('fixture receipt failed');}});
+    assert.equal(pulled.ok,true);assert.equal(pulled.verified,true);assert.equal(pulled.receipt.ok,false);
+    assert.ok(existsSync(path.join(pullDir,pulled.file)));assert.equal(JSON.parse(readFileSync(path.join(pullDir,'status.json'),'utf8')).receipt.ok,false);
     const keyPath = path.join(root, 'keydir', 'backup.key'), key = readBackupKey(keyPath, { create: true });
     assert.equal(statSync(keyPath).mode & 0o777, 0o600);
     const enc = path.join(root, 'backup.enc');

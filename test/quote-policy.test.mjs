@@ -27,7 +27,7 @@ test('单店失败保留健康店，整体pull失败及过期报价无法在售'
 });
 test('watch从有效报价重算最低价，过滤售罄无保障及混周期，失败不误报',()=>{
  for(const offers of [[{price:100},{price:1,status:'sold_out'}],[{price:100},{price:1,title:'Claude Pro 月卡 无质保'}],[{price:1},{price:100,title:'Claude Pro 年卡'}]]) {
-   const db=setup(offers);try{assert.deepEqual(runWatch(db,{rules:[{id:'min',source:'direct-shops',kind:'min_below',threshold:10}]}),[]);}finally{db.close();}
+   const db=setup(offers);try{assert.deepEqual(runWatch(db,{rules:[{id:'min',source:'direct-shops',kind:'min_below',term:offers.some(o=>o.title?.includes('年卡'))?'12m':'1m',threshold:10}]}),[]);}finally{db.close();}
  }
  const db=setup([{price:1}]);try{metaSet(db,'health:direct-shops',JSON.stringify({status:'failed',checkedAt:new Date(now+1).toISOString()}));assert.deepEqual(runWatch(db,{rules:[{id:'min',source:'direct-shops',kind:'min_below',threshold:10}]}),[]);}finally{db.close();}
 });

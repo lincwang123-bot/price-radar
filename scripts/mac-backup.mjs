@@ -7,6 +7,7 @@ import { homedir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
+import {publishReceipt} from '../lib/offsite-backup.mjs';
 
 const MAGIC = Buffer.from('AIRADAR1');
 const DB_FILES = ['radar.sqlite', 'submissions.sqlite', 'analytics.sqlite'];
@@ -95,7 +96,7 @@ export async function verifyMacBackup(archive, key, directory, { restoreTo, sign
   finally { rmSync(temp, { recursive: true, force: true }); }
 }
 
-export async function pullMacBackup({ directory = DEFAULT_DIR, keyPath = DEFAULT_KEY, signal, spawnRemote = spawn, timeoutMs = 240000 } = {}) {
+export async function pullMacBackup({ directory = DEFAULT_DIR, keyPath = DEFAULT_KEY, signal, spawnRemote = spawn, timeoutMs = 240000, sendReceipt=publishReceipt } = {}) {
   if (!path.isAbsolute(directory) || !path.isAbsolute(keyPath)) throw new Error('Use absolute backup paths');
   privateDirectory(directory);
   // Do not silently create a different key when encrypted archives already exist.
@@ -135,6 +136,11 @@ export async function pullMacBackup({ directory = DEFAULT_DIR, keyPath = DEFAULT
     const status = { version: 1, ok: true, checkedAt: new Date().toISOString(), file: name, encryptedBytes: statSync(file).size, ...verified };
     const statusTemp = path.join(directory, `.status-${randomBytes(6).toString('hex')}`);
     writeFileSync(statusTemp, JSON.stringify(status, null, 2), { mode: 0o600 }); renameSync(statusTemp, path.join(directory, 'status.json'));
+    clearTimeout(timeout);
+    try{status.receipt=await sendReceipt(status,{signal});}
+    catch{status.receipt={ok:false,warning:'本地备份已验证并保留，但服务器确认回执上传失败'};}
+    try{writeFileSync(statusTemp,JSON.stringify(status,null,2),{mode:0o600});renameSync(statusTemp,path.join(directory,'status.json'));}
+    finally{rmSync(statusTemp,{force:true});}
     return { ...status, directory };
   } finally {
     clearTimeout(timeout);

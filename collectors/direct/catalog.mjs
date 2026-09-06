@@ -4,6 +4,7 @@ import { offerSpec } from '../../lib/offer-spec.mjs';
 // 独立维护的小型明确分类表。它只覆盖当前站点实际展示的产品族；规则不确定时
 // 返回 null，避免把低价但不同形态的商品错误混入排行榜。
 const PRODUCTS = {
+  ...Object.fromEntries(['pro','premier'].flatMap(tier=>[1,3,12].map(months=>[`suno-${tier}-${months}m`,product(`suno-${tier}-${months}m`,`Suno ${tier==='pro'?'Pro':'Premier'} · ${months} 个月`,'Suno','订阅/会员',`${months} 个月；以原店交付说明为准`)]))),
   "chatgpt-go": product("chatgpt-go", "ChatGPT Go", "ChatGPT", "订阅/会员"),
   "chatgpt-plus": product("chatgpt-plus", "ChatGPT Plus 成品号/共享", "ChatGPT", "账号/共享"),
   "chatgpt-plus-recharge": product("chatgpt-plus-recharge", "ChatGPT Plus 代充/卡密", "ChatGPT", "订阅/会员"),
@@ -62,6 +63,10 @@ export function classifyDirectOffer({ title, category = "", sourceId = "" }) {
   const categoryText = normalized(category);
   const text = normalized(`${category} ${title}`);
   if (!text) return null;
+  if (/\bsuno\b/.test(titleText)) {
+    const months=singleSubscriptionMonths(titleText),tier=/\bpremier\b/.test(titleText)?'premier':/\bpro\b/.test(titleText)?'pro':null;
+    return tier?PRODUCTS[`suno-${tier}-${months}m`]??null:null;
+  }
   // 注册邮箱只是免费 AI 账号的附带属性，不应被当成独立邮箱报价。
   if (/^(?:chat\s*gpt|gpt)\s*[- ]*(?:free\b|普号|账号免费版)/.test(titleText)) return null;
 
