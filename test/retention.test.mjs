@@ -48,6 +48,16 @@ test('实时目录把期限、交付和币种分开；明确售罄与采集失�
   assert.ok(readRetentionMarket(quotes,{now}).groups.every(g=>g.state==='unknown'));
  }finally{quotes.close();}
 });
+test('只有官方参考或 API 套餐的产品可收藏，参考报价不混入店铺提醒',()=>{
+ const quotes=openDb(':memory:');const {db,store}=setup();
+ try{
+  storeSnapshot(quotes,{source:'cardnav-official',snapshotId:'official',fetchedAt:now.toISOString(),products:[{productId:'grok-supergrok',name:'Super Grok',currency:'USD',offers:[{offerId:'official',title:'Super Grok 官方月付',price:30,currency:'USD',status:'official',url:'https://grok.com/'}]}]});
+  storeSnapshot(quotes,{source:'goaihop-relay',snapshotId:'relay',fetchedAt:now.toISOString(),products:[{productId:'relay-example',name:'Example API',currency:'CNY',offers:[{offerId:'relay',title:'API 月付套餐',price:30,currency:'CNY',status:'in_stock',url:'https://api.example/'}]}]});
+  const m=readRetentionMarket(quotes,{now});assert.ok(m.products.some(p=>p.key==='super-grok'));assert.ok(m.products.some(p=>p.key==='relay-example'));assert.equal(m.groups.length,0);
+  const a=login(store,db);assert.equal(store.saveWatch(a.account.id,{productKey:'super-grok',mode:'off'},m).productKey,'super-grok');
+  assert.throws(()=>store.saveWatch(a.account.id,{productKey:'super-grok',mode:'target',targetPrice:10},m));
+ }finally{quotes.close();db.close();}
+});
 test('提醒只发给确认邮箱且暂停、删除、报价回升在发送前失效；不确定发送不重试',async()=>{
  let time=new Date(now);const db=new DatabaseSync(':memory:');const store=createRetentionStore(db,{secret:'s'.repeat(64),now:()=>time});
  try{
