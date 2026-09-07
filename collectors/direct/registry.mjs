@@ -6,6 +6,7 @@ import { collectDujiao } from "./dujiao.mjs";
 import { collectAikaShop } from './aikashop.mjs';
 import { PLATFORM16688_SHOPS, collect16688 } from './platform16688.mjs';
 import { collectAichong } from './aichong.mjs';
+import {merchantUrlBlocked} from '../../lib/merchant-blocklist.mjs';
 
 // 这里只登记我们逐个核验过的原站公开入口。URL 不接受运行时任意传入，
 // 避免把采集器变成通用代理或 SSRF 入口。
@@ -182,10 +183,11 @@ export function directTargets(ids = DEFAULT_DIRECT_TARGET_IDS) {
   const selected = TARGETS.filter((target) => requested.has(target.id));
   const missing = [...requested].filter((id) => !TARGETS.some((target) => target.id === id));
   if (missing.length) throw new Error(`未登记的直采来源: ${missing.join(", ")}`);
-  return selected;
+  return selected.filter(target=>!merchantUrlBlocked(target.origin));
 }
 
 export function collectorFor(target) {
+  if(merchantUrlBlocked(target.origin))throw new Error('该店铺已被站方暂停采集');
   const collector = COLLECTORS[target.kind];
   if (!collector) throw new Error(`来源 ${target.id} 没有对应采集器: ${target.kind}`);
   return collector;
