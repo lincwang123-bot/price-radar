@@ -2,6 +2,41 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {openDb,storeSnapshot} from '../lib/db.mjs';
 import {createApp} from '../lib/web.mjs';
+
+test('sitemap includes current directory canonicals with quotes and omits empty or stale directory products',async()=>{
+ const db=openDb(':memory:');
+ const offer=(title,url)=>({offerId:title,title,url,price:100,currency:'CNY',status:'in_stock',stockCount:2});
+ storeSnapshot(db,{source:'direct-shops',snapshotId:'directory-old',fetchedAt:'2020-01-01T00:00:00Z',products:[{productId:'suno-pro-1m',name:'Suno Pro',currency:'CNY',offers:[offer('Suno Pro 一个月代充','https://example.com/suno')]}]});
+ storeSnapshot(db,{source:'direct-shops',snapshotId:'directory-current',products:[
+  {productId:'chatgpt-plus-recharge',name:'ChatGPT Plus',currency:'CNY',offers:[offer('ChatGPT Plus 一个月代充','https://example.com/plus')]},
+  {productId:'chatgpt-plus-recharge-12m',name:'ChatGPT Plus',currency:'CNY',offers:[offer('ChatGPT Plus 一年代充','https://example.com/plus-year')]},
+  {productId:'claude-pro-month',name:'Claude Pro',currency:'CNY',offers:[]},
+ ]});
+ storeSnapshot(db,{source:'cardnav-official',snapshotId:'directory-reference',products:[{productId:'grok-supergrok',name:'Super Grok',currency:'CNY',offers:[{...offer('Super Grok 官方月付','https://grok.com/'),status:'official'}]}]});
+ storeSnapshot(db,{source:'ldxp-goods',snapshotId:'directory-search',products:[{productId:'mixed-search',name:'搜索结果',currency:'CNY',offers:[offer('Gemini Pro 一个月代充','https://example.com/gemini')]}]});
+ const app=createApp({db});await new Promise(r=>app.listen(0,'127.0.0.1',r));const origin=`http://127.0.0.1:${app.address().port}`;
+ try{
+  const map=await(await fetch(origin+'/sitemap.xml')).text();
+  const urls=[...map.matchAll(/<loc>(.*?)<\/loc>/g)].map(m=>m[1].replaceAll('&amp;','&'));
+  const directoryUrls=urls.filter(u=>new URL(u).searchParams.has('family'));
+  assert.deepEqual(directoryUrls,[
+   'https://airadar.vip/?family=chatgpt','https://airadar.vip/?family=chatgpt&product=chatgpt-plus',
+   'https://airadar.vip/?family=gemini','https://airadar.vip/?family=gemini&product=gemini-pro',
+   'https://airadar.vip/?family=grok','https://airadar.vip/?family=grok&product=super-grok',
+  ]);
+  assert.equal(new Set(urls).size,urls.length);
+  assert.doesNotMatch(map,/delivery=|sort=|channel=|utm_|<lastmod>/);
+  assert.ok(urls.includes('https://airadar.vip/product?source=direct-shops&id=chatgpt-plus-recharge'));
+  for(const url of directoryUrls){
+   const target=new URL(url),response=await fetch(origin+target.pathname+target.search);
+   assert.equal(response.status,200);
+   const html=await response.text();
+   assert.equal(html.match(/rel="canonical" href="([^"]+)"/)[1].replaceAll('&amp;','&'),url);
+   assert.match(html,/<meta name="robots" content="index, follow/);
+  }
+ }finally{await new Promise(r=>app.close(r));db.close();}
+});
+
 test('百度验证只响应精确公开文件，GET字节一致、HEAD无正文、其他方法405',async()=>{
  const db=openDb(':memory:'),app=createApp({db});await new Promise(r=>app.listen(0,'127.0.0.1',r));const origin=`http://127.0.0.1:${app.address().port}`,path='/baidu_verify_codeva-5RkS1i3vOP.html';
  try{const get=await fetch(origin+path);assert.equal(get.status,200);assert.deepEqual(Buffer.from(await get.arrayBuffer()),Buffer.from('67e45203694e31d32e7dec268a770435'));assert.equal(get.headers.get('content-type'),'text/html; charset=utf-8');assert.equal(get.headers.get('content-length'),'32');
