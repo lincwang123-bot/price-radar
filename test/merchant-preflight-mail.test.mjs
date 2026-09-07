@@ -58,14 +58,11 @@ test('same reason is deduplicated across ticks and forced retests; a changed rea
  assert.match(autoRows()[1].public_reply,/无需登录/);
 });
 
-test('internal/unknown failures explain operator handling instead of requesting merchant changes',t=>{
+test('internal/unknown failures remain backend-only instead of spending the result email',t=>{
  for(const reason of ['internal_error','unknown']){
   const {db,result,autoRows}=fixture(t);
   reconcileAutomaticPreflights(db,result(reason,'unavailable'));
-  assert.equal(autoRows()[0].stage,'test_delayed');
-  const message=merchantMailMessage(autoRows()[0],'notice@airadar.vip',{replyEnabled:true});
-  assert.match(message.text,/无需.*修改/);
-  assert.doesNotMatch(message.text,/申请需要补充资料|请按以下清单回复/);
+  assert.equal(autoRows().length,0);
  }
 });
 
@@ -74,8 +71,7 @@ test('expired or legacy reasonless results never request guessed materials',t=>{
  reconcileAutomaticPreflights(a.db,{...past,now:new Date(+past.now+86400000)});
  assert.equal(a.autoRows().length,0);
  const b=fixture(t);reconcileAutomaticPreflights(b.db,b.result(null,'unavailable'));
- assert.equal(b.autoRows()[0].stage,'test_delayed');
- assert.doesNotMatch(b.autoRows()[0].public_reply,/404|安全校验/);
+ assert.equal(b.autoRows().length,0);
 });
 
 test('approval supersedes detailed automatic failure notices but retains explicit replies and receipt',t=>{
@@ -120,7 +116,7 @@ test('missing recipient and invalid result do not enqueue mail; stale automatic 
  queueMerchantMail(b.db,{id:b.id,email:merchant.email,stage:'ready',eventKey:b.id+':result:old-ready',now:current.now});
  reconcileAutomaticPreflights(b.db,current);
  assert.equal(b.autoRows().length,1);
- assert.equal(b.db.prepare("SELECT status FROM merchant_mail_outbox WHERE event_key=?").get(b.id+':result:old-ready').status,'superseded');
+ assert.equal(b.db.prepare("SELECT status FROM merchant_mail_outbox WHERE event_key=?").get(b.id+':result:old-ready'),undefined);
  const request=b.db.prepare('SELECT id FROM merchant_preflight_requests ORDER BY sequence DESC LIMIT 1').get();
  writeFileSync(path.join(b.options.resultsDir,request.id+'.json'),'{invalid');
  reconcileAutomaticPreflights(b.db,current);assert.equal(b.autoRows().length,1);

@@ -96,7 +96,7 @@ test('supply replies use the confirmed intake email and preserve the original su
   assert.equal(db.prepare("SELECT recipient FROM merchant_mail_outbox WHERE stage='reply'").get().recipient,'confirmed@example.org');
   assert.equal(db.prepare('SELECT contact FROM cooperation_submissions').get().contact,'example-tg');
 });
-test('publication requires fresh actual directory quotes for the exact approved shop, then enqueues once',t=>{
+test('publication never adds a third email, even with fresh actual directory quotes',t=>{
   const db=privateFixture(t),publicDb=openDb(':memory:');t.after(()=>publicDb.close());
   const {id}=createMerchantApplication(db,merchant,{now});
   const approve={action:'approve',expectedVersion:1,note:'已人工核对店铺归属和商品',ownershipConfirmed:true,permissionConfirmed:true};
@@ -111,7 +111,7 @@ test('publication requires fresh actual directory quotes for the exact approved 
   }
   snapshot();health('failed');assert.equal(reconcileMerchantPublication(db,publicDb,{now:later}).queued,0);
   health('active',false);assert.equal(reconcileMerchantPublication(db,publicDb,{now:later}).queued,0);
-  health();assert.equal(reconcileMerchantPublication(db,publicDb,{now:later}).queued,1);
+  health();assert.equal(reconcileMerchantPublication(db,publicDb,{now:later}).queued,0);
   assert.equal(reconcileMerchantPublication(db,publicDb,{now:later}).queued,0);
-  const rows=merchantMailStatus(db,id).items;assert.deepEqual(rows.map(r=>r.stage),['published','approved','received']);assert.ok(rows.every(r=>r.status==='queued'));
+  const rows=merchantMailStatus(db,id).items;assert.deepEqual(rows.map(r=>r.stage),['approved','received']);assert.ok(rows.every(r=>r.status==='queued'));
 });

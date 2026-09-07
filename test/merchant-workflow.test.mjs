@@ -95,5 +95,5 @@ test('mail transport is configuration gated, deduplicated, bounded and exposes o
   assert.equal(merchantMailStatus(db,id).items[0].status,'failed');
   assert.doesNotMatch(JSON.stringify(merchantMailStatus(db,id)),/internal-secret/);
   reviewMerchantApplication(db,id,{action:'reject',expectedVersion:1,note:'内部说明不要发给客户'},{bridgeDir:options.bridgeDir,now:options.now});
-  assert.equal(merchantMailStatus(db,id).items[0].stage,'rejected');
+  assert.equal(merchantMailStatus(db,id).items.some(row=>row.stage==='rejected'),false);
 });

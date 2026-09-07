@@ -107,7 +107,7 @@ test('approval publishes sanitized manifest; pause removes badge; optimistic ver
   assert.throws(() => db.exec("UPDATE merchant_application_actions SET note='changed'"), /append-only/);
 });
 
-test('review notes are optional for all decisions, without losing audit or notification events', t => {
+test('review notes are optional for all decisions; audit persists and only allowed decisions notify', t => {
   for (const action of ['approve','reject','pause','request_info']) {
     for (const note of [undefined,'','  \n ','好']) {
       const {db,dir}=fixture(t), {id}=createMerchantApplication(db,payload(),options);
@@ -116,7 +116,7 @@ test('review notes are optional for all decisions, without losing audit or notif
       assert.equal(result.actions[0].note,note?.trim()||'');
       assert.equal(result.actions[0].action,action);
       assert.equal(result.actions[0].actor,'reviewer');
-      assert.equal(db.prepare('SELECT COUNT(*) n FROM merchant_mail_outbox WHERE event_key=?').get(id+':review:2').n,1);
+      assert.equal(db.prepare('SELECT COUNT(*) n FROM merchant_mail_outbox WHERE event_key=?').get(id+':review:2').n,['approve','request_info'].includes(action)?1:0);
     }
   }
   const {db,dir}=fixture(t), {id}=createMerchantApplication(db,payload(),options);
