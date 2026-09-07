@@ -11,7 +11,7 @@ const origin="https://airadar.test";
 test("后台默认拒绝，认证/过期/退出/CSRF/审计/转义完整边界",async()=>{
   const db=openDb(":memory:"), submissionsDb=openSubmissionsDb(":memory:"),analytics=openAnalytics(":memory:","fixture-analytics-secret-32-characters");let time=Date.now();
   const password="a-fixture-password-only-1234",passwordHash=await hashAdminPassword(password);
-  const record=createSubmission(submissionsDb,{kind:"feedback",topic:"suggestion",subject:"<script>alert(1)</script>",details:"private fixture detail"});
+  const record=createSubmission(submissionsDb,{kind:"feedback",topic:"suggestion",subject:"<script>alert(1)</script>",details:"private fixture detail",contact:"private-merchant@example.com"});
   let app=createApp({db,submissionsDb});await new Promise(r=>app.listen(0,"127.0.0.1",r));
   const addr=()=>`http://127.0.0.1:${app.address().port}`;
   assert.equal((await fetch(addr()+"/admin")).status,404);await new Promise(r=>app.close(r));
@@ -23,6 +23,9 @@ test("后台默认拒绝，认证/过期/退出/CSRF/审计/转义完整边界",
     assert.equal((await request("/admin/analytics.csv")).status,303);
     for(const cookie of ["","airadar_admin=forged"]){const r=await request("/admin/submission/"+record.id,{headers:{cookie}});assert.equal(r.status,303);assert.ok(!(await r.text()).includes("private fixture"));}
     let session=await login();let detail=await request("/admin/submission/"+record.id,{headers:{cookie:session}});const text=await detail.text();assert.ok(text.includes("&lt;script&gt;"));assert.deepEqual([...text.matchAll(/<script>([\s\S]*?)<\/script>/g)].map(match=>match[1]),[ADMIN_COPY_SCRIPT]);assert.ok(detail.headers.get('content-security-policy').includes(`script-src '${ADMIN_COPY_HASH}'`));assert.doesNotMatch(detail.headers.get('content-security-policy'),/script-src[^;]*unsafe-inline/);const csrf=/name="csrf" value="([^"]+)"/.exec(text)[1];
+    assert.match(detail.headers.get('cache-control'), /(?:^|,\s*)no-transform(?:,|$)/);
+    assert.match(text, /private-merchant@example\.com/);
+    assert.doesNotMatch(text, /href=["'][^"']*(?:mailto:|email-protection|private-merchant)/);
     const stats=await request("/admin/analytics?days=30",{headers:{cookie:session}});assert.equal(stats.status,200);assert.match(await stats.text(),/访客估算/);
     const csv=await request("/admin/analytics.csv?days=30",{headers:{cookie:session}});assert.equal(csv.status,200);assert.match(csv.headers.get("content-type"),/text\/csv/);assert.match(await csv.text(),/数据状态/);
     assert.equal((await post("/admin/submission/"+record.id,{status:"resolved",csrf},session,{origin:"https://evil.test"})).status,403);
