@@ -100,3 +100,29 @@ test('manifest revocation precedes review and failed queue writes leave no unaud
     assert.equal(db.prepare('SELECT COUNT(*) n FROM merchant_preflight_requests').get().n, 1);
   } finally { rmSync(manifest, { recursive: true }); renameSync(manifest + '.backup', manifest); }
 });
+
+test('原因字段严格白名单投影，旧失败仍兼容但不推断原因', t => {
+  const { db, dir, makeApp, options } = fixture(t), id = makeApp();
+  const request = queueMerchantPreflight(db, id, review, options), target = path.join(dir, request.id + '.json');
+  const failure = { status: 'unavailable', rawCount: 0, validCount: 0, samples: [] };
+  writeFileSync(target, JSON.stringify(validResult(request, failure)));
+  assert.equal(latestMerchantPreflight(db, id, options).result.reasonCode, undefined);
+  writeFileSync(target, JSON.stringify(validResult(request, { ...failure, reasonCode: 'access_denied', httpStatus: 200, error: 'secret', rawBody: 'private' })));
+  const result = latestMerchantPreflight(db, id, options).result;
+  assert.equal(result.reasonCode, 'access_denied'); assert.equal(result.httpStatus, 200);
+  assert.doesNotMatch(JSON.stringify(result), /secret|private|rawBody/);
+  for (const fields of [{ reasonCode: '<script>secret</script>' }, { reasonCode: 'toString' }, { reasonCode: null },
+    { httpStatus: '403' }, { httpStatus: 99 }, { httpStatus: 600 }, { httpStatus: 403.1 }, { httpStatus: { secret: true } }]) {
+    writeFileSync(target, JSON.stringify(validResult(request, { ...failure, ...fields })));
+    assert.equal(latestMerchantPreflight(db, id, options).status, 'invalid', JSON.stringify(fields));
+  }
+  for (const fields of [{ status: 'ready', rawCount: 1, validCount: 1, samples: validResult(request).samples, reasonCode: 'access_denied' },
+    { status: 'no_valid_offers', reasonCode: 'access_denied' }, { reasonCode: 'no_valid_quotes' },
+    { status: 'waiting_adapter', reasonCode: 'access_denied' }, { validCount: 1, rawCount: 1, samples: validResult(request).samples },
+    { rawCount: 1 }, { status: 'no_valid_offers', validCount: 1, rawCount: 1, samples: validResult(request).samples }]) {
+    writeFileSync(target, JSON.stringify(validResult(request, { ...failure, ...fields })));
+    assert.equal(latestMerchantPreflight(db, id, options).status, 'invalid', JSON.stringify(fields));
+  }
+  writeFileSync(target, JSON.stringify(validResult(request, { ...failure, reasonCode: 'unknown', message: 'secret raw error https://x/?key=private' })));
+  assert.doesNotMatch(JSON.stringify(latestMerchantPreflight(db, id, options).result), /secret|private/);
+});

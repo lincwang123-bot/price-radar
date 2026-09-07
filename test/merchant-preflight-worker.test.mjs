@@ -62,6 +62,52 @@ test('拒绝访问立即停止且不泄露原响应；未知系统明确待适�
   assert.equal(g.result().status, 'waiting_adapter');
 });
 
+test('失败原因按可信状态和错误代码分类，HTTP 200 安全校验不遗漏或泄露原文', async t => {
+  const variants = [
+    [() => new Response('secret response', { status: 429 }), 'rate_limited', 429],
+    [() => new Response('secret response', { status: 401 }), 'login_required', 401],
+    [() => new Response('secret response', { status: 403 }), 'access_denied', 403],
+    [() => new Response('<title>Just a moment</title>secret response', { headers: { 'content-type': 'text/html' } }), 'access_denied', 200],
+    [() => new Response('secret response', { status: 503 }), 'server_error', 503],
+    [() => { throw Object.assign(new Error('secret https://host/?key=private'), { code: 'ACCESS_DENIED', status: 200 }); }, 'access_denied', 200],
+    [() => { throw Object.assign(new Error('secret'), { code: 'ENOTFOUND' }); }, 'dns_error'],
+    [() => { throw Object.assign(new Error('secret'), { code: 'ERR_TLS_CERT_ALTNAME_INVALID' }); }, 'tls_error'],
+    [() => { throw Object.assign(new Error('secret'), { code: 'ETIMEDOUT' }); }, 'timeout'],
+    [() => { throw Object.assign(new Error('secret'), { code: 'ECONNRESET' }); }, 'network_error'],
+    [() => { throw Object.assign(new Error('secret'), { code: 'ROBOTS_DISALLOWED' }); }, 'robots_disallowed'],
+    [() => { throw new Error('公开目录请求达到上限'); }, 'collector_limit'],
+    [() => { throw new Error('公开目录响应超过限制'); }, 'collector_limit'],
+    [() => { throw new Error('公开目录不允许重定向'); }, 'redirect_disallowed'],
+    [() => json({ code: 401, msg: 'secret' }), 'login_required'],
+    [() => { throw new Error('merchant text says captcha DNS timeout https://secret'); }, 'unknown'],
+  ];
+  for (const [respond, reasonCode, httpStatus] of variants) {
+    const f = fixture(t); let calls = 0;
+    await processMerchantPreflights({ ...f, merchantFetchFactory: () => async () => { calls++; return respond(); } });
+    const result = f.result();
+    assert.equal(calls, 1); assert.equal(result.status, 'unavailable');
+    assert.equal(result.reasonCode, reasonCode); assert.equal(result.httpStatus, httpStatus);
+    assert.doesNotMatch(JSON.stringify(result), /secret|private|captcha DNS timeout/);
+  }
+});
+
+test('仅记录实际探测证据：两个404、内容格式和未知系统分开；成功适配不受先前404影响', async t => {
+  for (const [respond, code, httpStatus] of [
+    [() => new Response('secret', { status: 404 }), 'not_found', 404],
+    [() => new Response('<html>普通店铺首页，不是故障</html>', { headers: { 'content-type': 'text/html' } }), 'invalid_catalog'],
+    [() => json({ unrecognized: true }), 'unsupported_platform'],
+  ]) {
+    const f = fixture(t); let calls = 0;
+    await processMerchantPreflights({ ...f, merchantFetchFactory: () => async () => { calls++; return respond(); } });
+    assert.equal(calls, 2); assert.equal(f.result().status, 'waiting_adapter');
+    assert.equal(f.result().reasonCode, code); assert.equal(f.result().httpStatus, httpStatus);
+  }
+  const f = fixture(t); let calls = 0;
+  await processMerchantPreflights({ ...f, merchantFetchFactory: () => async () => ++calls === 1 ? new Response('', { status: 404 })
+    : json({ code: 200, data: [{ id: 1, name: 'ChatGPT Plus 月卡代充', price: 100, stock: 5 }] }) });
+  assert.equal(f.result().status, 'ready'); assert.equal(f.result().reasonCode, undefined);
+});
+
 test('撤销队列或更换版本后，进行中的试采不留下可批准结果', async t => {
   const f = fixture(t);
   await processMerchantPreflights({ ...f, merchantFetchFactory: () => async () => { f.save([]); return json(payload()); } });

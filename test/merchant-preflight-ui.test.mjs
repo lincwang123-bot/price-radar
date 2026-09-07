@@ -42,3 +42,21 @@ test('preflight renders actionable states, counts and escaped bounded samples',(
   assert.doesNotMatch(html,/<script|<img>|value="approve" type="submit" disabled/);
   assert.match(html,/不自动发布报价，也不验证真实交易/);
 });
+test('unread catalogues do not display invented zero counts and library is always available',()=>{
+ for(const status of ['unavailable','waiting_adapter']){
+  const html=merchantReviewContent({application,preflight:{status,result:{status,rawCount:0,validCount:0,reasonCode:status==='unavailable'?'not_found':'invalid_catalog',message:'Private stacktrace'}}});
+  assert.doesNotMatch(html,/可收录报价：0 条|原始解析：0 条|Private stacktrace/);
+  assert.match(html,status==='unavailable'?/未读取成功/:/尚未识别目录/);
+  assert.match(html,/preflight-current-message/);assert.match(html,/其他情况的沟通文案/);
+ }
+ for(const preflight of [null,{status:'unavailable',result:{status:'unavailable'}}]){
+  const html=merchantReviewContent({application,preflight});
+  assert.match(html,/<details class="guidance-library"><summary>其他情况的沟通文案/);
+  assert.match(html,/data-copy-target="preflight-library-0"/);
+  if(preflight)assert.match(html,/历史测试未记录具体原因，请重新测试/);
+ }
+});
+test('conversion provenance links back to original supply record and escapes audit note',()=>{
+ const html=merchantReviewContent({application:{...application,conversion:{sourceSubmissionId:'CO-EXAMPLE',convertedAt:'2026-09-07T00:00:00Z',note:'<img onerror=x>'}}});
+ assert.match(html,/href="\/admin\/submission\/CO-EXAMPLE"/);assert.match(html,/转入核验依据/);assert.doesNotMatch(html,/<img/);
+});
