@@ -15,7 +15,7 @@ test('conversion prefills source facts but requires actual shop name and fresh c
  assert.match(html,/name="ownershipConfirmed" value="true" required/);
  assert.match(html,/name="permissionConfirmed" value="true" required/);
  assert.doesNotMatch(html,/<input[^>]*checked/);
- assert.match(html,/不批准店铺、不发起测试，也不发布报价/);
+ assert.match(html,/不批准店铺.*自动检测公开目录，但不发布报价/);
 });
 test('linked and conflicting applications have distinct safe links and no silent merge',()=>{
  const linked=conversionPanel({submission,linkedApplication:{id:'MA-LINK',shopName:'已转店铺'}});

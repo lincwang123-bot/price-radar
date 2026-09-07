@@ -4,7 +4,7 @@ import { openSubmissionsDb } from '../lib/submissions.mjs';
 import { convertSupplySubmission, linkedMerchantApplication, getMerchantApplication, createMerchantApplication, syncApprovedMerchantManifest, conversionFormValues } from '../lib/merchant-onboarding.mjs';
 
 const time = new Date('2026-09-07T04:00:00.000Z');
-const fields = { shopName: '核验后的店铺', shopUrl: 'https://wzyp.cn/shop/sample-shop', contact: 'confirmed@example.org', productAreas: ['chatgpt'],
+const fields = { shopName: '核验后的店铺', shopUrl: 'https://wzyp.cn/shop/sample-shop', email:'owner@example.org', contact: 'confirmed@example.org', productAreas: ['chatgpt'],
   details: '管理员确认的资料', note: '已向店主核实归属与公开目录采集授权', ownershipConfirmed: true, permissionConfirmed: true };
 const options = { actor: 'owner', now: time };
 function setup(t) {
@@ -51,7 +51,7 @@ test('only supply can convert and authorization plus canonical field validation 
 });
 test('canonical duplicate returns existing application without merging contact or linking CO', t => {
   const { db, source } = setup(t), id = source();
-  const existing=createMerchantApplication(db,{...fields,contact:'existing-owner@example.org',shopUrl:'https://www.wzyp.cn/sample-shop',consent:true},{now:time});
+  const existing=createMerchantApplication(db,{...fields,email:'owner@example.org', contact:'existing-owner@example.org',shopUrl:'https://www.wzyp.cn/sample-shop',consent:true},{now:time});
   assert.throws(()=>convertSupplySubmission(db,id,fields,options),error=>error.status===409&&error.existingApplication?.id===existing.id);
   assert.equal(linkedMerchantApplication(db,id),null);
   assert.equal(getMerchantApplication(db,existing.id).contact,'existing-owner@example.org');

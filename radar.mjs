@@ -231,7 +231,8 @@ async function cmdServe(config, db) {
   const app = await startWeb({ db, submissionsDb, analytics, host, port });
   const shutdown = () => {
     console.log("\n[web] 停止。");
-    app.close(() => {
+    app.close(async () => {
+      await app.merchantWorkflowDone?.();
       try { submissionsDb.close(); } catch {}
       try { db.close(); } catch {}
       try { analytics?.close(); } catch {}

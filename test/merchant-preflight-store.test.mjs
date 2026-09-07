@@ -13,7 +13,7 @@ function fixture(t) {
   const db = openSubmissionsDb(':memory:'), dir = mkdtempSync(path.join(os.tmpdir(), 'merchant-preflight-'));
   t.after(() => { db.close(); rmSync(dir, { recursive: true, force: true }); });
   const makeApp = (n = 0) => createMerchantApplication(db, { shopName: '样例店铺', shopUrl: `https://merchant-${n}.com/`, platform: 'auto',
-    productAreas: ['chatgpt'], contact: 'private@example.org', details: '保密审核材料', consent: true }, { now, clientAddress: String(n) }).id;
+    productAreas: ['chatgpt'], email:`owner-${n}@example.org`, contact: 'private@example.org', details: '保密审核材料', consent: true }, { now, clientAddress: String(n) }).id;
   const options = { bridgeDir: dir, resultsDir: dir, now };
   return { db, dir, makeApp, options };
 }

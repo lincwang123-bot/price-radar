@@ -89,8 +89,16 @@ test('failed and interrupted SSH fixture processes leave no pending file or lock
 test('SSH fixture ignoring TERM after EOF is force-stopped and awaited',async()=>{
  const root=mkdtempSync(path.join(tmpdir(),'airadar-force-stop-'));let child;
  try{
+  // Under concurrent server load the old 100 ms deadline could fire before the
+  // fixture installed its SIGTERM handler. Wait for that exact precondition.
+  child=spawn(process.execPath,['-e',"process.on('SIGTERM',()=>{});process.send('ready');process.stdout.end();setInterval(()=>{},1000)"],{stdio:['ignore','pipe','pipe','ipc']});
+  await new Promise((resolve,reject)=>{
+   const timer=setTimeout(()=>reject(new Error('SSH fixture did not become ready')),5000);
+   child.once('message',()=>{clearTimeout(timer);resolve();});
+   child.once('error',error=>{clearTimeout(timer);reject(error);});
+  });
   await assert.rejects(pullMacBackup({directory:path.join(root,'backups'),keyPath:path.join(root,'key'),timeoutMs:100,
-   spawnRemote:()=>child=spawn(process.execPath,['-e',"process.on('SIGTERM',()=>{});process.stdout.end();setInterval(()=>{},1000)"],{stdio:['ignore','pipe','pipe']})}));
+   spawnRemote:()=>child}));
   assert.equal(child.signalCode,'SIGKILL');
   assert.equal(existsSync(path.join(root,'backups','.running')),false);
  }finally{if(child&&child.exitCode===null&&child.signalCode===null)child.kill('SIGKILL');rmSync(root,{recursive:true,force:true});}

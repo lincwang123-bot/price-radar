@@ -15,14 +15,14 @@ test('proof and shop links only link safe HTTP(S) URLs in isolated new tabs',()=
   }
   assert.doesNotMatch(safeExternalLink('https://example.com/','<img src=x onerror=alert(1)>'),/<img/);
 });
-test('preflight form is independent and requires both confirmations but no review note',()=>{
+test('public preflight recheck is independent while manual approval retains all confirmations',()=>{
   const html = merchantReviewContent({application,csrfToken:'test-token'});
   const form = html.match(/<form[^>]*id="merchant-preflight">([\s\S]*?)<\/form>/)[1];
   assert.match(form,/name="version" value="3"/);
   assert.match(form,/name="csrf" value="test-token"/);
-  assert.match(form,/name="ownershipConfirmed" value="true" required/);
-  assert.match(form,/name="permissionConfirmed" value="true" required/);
-  assert.match(form,/name="action" value="test"/);
+  assert.doesNotMatch(form,/name="ownershipConfirmed"/);
+  assert.doesNotMatch(form,/name="permissionConfirmed"/);
+  assert.match(form,/name="action" value="auto_test"/);
   assert.doesNotMatch(form,/name="note"/);
   assert.match(html,/value="approve" type="submit" disabled/);
   assert.match(html,/name="sampleReviewed"/);

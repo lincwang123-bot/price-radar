@@ -23,7 +23,7 @@ test('merchant admin protects private intake and requires tested samples before 
   const base = `http://127.0.0.1:${server.address().port}`;
   const request = (url, options = {}) => fetch(base + url, { redirect: 'manual', ...options });
   const post = (url, fields, cookie, extra = {}) => request(url, { method: 'POST', headers: { origin, 'content-type': 'application/x-www-form-urlencoded', cookie, ...extra }, body: new URLSearchParams(fields) });
-  const input = { shopName: '<script>商店</script>', shopUrl: 'https://merchant-fixture.com/', platform: 'auto', productAreas: ['chatgpt'], contact: 'private-owner@example.org', details: '私人核验渠道', consent: true };
+  const input = { shopName: '<script>商店</script>', shopUrl: 'https://merchant-fixture.com/', platform: 'auto', productAreas: ['chatgpt'], email:'owner@example.org', contact: 'private-owner@example.org', details: '私人核验渠道', consent: true };
   const { id } = createMerchantApplication(submissionsDb, input);
   const detailPath = `/admin/merchants/${id}`;
   try {

@@ -7,7 +7,7 @@ import { openSubmissionsDb } from '../lib/submissions.mjs';
 import { canonicalShopIdentity, createMerchantApplication, listMerchantApplications, getMerchantApplication,
   reviewMerchantApplication, approvedMerchantBadges, syncApprovedMerchantManifest, merchantBridgeDir } from '../lib/merchant-onboarding.mjs';
 
-const payload = (over = {}) => ({ shopName: '测试商店', shopUrl: 'https://merchant-shop.com/', platform: 'auto', productAreas: ['chatgpt'], contact: 'owner@example.org', details: '公开商品目录', consent: true, ...over });
+const payload = (over = {}) => ({ shopName: '测试商店', shopUrl: 'https://merchant-shop.com/', platform: 'auto', productAreas: ['chatgpt'], email:'owner@example.org', contact: 'owner@example.org', details: '公开商品目录', consent: true, ...over });
 const options = { now: new Date('2026-09-07T04:00:00Z'), clientAddress: '198.51.100.3', secret: 'x'.repeat(32) };
 const approval = (over = {}) => ({ action: 'approve', note: '已通过店铺公告核实所有权和公开目录采集许可', ownershipConfirmed: true, permissionConfirmed: true, actor: 'reviewer', expectedVersion: 1, ...over });
 function fixture(t) {
