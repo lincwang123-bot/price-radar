@@ -233,6 +233,7 @@ async function cmdServe(config, db) {
     console.log("\n[web] 停止。");
     app.close(async () => {
       await app.merchantWorkflowDone?.();
+      await app.retentionWorkflowDone?.();
       try { submissionsDb.close(); } catch {}
       try { db.close(); } catch {}
       try { analytics?.close(); } catch {}
