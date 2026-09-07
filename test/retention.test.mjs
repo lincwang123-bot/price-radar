@@ -153,12 +153,12 @@ test('行情观察保留真实天数，不混规格、币种或伪造过去30日
   assert.equal(marketHistory(db,'b'.repeat(24),30,now).days,0);
  }finally{db.close();}
 });
-test('每天汇总上限不会丢失冷却期间累计降价，续费只按所选日期提醒一次',()=>{
+test('每天汇总上限不会丢失冷却期间累计降价，续费只按所选日期提醒一次',async()=>{
  let time=new Date(now);const db=new DatabaseSync(':memory:');const store=createRetentionStore(db,{secret:'s'.repeat(64),now:()=>time});
  try{
   const a=login(store,db);store.saveWatch(a.account.id,{productKey:'chatgpt-plus',groupId:group.id,mode:'changes',dropPct:5,renewalDate:'2026-09-09',leadDays:0},market);
   const observe=price=>store.observe({...market,groups:[{...group,price}]});
-  observe(94);time=new Date(+time+3600000);observe(87);
+  observe(94);await drainRetentionMail(store,{...market,groups:[{...group,price:94}]},{transport:{sendMail:async m=>({accepted:[m.to]})},from:'notify@example.com',now:time});time=new Date(+time+3600000);observe(87);
   assert.equal(db.prepare("SELECT COUNT(*) n FROM retention_notices WHERE kind='drop'").get().n,1);
   assert.equal(db.prepare("SELECT COUNT(*) n FROM retention_mail WHERE kind='digest'").get().n,1);
   assert.equal(db.prepare("SELECT COUNT(*) n FROM retention_notices WHERE kind='renewal'").get().n,0);
@@ -166,5 +166,20 @@ test('每天汇总上限不会丢失冷却期间累计降价，续费只按所�
   assert.equal(db.prepare("SELECT COUNT(*) n FROM retention_notices WHERE kind='drop'").get().n,2);
   assert.equal(db.prepare("SELECT COUNT(*) n FROM retention_notices WHERE kind='renewal'").get().n,1);
   assert.equal(db.prepare("SELECT COUNT(*) n FROM retention_mail WHERE kind='digest'").get().n,2);
+ }finally{db.close();}
+});
+test('停机后恢复发送以实际发件时间限频，不会把积压邮件集中发给同一邮箱',async()=>{
+ let time=new Date(now);const db=new DatabaseSync(':memory:');const store=createRetentionStore(db,{secret:'s'.repeat(64),now:()=>time});let sent=0;
+ try{
+  const a=login(store,db);store.saveWatch(a.account.id,{productKey:'chatgpt-plus',groupId:group.id,mode:'target',targetPrice:95},market);
+  const lower={...market,groups:[{...group,price:90}]};store.observe(lower);
+  time=new Date(+time+2*86400000);store.observe(lower);
+  assert.equal(db.prepare("SELECT COUNT(*) n FROM retention_mail WHERE kind='digest'").get().n,1);
+  const transport={sendMail:async m=>{sent++;return {accepted:[m.to]};}};
+  await drainRetentionMail(store,lower,{transport,from:'notify@example.com',now:time});assert.equal(sent,1);
+  store.observe(market);store.observe(lower);
+  await drainRetentionMail(store,lower,{transport,from:'notify@example.com',now:time});assert.equal(sent,1);
+  time=new Date(+time+86400001);store.observe(lower);
+  await drainRetentionMail(store,lower,{transport,from:'notify@example.com',now:time});assert.equal(sent,2);
  }finally{db.close();}
 });
