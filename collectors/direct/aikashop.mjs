@@ -1,4 +1,5 @@
 import { safeFetchText } from '../../lib/safe-fetch.mjs';
+import { deliveryEvidence } from '../../lib/delivery-evidence.mjs';
 const ORIGIN='https://aikashop.com';
 const PRODUCT_PATH='/products/suno.html';
 export function parseAikaShop(html,target,capturedAt=new Date().toISOString()) {
@@ -14,7 +15,7 @@ export function parseAikaShop(html,target,capturedAt=new Date().toISOString()) {
     if(!plan||!Number.isFinite(price)||price<=0||seen.has(row.name))throw new Error('AikaShop SKU规格/价格不可靠');
     seen.add(row.name);
     const months={月卡:1,季卡:3,年卡:12}[plan[2]];
-    return {offerId:`aikashop:suno-${plan[1].toLowerCase()}-${months}m`,sourceId:'aikashop',sourceName:'AI卡商城',storeName:'AI卡商城',title:`Suno ${plan[1]} 代充 ${months}个月`,category:'Suno',price,currency:'CNY',status:'unknown',stockCount:null,url:ORIGIN+PRODUCT_PATH,capturedAt,extra:{priceBasis:'listed',stockEvidence:'页面无逐SKU库存证据；挂牌目录不等于可售',warrantyEvidence:'站方页面声明30天售后，未验证履约'}};
+    return {offerId:`aikashop:suno-${plan[1].toLowerCase()}-${months}m`,sourceId:'aikashop',sourceName:'AI卡商城',storeName:'AI卡商城',title:`Suno ${plan[1]} ${months}个月`,category:'Suno',price,currency:'CNY',status:'unknown',stockCount:null,url:ORIGIN+PRODUCT_PATH,capturedAt,extra:{priceBasis:'listed',stockEvidence:'页面无逐SKU库存证据；挂牌目录不等于可售',warrantyEvidence:'站方页面声明30天售后，未验证履约',deliveryEvidence:deliveryEvidence({productTitle:'Suno',skuTitle:row.name,category:'Suno',description:row.description})}};
   });
 }
 export async function collectAikaShop(target,options={}) {

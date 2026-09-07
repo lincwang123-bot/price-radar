@@ -87,7 +87,7 @@ test('历史LIMIT先取最近观察再正序，不限制CLI默认全部历史；
  const db=openDb(':memory:');
  const target=directTargets().find(t=>t.kind==='kami');
  try {
-   for(let i=1;i<=5;i++) storeSnapshot(db,{source:'direct-shops',snapshotId:`s${i}`,fetchedAt:new Date(now+i*1000).toISOString(),products:[{productId:'claude-pro-month',name:'Claude Pro',offers:[{offerId:'o',title:'Claude Pro 月卡',price:i,status:'in_stock',url:`${target.origin}/buy/1`}]}]});
+   for(let i=1;i<=5;i++) storeSnapshot(db,{source:'direct-shops',snapshotId:`s${i}`,fetchedAt:new Date(now+i*1000).toISOString(),products:[{productId:'claude-pro-month',name:'Claude Pro',offers:[{offerId:'o',title:'Claude Pro 代充月卡',price:i,status:'in_stock',url:`${target.origin}/buy/1`}]}]});
    const options={source:'direct-shops',productId:'claude-pro-month'};
    assert.equal(quoteSeries(db,options).length,5);
    assert.deepEqual(quoteSeries(db,{...options,limit:2}).map(p=>p.lowest_price),[4,5]);

@@ -1,4 +1,5 @@
 import { safeFetchJson } from '../../lib/safe-fetch.mjs';
+import { deliveryEvidence } from '../../lib/delivery-evidence.mjs';
 import { directOfferExclusionReason } from './catalog.mjs';
 import { isAuthorizedMerchantTarget } from '../../lib/merchant-target-capability.mjs';
 
@@ -99,7 +100,8 @@ export function parse16688Goods(payload, target, capturedAt = new Date().toISOSt
       price, listedPrice: price, feeAmount: null, priceBasis: 'listed', currency: 'CNY',
       status, stockCount: status === 'out_of_stock' ? 0 : count,
       url: `${source.origin}/goods/${item.goods_no}`, capturedAt, expiresAt: null,
-      extra: { shopNo: source.shopNo, shopUrl: `${source.origin}/shop/${source.shopNo}` },
+      extra: { shopNo: source.shopNo, shopUrl: `${source.origin}/shop/${source.shopNo}`,
+        deliveryEvidence: deliveryEvidence({ productTitle:title, category:item.category?.name ?? item.category_name, description:item.description }) },
     }];
   });
 }

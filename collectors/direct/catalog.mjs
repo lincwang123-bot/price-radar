@@ -1,14 +1,15 @@
 import { createHash } from "node:crypto";
 import { offerSpec, deliveryForm } from '../../lib/offer-spec.mjs';
+import { deliveryEvidence } from '../../lib/delivery-evidence.mjs';
 
 // 独立维护的小型明确分类表。它只覆盖当前站点实际展示的产品族；规则不确定时
 // 返回 null，避免把低价但不同形态的商品错误混入排行榜。
 const PRODUCTS = {
   ...Object.fromEntries(['pro','premier'].flatMap(tier=>[1,3,12].map(months=>[`suno-${tier}-${months}m`,product(`suno-${tier}-${months}m`,`Suno ${tier==='pro'?'Pro':'Premier'} · ${months} 个月`,'Suno','订阅/会员',`${months} 个月；以原店交付说明为准`)]))),
   "chatgpt-go": product("chatgpt-go", "ChatGPT Go", "ChatGPT", "订阅/会员"),
-  "chatgpt-plus": product("chatgpt-plus", "ChatGPT Plus 成品号/共享", "ChatGPT", "账号/共享"),
-  "chatgpt-plus-recharge": product("chatgpt-plus-recharge", "ChatGPT Plus 代充/卡密", "ChatGPT", "订阅/会员"),
-  "chatgpt-plus-recharge-12m": product("chatgpt-plus-recharge-12m", "ChatGPT Plus 代充/卡密 · 12 个月", "ChatGPT", "订阅/会员", "12 个月；以原店交付说明为准"),
+  "chatgpt-plus": product("chatgpt-plus", "ChatGPT Plus", "ChatGPT", "账号/共享"),
+  "chatgpt-plus-recharge": product("chatgpt-plus-recharge", "ChatGPT Plus", "ChatGPT", "订阅/会员"),
+  "chatgpt-plus-recharge-12m": product("chatgpt-plus-recharge-12m", "ChatGPT Plus · 12 个月", "ChatGPT", "订阅/会员", "12 个月；以原店交付说明为准"),
   "chatgpt-pro-5x": product("chatgpt-pro-5x", "ChatGPT Pro 5x", "ChatGPT", "订阅/会员"),
   "chatgpt-pro-20x": product("chatgpt-pro-20x", "ChatGPT Pro 20x", "ChatGPT", "订阅/会员"),
   "chatgpt-team-business": product("chatgpt-team-business", "ChatGPT Team / Business", "ChatGPT", "团队席位/账号"),
@@ -59,7 +60,7 @@ function has(text, pattern) {
   return pattern.test(text);
 }
 
-export function classifyDirectOffer({ title, category = "", sourceId = "" }) {
+export function classifyDirectOffer({ title, category = "", sourceId = "", extra }) {
   const titleText = normalized(title);
   const categoryText = normalized(category);
   const text = normalized(`${category} ${title}`);
@@ -183,7 +184,7 @@ export function classifyDirectOffer({ title, category = "", sourceId = "" }) {
     if (fiveX) return PRODUCTS["chatgpt-pro-5x"];
   }
   if (chatgpt && has(titleText, /\bplus(?:\b|(?=\d))|g\s*\+/)) {
-    if (has(titleText, /日抛|周抛|普号|体验|试用|trial|free\s*号/) || ['成品账号', '共享'].includes(deliveryForm(titleText))) return PRODUCTS["chatgpt-plus"];
+    if (has(titleText, /日抛|周抛|普号|体验|试用|trial|free\s*号/) || ['成品账号', '共享'].includes(deliveryForm({title,category,extra}))) return PRODUCTS["chatgpt-plus"];
     if (singleSubscriptionMonths(titleText) === 12) return PRODUCTS["chatgpt-plus-recharge-12m"];
     return PRODUCTS["chatgpt-plus-recharge"];
   }
@@ -302,11 +303,14 @@ export function groupDirectOffers(rawOffers) {
 }
 
 export function stableDirectSnapshotId(offers, staleTargetIds = []) {
+  const evidenceOf = extra => { try { return deliveryEvidence((typeof extra === 'string' ? JSON.parse(extra) : extra)?.deliveryEvidence || {}); } catch { return deliveryEvidence({}); } };
   const rows = (offers ?? []).map((offer) => ({
     productId: classifyDirectOffer(offer)?.id ?? null,
     offerId: String(offer.offerId ?? ""),
     sourceId: String(offer.sourceId ?? ""),
     title: String(offer.title ?? ""),
+    category: deliveryEvidence({ category: offer.category }).category,
+    deliveryEvidence: evidenceOf(offer.extra),
     price: Number.isFinite(Number(offer.price)) ? Number(offer.price) : null,
     currency: String(offer.currency ?? ""),
     status: String(offer.status ?? ""),

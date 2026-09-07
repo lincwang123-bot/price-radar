@@ -1,4 +1,5 @@
 import { safeFetchText } from "../../lib/safe-fetch.mjs";
+import { deliveryEvidence } from '../../lib/delivery-evidence.mjs';
 
 const CATALOG_PATH = "/mooncake-official-media/catalog.js";
 const ASSIGNMENT = /\bwindow\.MOONCAKE_CATALOG\s*=\s*/;
@@ -109,6 +110,7 @@ function itemOffer(item, category, source, capturedAt) {
     capturedAt,
     expiresAt: null,
     deliveryMode: Number(item.delivery_way) === 0 ? "auto" : Number(item.delivery_way) === 1 ? "manual" : null,
+    extra: { deliveryEvidence: deliveryEvidence({ productTitle:title, category, description:item.description }) },
   };
 }
 

@@ -1,4 +1,5 @@
 import { randomBytes } from "node:crypto";
+import { deliveryEvidence } from '../../lib/delivery-evidence.mjs';
 
 import { safeFetchJson } from "../../lib/safe-fetch.mjs";
 import { directOfferExclusionReason } from './catalog.mjs';
@@ -91,7 +92,8 @@ export async function collectShopApi(target, options = {}) {
         { referer, visitorId },
       );
       const pageOffers = parseShopApiGoods(payload, source, capturedAt)
-        .map((offer) => offer.category || !category.name ? offer : { ...offer, category: category.name });
+        .map((offer) => offer.category || !category.name ? offer : { ...offer, category: category.name,
+          extra: { ...offer.extra, deliveryEvidence:deliveryEvidence({ ...offer.extra.deliveryEvidence, category:category.name }) } });
       for (const offer of pageOffers) {
         if (seen.has(offer.offerId)) continue;
         seen.add(offer.offerId);
@@ -208,7 +210,8 @@ function goodsOffer(item, source, capturedAt) {
     capturedAt,
     expiresAt: null,
     deliveryMode: Number(item.extend?.send_order) === 0 ? "auto" : null,
-    extra: { shopUrl: `${source.origin}/shop/${encodeURIComponent(source.token)}` },
+    extra: { shopUrl: `${source.origin}/shop/${encodeURIComponent(source.token)}`,
+      deliveryEvidence: deliveryEvidence({ productTitle:title, category:cleanText(item.category?.name ?? item.category_name ?? item.category), description:item.description }) },
   };
 }
 

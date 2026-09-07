@@ -1,4 +1,5 @@
 import { safeFetchJson, safeFetchText } from '../../lib/safe-fetch.mjs';
+import { deliveryEvidence } from '../../lib/delivery-evidence.mjs';
 
 const ORIGIN = 'https://aichong.xin';
 const MAX_PRODUCTS = 100;
@@ -27,7 +28,8 @@ export function parseAichong(payload, target, capturedAt = new Date().toISOStrin
     // The description and chips carry actual duration/delivery details. Do not
     // include the crossed-out official price or infer duration from warranty.
     const title = [name, row.desc, ...(Array.isArray(row.chips) ? row.chips : []), row.price_suffix].filter(x => typeof x === 'string' && x.trim()).join(' · ');
-    return [{offerId:`aichong:${id}`,sourceId:'aichong',sourceName:target.name || 'AI补给站',storeName:target.name || 'AI补给站',title,category:String(row.category ?? ''),price,listedPrice:price,priceBasis:'listed',feeAmount:null,currency:'CNY',status,stockCount:status === 'out_of_stock' ? 0 : null,url:`${ORIGIN}/buy.html?id=${id}`,capturedAt,expiresAt:null,deliveryMode:null}];
+    return [{offerId:`aichong:${id}`,sourceId:'aichong',sourceName:target.name || 'AI补给站',storeName:target.name || 'AI补给站',title,category:String(row.category ?? ''),price,listedPrice:price,priceBasis:'listed',feeAmount:null,currency:'CNY',status,stockCount:status === 'out_of_stock' ? 0 : null,url:`${ORIGIN}/buy.html?id=${id}`,capturedAt,expiresAt:null,deliveryMode:null,
+      extra:{deliveryEvidence:deliveryEvidence({productTitle:name,category:row.category,description:[row.desc,...(Array.isArray(row.chips)?row.chips:[]),row.price_suffix].filter(x=>typeof x==='string').join(' · ')})}}];
   });
 }
 

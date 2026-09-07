@@ -1,4 +1,5 @@
 import { safeFetchJson } from "../../lib/safe-fetch.mjs";
+import { deliveryEvidence } from '../../lib/delivery-evidence.mjs';
 
 const PRODUCTS_PATH = "/api/shop/products";
 
@@ -60,6 +61,7 @@ function productOffer(product, source, capturedAt) {
     capturedAt,
     expiresAt: null,
     deliveryMode: cleanText(product.deliveryMode) || null,
+    extra: { deliveryEvidence: deliveryEvidence({ productTitle:title, category:cleanText(product.category), description:product.description }) },
   };
 }
 

@@ -15,7 +15,8 @@ test('home minimum uses fresh eligible shop prices and states the winning specif
   const row=key=>html.match(new RegExp('<article class="directory-row" data-directory-product="'+key+'">[\\s\\S]*?</article>'))?.[0]||'';
   assert.match(row('claude-pro'),/data-directory-minimum[^>]*>¥120\s*<small>起<\/small>/);
   assert.match(row('claude-pro'),/1 个月 · 代充/);
-  assert.match(row('claude-pro'),/查看店铺/);
+  assert.match(row('claude-pro'),/data-delivery-link="recharge"/);
+  assert.match(row('claude-pro'),/查看店铺 ›/);
   assert.doesNotMatch(row('claude-pro'),/¥(?:0|1|2|3|600)<|\$4/);
   assert.match(row('chatgpt-go'),/期限未注明 · 代充/);
   assert.match(row('gemini-ultra'),/暂无有效报价/);

@@ -1,4 +1,5 @@
 import { safeFetchJson } from "../../lib/safe-fetch.mjs";
+import { deliveryEvidence } from '../../lib/delivery-evidence.mjs';
 import { isAuthorizedMerchantTarget, inheritMerchantTarget } from '../../lib/merchant-target-capability.mjs';
 
 const PRODUCTS_PATH = "/api/v1/public/products";
@@ -187,7 +188,17 @@ function skuOffer(sku, product, context) {
     capturedAt: context.capturedAt,
     expiresAt: null,
     deliveryMode,
+    extra: { deliveryEvidence: deliveryEvidence({ productTitle: context.productTitle, skuTitle: rawSkuTitle,
+      category: context.category, description: publicDescription(sku.description) || publicDescription(product.description) }) },
   };
+}
+
+function publicDescription(value) {
+  if (typeof value === 'string') return value;
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return '';
+  // Description translations are public text; unknown nested keys are not.
+  return ['zh-CN','zh_CN','zh-TW','zh_TW','zh','en-US','en_US','en'].map(key => value[key])
+    .find(text => typeof text === 'string' && text.trim()) || '';
 }
 
 function skuInventory(sku, product, deliveryMode) {

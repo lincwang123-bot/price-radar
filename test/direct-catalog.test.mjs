@@ -87,9 +87,9 @@ test("新 AI 品类按套餐、期限和额度区分，不从质保天数推断�
 
 test("库存紧张属于可购买报价，且新类别仍排除售罄与无质保商品", () => {
   const products=groupDirectOffers([
-    {...offer('low','Perplexity Pro 月卡',36,'low_stock'),stockCount:null},
-    offer('sold','Perplexity Pro 月卡',1,'out_of_stock'),
-    offer('bare','Perplexity Pro 月卡 无质保',2,'in_stock'),
+    {...offer('low','Perplexity Pro 代充月卡',36,'low_stock'),stockCount:null},
+    offer('sold','Perplexity Pro 代充月卡',1,'out_of_stock'),
+    offer('bare','Perplexity Pro 代充月卡 无质保',2,'in_stock'),
   ]);
   assert.equal(products.length,1);
   assert.equal(products[0].lowestPrice,36);

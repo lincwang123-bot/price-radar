@@ -1,4 +1,5 @@
 import { safeFetchJson } from "../../lib/safe-fetch.mjs";
+import { deliveryEvidence } from '../../lib/delivery-evidence.mjs';
 
 const CATALOG_PATH = "/user/api/index/commodity";
 const DEFAULT_PAGE_SIZE = 100;
@@ -104,6 +105,7 @@ function kamiOffer(item, source, capturedAt) {
     capturedAt,
     expiresAt: null,
     deliveryMode: Number(item.delivery_way) === 0 ? "auto" : Number(item.delivery_way) === 1 ? "manual" : null,
+    extra: { deliveryEvidence: deliveryEvidence({ productTitle:title, category, description:item.description }) },
   };
 }
 
