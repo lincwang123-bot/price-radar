@@ -9,7 +9,7 @@ import { createApp } from '../lib/web.mjs';
 import { reviewMerchantApplication } from '../lib/merchant-onboarding.mjs';
 import { merchantApplicationHref } from '../lib/merchant-badges.mjs';
 
-test('public merchant intake persists privately and live owner badges follow approval without affecting quote order', async () => {
+test('public merchant intake persists privately and neutral listing badges follow approval without affecting quote order', async () => {
   const directory=mkdtempSync(path.join(os.tmpdir(),'merchant-web-'));
   const db=openDb(':memory:'),submissionsDb=openSubmissionsDb(':memory:');
   const app=createApp({db,submissionsDb,adminOptions:{merchantBridgeDir:directory}});
@@ -27,6 +27,11 @@ test('public merchant intake persists privately and live owner badges follow app
     assert.match(form.headers.get('x-robots-tag'),/noindex/);
     assert.match(html,/<form id="merchant-submission" action="\/api\/merchant-applications" method="post">/);
     assert.doesNotMatch(html,/content="index, follow/);
+    assert.match(html,/店铺已收录/);
+    assert.doesNotMatch(html,/店主已核验/);
+    const privacy=await(await fetch(base+'/privacy')).text();
+    assert.match(privacy,/收录状态标识/);
+    assert.doesNotMatch(privacy,/身份核验标识|店主已核验/);
     const csrf=html.match(/name="csrf-token" content="([^"]+)"/)[1];
     const headers={origin:base,'content-type':'application/json',cookie:'airadar_csrf='+csrf,'x-csrf-token':csrf};
     const payload={shopName:'合成测试商店1',shopUrl:'https://merchant-1.com/',platform:'auto',productAreas:['chatgpt','grok_x','api_relay','mail_verify'],email:'owner@example.org', contact:'private-contact@merchant-1.com',details:'仅限后台的合成审核说明',consent:true};
@@ -51,10 +56,14 @@ test('public merchant intake persists privately and live owner badges follow app
     const after=await(await fetch(base+route)).text();
     assert.equal((after.match(/<span class="merchant-verified"/g)||[]).length,1);
     assert.match(after,/合成测试商店1<span class="merchant-verified"/);
+    assert.match(after,/>店铺已收录<\/span>/);
+    assert.doesNotMatch(after,/店主已核验|站长已核验店铺经营身份/);
     assert.ok(after.indexOf('合成测试商店0')<after.indexOf('合成测试商店1'));
     assert.doesNotMatch(after,/private-contact|仅限后台|已用店内公告|merchantIdentity/);
     const detail=await(await fetch(base+'/product?source=direct-shops&id=chatgpt-plus-recharge')).text();
     assert.equal((detail.match(/<span class="merchant-verified"/g)||[]).length,2,'desktop and mobile render badge');
+    assert.equal((detail.match(/>店铺已收录<\/span>/g)||[]).length,2);
+    assert.doesNotMatch(detail,/店主已核验|站长已核验店铺经营身份/);
     assert.match(detail,/href="\/submit-shop\?/);
     reviewMerchantApplication(submissionsDb,body.id,{action:'pause',note:'合成测试暂停授权流程',expectedVersion:2},{bridgeDir:directory});
     const paused=await(await fetch(base+route)).text();

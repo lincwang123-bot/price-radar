@@ -54,8 +54,10 @@ test('review has no scripts and escapes private fields, audit records and CSRF m
 });
 test('approval is separate from collection and verified badge requires approval and verification',()=>{
   const render=(status,health)=>merchantReviewContent({application:{...application,status,identityVerifiedAt:'2026-09-07'},health});
-  assert.ok(!render('pending',{}).includes('class="badge">店主已核验'));
-  assert.match(render('approved',{}),/class="badge">店主已核验/);
+  assert.ok(!render('pending',{}).includes('class="badge">内部核验已记录'));
+  assert.match(render('approved',{}),/class="badge">内部核验已记录/);
+  assert.doesNotMatch(render('approved',{}),/店主已核验/);
+  assert.match(render('approved',{}),/公开页面仅显示“店铺已收录”/);
   assert.match(render('approved',{}),/class="badge">等待采集/);
   for(const [status,label] of [['ok','目录可读取 / 暂无有效报价'],['unsupported','待适配'],['waiting_adapter','待适配'],['failed','采集暂不可用']])assert.ok(render('approved',{status}).includes('class="badge">'+label));
   assert.match(render('approved',{status:'active',offerCount:1}),/class="badge">已接入/);

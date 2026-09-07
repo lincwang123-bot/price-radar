@@ -86,7 +86,7 @@ test('merchant admin protects private intake and requires tested samples before 
     assert.equal(approved.status, 'approved');
     assert.equal(approved.actions[0].actor, 'owner');
     const approvedHtml = await (await get(detailPath)).text();
-    assert.match(approvedHtml, /店主已核验/);
+    assert.match(approvedHtml, /内部核验已记录/);
     assert.match(approvedHtml, /等待采集/);
     assert.match(approvedHtml, /审核通过且采集成功后展示有效报价/);
     assert.doesNotMatch(approvedHtml, /badge">已接入/);
