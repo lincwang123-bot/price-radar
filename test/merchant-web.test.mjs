@@ -63,6 +63,7 @@ test('public merchant intake persists privately and neutral listing badges follo
     const detail=await(await fetch(base+'/product?source=direct-shops&id=chatgpt-plus-recharge')).text();
     assert.equal((detail.match(/<span class="merchant-verified"/g)||[]).length,2,'desktop and mobile render badge');
     assert.equal((detail.match(/>店铺已收录<\/span>/g)||[]).length,2);
+    assert.match(detail,/<div class="offer-title"><strong>合成测试商店1<span class="merchant-verified"[^>]*>店铺已收录<\/span><\/strong>/,'desktop badge stays inline with the shop name, not a stretched flex-column row');
     assert.doesNotMatch(detail,/店主已核验|站长已核验店铺经营身份/);
     assert.match(detail,/href="\/submit-shop\?/);
     reviewMerchantApplication(submissionsDb,body.id,{action:'pause',note:'合成测试暂停授权流程',expectedVersion:2},{bridgeDir:directory});

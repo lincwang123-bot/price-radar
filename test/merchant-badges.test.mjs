@@ -1,9 +1,15 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {merchantBadgeForOffer,merchantApplicationHref} from '../lib/merchant-badges.mjs';
+import {merchantBadgeForOffer,merchantApplicationHref,MERCHANT_BADGE_CSS} from '../lib/merchant-badges.mjs';
 
 const approved=[{identity:'domain:shop.example.com',identityVerifiedAt:'2026-09-07T00:00:00Z'},
  {identity:'shop:16688:S123',identityVerifiedAt:'2026-09-07T00:00:00Z'}];
+test('listing badges have compact green styling that overrides generic offer metadata',()=>{
+ assert.match(MERCHANT_BADGE_CSS,/\.offer-title \.merchant-verified/);
+ assert.match(MERCHANT_BADGE_CSS,/background:#ecfdf3/);
+ assert.match(MERCHANT_BADGE_CSS,/color:#16713a/);
+ assert.match(MERCHANT_BADGE_CSS,/white-space:nowrap/);
+});
 test('listing badge is neutral, exact-host, and revoked with approval',()=>{
  const offer={source:'direct-shops',url:'https://shop.example.com/buy/1'};
  assert.match(merchantBadgeForOffer(offer,approved),/>店铺已收录<\/span>/);
