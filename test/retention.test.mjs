@@ -7,6 +7,7 @@ import {readRetentionMarket,weeklyMarket} from '../lib/retention-market.mjs';
 import {openDb,storeSnapshot,metaSet} from '../lib/db.mjs';
 import {drainRetentionMail,retentionMessage} from '../lib/retention-mail.mjs';
 import {createRetention} from '../lib/retention.mjs';
+import {createApp} from '../lib/web.mjs';
 import http from 'node:http';
 
 const now=new Date('2026-09-08T02:00:00Z');
@@ -57,6 +58,19 @@ test('只有官方参考或 API 套餐的产品可收藏，参考报价不混入
   const a=login(store,db);assert.equal(store.saveWatch(a.account.id,{productKey:'super-grok',mode:'off'},m).productKey,'super-grok');
   assert.throws(()=>store.saveWatch(a.account.id,{productKey:'super-grok',mode:'target',targetPrice:10},m));
  }finally{quotes.close();db.close();}
+});
+test('关注或周报的明确规格链接自动选择对应交付方式，不被默认代充隐藏',async()=>{
+ const quotes=openDb(':memory:');
+ storeSnapshot(quotes,{source:'priceai',snapshotId:'delivery-links',products:[{productId:'chatgpt-plus-recharge',name:'ChatGPT Plus',currency:'CNY',offers:[
+  {offerId:'recharge',title:'ChatGPT Plus 代充1个月',price:100,currency:'CNY',status:'in_stock',url:'https://shop.example/recharge'},
+  {offerId:'account',title:'ChatGPT Plus 成品账号1个月',price:20,currency:'CNY',status:'in_stock',url:'https://shop.example/account'}]}]});
+ const m=readRetentionMarket(quotes),g=m.groups.find(g=>g.price===20);assert.ok(g);
+ const server=createApp({db:quotes});await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
+ try{
+  const response=await fetch('http://127.0.0.1:'+server.address().port+'/?'+new URLSearchParams({family:g.family,product:g.productKey,spec:g.comparisonKey}));
+  assert.equal(response.status,200);const html=await response.text();
+  assert.ok(html.includes('data-directory-quote data-price="20"'),'exact account quote must be visible');assert.ok(!html.includes('data-directory-quote data-price="100"'),'recharge quote must remain excluded');
+ }finally{await new Promise(resolve=>server.close(resolve));quotes.close();}
 });
 test('提醒只发给确认邮箱且暂停、删除、报价回升在发送前失效；不确定发送不重试',async()=>{
  let time=new Date(now);const db=new DatabaseSync(':memory:');const store=createRetentionStore(db,{secret:'s'.repeat(64),now:()=>time});
