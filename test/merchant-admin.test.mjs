@@ -79,12 +79,14 @@ test('merchant admin protects private intake and requires tested samples before 
     };
     await finishPreflight(1);
     assert.equal((await post(detailPath, { ...fields, sampleReviewed: 'false' }, session)).status, 422);
-    assert.equal((await post(detailPath, { ...fields, note: 'yes' }, session)).status, 422);
-    assert.equal((await post(detailPath, fields, session)).status, 303);
+    assert.equal((await post(detailPath, { ...fields, note: '字'.repeat(1501) }, session)).status, 422);
+    assert.equal((await post(detailPath, { ...fields, note: '' }, session)).status, 303, 'blank note does not prevent approval once all real checks pass');
     const approved = getMerchantApplication(submissionsDb, id);
     assert.equal(approved.version, 2);
     assert.equal(approved.status, 'approved');
     assert.equal(approved.actions[0].actor, 'owner');
+    assert.equal(approved.actions[0].note, '');
+    assert.equal(submissionsDb.prepare('SELECT COUNT(*) n FROM merchant_mail_outbox WHERE application_id=? AND stage=?').get(id,'approved').n,1);
     const approvedHtml = await (await get(detailPath)).text();
     assert.match(approvedHtml, /内部核验已记录/);
     assert.match(approvedHtml, /等待采集/);

@@ -83,7 +83,7 @@ test('rate limits and retention retain no raw client address', t => {
 test('approval publishes sanitized manifest; pause removes badge; optimistic versions and append-only audit', t => {
   const { db, dir } = fixture(t);
   const { id } = createMerchantApplication(db, payload(), options);
-  for (const change of [{ ownershipConfirmed: false }, { permissionConfirmed: false }, { note: 'yes' }]) assert.throws(() => reviewMerchantApplication(db, id, approval(change), { bridgeDir: dir }), { status: 422 });
+  for (const change of [{ ownershipConfirmed: false }, { permissionConfirmed: false }]) assert.throws(() => reviewMerchantApplication(db, id, approval(change), { bridgeDir: dir }), { status: 422 });
   const approved = reviewMerchantApplication(db, id, approval(), { bridgeDir: dir, now: options.now });
   assert.equal(approved.status, 'approved');
   assert.equal(approved.version, 2);
@@ -105,6 +105,25 @@ test('approval publishes sanitized manifest; pause removes badge; optimistic ver
   assert.equal(again.actions.length, 3);
   assert.throws(() => db.exec('DELETE FROM merchant_application_actions'), /append-only/);
   assert.throws(() => db.exec("UPDATE merchant_application_actions SET note='changed'"), /append-only/);
+});
+
+test('review notes are optional for all decisions, without losing audit or notification events', t => {
+  for (const action of ['approve','reject','pause','request_info']) {
+    for (const note of [undefined,'','  \n ','好']) {
+      const {db,dir}=fixture(t), {id}=createMerchantApplication(db,payload(),options);
+      const result=reviewMerchantApplication(db,id,approval({action,note}),{bridgeDir:dir,now:options.now});
+      assert.equal(result.version,2);
+      assert.equal(result.actions[0].note,note?.trim()||'');
+      assert.equal(result.actions[0].action,action);
+      assert.equal(result.actions[0].actor,'reviewer');
+      assert.equal(db.prepare('SELECT COUNT(*) n FROM merchant_mail_outbox WHERE event_key=?').get(id+':review:2').n,1);
+    }
+  }
+  const {db,dir}=fixture(t), {id}=createMerchantApplication(db,payload(),options);
+  for (const note of ['字'.repeat(1501),'password=private-secret']) {
+    assert.throws(()=>reviewMerchantApplication(db,id,approval({note}),{bridgeDir:dir}),{status:422});
+  }
+  assert.equal(getMerchantApplication(db,id).status,'pending');
 });
 
 test('manifest write or audit insertion failures roll back approval', t => {

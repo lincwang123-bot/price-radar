@@ -47,7 +47,10 @@ test('review has no scripts and escapes private fields, audit records and CSRF m
   assert.ok(!html.includes('<script>'));
   assert.ok(!html.includes('<img'));
   assert.match(html,/name="version" value="1"/);
-  assert.match(html,/name="note" required minlength="5"/);
+  assert.match(html,/审核说明（选填）/);
+  const note=html.match(/<textarea\b[^>]*name="note"[^>]*>/)[0];
+  assert.doesNotMatch(note,/required|minlength/);
+  assert.match(note,/maxlength="1500"/);
   assert.match(html,/name="ownershipConfirmed"/);
   assert.match(html,/name="permissionConfirmed"/);
   for(const action of ['approve','reject','pause'])assert.ok(html.includes('value="'+action+'"'));
