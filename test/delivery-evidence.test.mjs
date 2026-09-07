@@ -31,12 +31,27 @@ test('Dujiao preserves parent account evidence with generic month SKU and lets p
     {id:3,title:'本人账号充值',description:'<p>给您已有的账号开通会员，不提供账号</p>',price:120,auto_stock_available:2,manual_stock_available:2},
   ]}]});
   const a=parseDujiaoProducts(payload('auto'),target,at),b=parseDujiaoProducts(payload('manual'),target,at);
-  assert.deepEqual(a[0].extra.deliveryEvidence,{productTitle:'ChatGPT Plus 成品号',skuTitle:'月卡',category:'ChatGPT',description:'提供已开通会员的账号'});
+  assert.deepEqual(a[0].extra.deliveryEvidence,{productTitle:'ChatGPT Plus 成品号',skuTitle:'月卡',category:'ChatGPT',description:'提供已开通会员的账号',descriptionScope:'product_multi'});
   assert.equal(a[0].title,'ChatGPT 月卡');
   assert.equal(a[1].extra.deliveryEvidence.skuTitle,'本人账号充值');
   assert.equal(a[1].extra.deliveryEvidence.description,'给您已有的账号开通会员，不提供账号');
+  assert.equal(a[1].extra.deliveryEvidence.descriptionScope,'sku');
   assert.deepEqual(a.map(o=>o.extra.deliveryEvidence),b.map(o=>o.extra.deliveryEvidence),'auto/manual never becomes delivery evidence');
   assert.equal(offerDelivery(a[0]).kind,'account');assert.equal(offerDelivery(a[1]).kind,'recharge');
+});
+test('description scope is bounded evidence and survives storage and snapshot fingerprints',()=>{
+  for(const scope of ['sku','product','product_multi'])assert.equal(deliveryEvidence({descriptionScope:scope}).descriptionScope,scope);
+  for(const scope of [undefined,'all','trusted',{},null])assert.equal(deliveryEvidence({descriptionScope:scope}).descriptionScope,undefined);
+  const single=parseDujiaoProducts({data:[{id:1,title:'ChatGPT Plus',description:'充值自己的账号',skus:[{id:1,title:'月卡',price:100,auto_stock_available:1}]}]}, {id:'morimm',origin:'https://morimm.com'},at)[0];
+  assert.equal(single.extra.deliveryEvidence.descriptionScope,'product');
+  const changed={...single,extra:{deliveryEvidence:{...single.extra.deliveryEvidence,descriptionScope:'product_multi'}}};
+  assert.notEqual(stableDirectSnapshotId([single]),stableDirectSnapshotId([changed]));
+  const db=openDb(':memory:');
+  try{
+    storeSnapshot(db,{source:'direct-shops',snapshotId:'scoped',fetchedAt:at,products:[{productId:'chatgpt-plus',offers:[single]}]});
+    const stored=JSON.parse(offersOfProduct(db,'direct-shops','scoped','chatgpt-plus')[0].extra);
+    assert.equal(stored.deliveryEvidence.descriptionScope,'product');
+  }finally{db.close();}
 });
 test('public catalog adapters retain only the selected product description and category',()=>{
   const description='<p>仅充值您已有的账号，不提供成品号</p>';

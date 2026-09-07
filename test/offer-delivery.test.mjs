@@ -93,3 +93,73 @@ test('未知及不同交付不合算最低价，仅安全交付说明变化也�
   assert.notEqual(stableDirectSnapshotId([row('本商品交付成品账号')]), stableDirectSnapshotId([row('本商品充值到自己的账号')]));
   assert.notEqual(stableDirectSnapshotId([{ ...base, offerId: 'a', category: '成品账号' }]), stableDirectSnapshotId([{ ...base, offerId: 'a', category: '代充' }]));
 });
+
+test('生产公开标题的充自己号是充值对象，不被兑换字眼或号字遮蔽', () => {
+  for (const title of [
+    'GPT plus充你自己号一个月.质保不掉订阅囤卡超3天未兑换不退',
+    'GPT GO充你自己号一个月',
+    'GPT Pro 5x充你自己号一个月',
+    'GPT Pro 20x充你自己号一个月',
+    'Gemini pro 一年会员充自己的号',
+  ]) {
+    for (const price of [0.01, 100, 99999]) assert.equal(offerDelivery({ title, price, extra: { deliveryEvidence: { productTitle: title } } }).kind, 'recharge', title);
+  }
+  for (const title of ['ChatGPT Plus 成品号/充你自己号 一个月', 'Claude Pro 共享账号 或 充自己的号 一个月']) {
+    assert.deepEqual(offerDelivery(title), { kind: 'unknown', label: '交付待确认', known: false, conflict: true }, title);
+  }
+});
+
+test('使用警告不得被当作共享交付，实际共享和混合套餐保持独立', () => {
+  const title = 'G Plus [官方直充] CDK 全自动充值 直充自己账号';
+  const description = '商品描述 Plus 月卡，菲区官方卡充渠道，仅支持feer账号（无订阅状态）。交付与使用 付款后请留意订单状态和联系通知。请使用干净、稳定的网络环境，避免频繁切换地区或多人共享账号。实际交付与售后以本站订单说明和客服确认为准。';
+  assert.deepEqual(offerDelivery({ title, extra: { deliveryEvidence: { productTitle: title, description } } }), { kind: 'recharge', label: '代充', known: true, conflict: false });
+  for (const warning of ['避免多人共享账号', '请勿与他人共享账号', '禁止共享账号']) {
+    assert.equal(offerDelivery({ title, extra: { deliveryEvidence: { description: `本商品直充自己的账号，${warning}。` } } }).kind, 'recharge', warning);
+  }
+  assert.equal(offerDelivery('Claude Pro 多人共享账号月卡').kind, 'shared');
+  assert.equal(offerDelivery({ title, extra: { deliveryEvidence: { description: '本商品交付多人共享账号' } } }).conflict, true);
+  assert.equal(offerDelivery('G Plus 成品/菲区卡密代充').conflict, true);
+  assert.equal(offerDelivery('独享成品账号，禁止多人共享账号').kind, 'account');
+});
+
+test('生产描述中的账号适用条件不与明示直充冲突，也不能独立证明交付账号', () => {
+  const description = '国区谷歌账号不可用！ 国区谷歌账号不可用！ 拍之前先去 https://policies.google.com/country-association-form 看看账号属地，如果是国区改成功了再拍，不然不接受任何售后！ 卡密长期有效可囤，质保可用。';
+  assert.equal(offerDelivery({ title: 'Gemini Pro 18个月直充', extra: { deliveryEvidence: { productTitle: 'Gemini Pro 18个月直充', description } } }).kind, 'recharge');
+  for (const description of ['请确认账号地区符合要求', '需自备账号', '请使用自己注册的账号', '买家提供账号密码', '账号地区需符合要求']) {
+    assert.equal(offerDelivery({ title: 'Gemini Pro 月卡', extra: { deliveryEvidence: { description } } }).kind, 'unknown', description);
+    assert.equal(offerDelivery(`Gemini Pro 月卡 ${description}`).kind, 'unknown', description);
+  }
+});
+
+test('限定词否定和SKU明确排除交付阻止父标题回填，描述否定也不能被SKU压过', () => {
+  for (const suffix of ['不提供独享账号', 'not a dedicated account', '不含成品账号']) {
+    assert.equal(offerDelivery(`Claude Pro 月卡 ${suffix}`).kind, 'unknown', suffix);
+  }
+  for (const extra of [
+    { deliveryEvidence: { productTitle: 'Gemini Pro 成品账号', skuTitle: '不含账号' } },
+    { deliveryEvidence: { productTitle: 'Gemini Pro 成品账号', skuTitle: '不提供独享账号' } },
+    { deliveryEvidence: { productTitle: '不提供独立账号' } },
+    { deliveryEvidence: { productTitle: 'Gemini Pro 成品账号', skuTitle: '需自备账号' } },
+    { deliveryEvidence: { productTitle: 'Gemini Pro 成品账号', skuTitle: '请提供您的账号' } },
+  ]) assert.equal(offerDelivery({ title: 'Gemini Pro 月卡', extra }).kind, 'unknown');
+  for (const description of ['不含账号', '仅为买家现有账号开通会员，不提供成品号']) {
+    const value = offerDelivery({ title: 'Claude Pro 成品账号月卡', extra: { deliveryEvidence: { skuTitle: '成品账号月卡', description } } });
+    assert.equal(value.kind, 'unknown', description); assert.equal(value.conflict, true, description);
+  }
+});
+
+test('成品与共享或席位多选保持冲突，多SKU父描述不替代当前SKU交付证据', () => {
+  for (const title of ['ChatGPT Plus 成品账号或共享账号 月卡', 'Claude Pro 成品账号或席位 月卡', 'Claude Pro 成品账号/合租 月卡']) {
+    assert.equal(offerDelivery(title).conflict, true, title); assert.equal(offerDelivery(title).known, false, title);
+  }
+  const mixed = { productTitle: 'Claude Pro 成品账号或代充', description: '成品账号无售后；代充质保一个月', descriptionScope: 'product_multi' };
+  assert.equal(offerDelivery({ title: 'Claude Pro 代充月卡', extra: { deliveryEvidence: { ...mixed, skuTitle: '代充月卡' } } }).kind, 'recharge');
+  assert.equal(offerDelivery({ title: 'Claude Pro 月卡', extra: { deliveryEvidence: { ...mixed, skuTitle: '月卡' } } }).kind, 'unknown');
+  assert.equal(offerDelivery({ title: 'Claude Pro 月卡', extra: { deliveryEvidence: { skuTitle: '月卡', description: '交付成品账号', descriptionScope: 'product_multi' } } }).kind, 'unknown');
+});
+
+test('否定售后问题或买方条件不等于否定商品交付', () => {
+  assert.equal(offerDelivery({ title: 'Claude pro 官方直充秒到账【美区IOS 质保订阅30天】', extra: { deliveryEvidence: { description: '支持充值到您自己的账号，并不是充值有问题，而是封锁区域用户导致封号，只能保证充值渠道正规' } } }).kind, 'recharge');
+  for (const title of ['Claude Pro 成品账号，无需自备账号', '卖家注册并开通会员后交付全新账号，买家无需提供账号']) assert.equal(offerDelivery(title).kind, 'account', title);
+  for (const description of ['不提供充值', '本商品并非代充商品']) assert.equal(offerDelivery({ title: 'Claude Pro 代充', extra: { deliveryEvidence: { description } } }).kind, 'unknown', description);
+});

@@ -170,6 +170,7 @@ function skuOffer(sku, product, context) {
   const deliveryMode = normalizedDeliveryMode(sku.fulfillment_type ?? product.fulfillment_type);
   const inventory = skuInventory(sku, product, deliveryMode);
   const slug = identifier(product.slug) ?? context.productId;
+  const skuDescription = publicDescription(sku.description);
   return {
     offerId: `${context.source.id}:${context.productId}:${skuId}`,
     sourceId: context.source.id,
@@ -189,7 +190,8 @@ function skuOffer(sku, product, context) {
     expiresAt: null,
     deliveryMode,
     extra: { deliveryEvidence: deliveryEvidence({ productTitle: context.productTitle, skuTitle: rawSkuTitle,
-      category: context.category, description: publicDescription(sku.description) || publicDescription(product.description) }) },
+      category: context.category, description: skuDescription || publicDescription(product.description),
+      descriptionScope: skuDescription ? 'sku' : context.skuCount === 1 ? 'product' : 'product_multi' }) },
   };
 }
 

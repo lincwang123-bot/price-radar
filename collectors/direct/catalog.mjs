@@ -243,11 +243,22 @@ export function directOfferExclusionReason(raw) {
     return "out_of_stock";
   }
 
-  const title = normalized(raw?.title);
+  // Only the selected SKU's bounded evidence is relevant; parent product titles,
+  // categories and arbitrary extra fields may describe other variants.
+  let evidence = {};
+  try { evidence = deliveryEvidence((typeof raw?.extra === 'string' ? JSON.parse(raw.extra) : raw?.extra)?.deliveryEvidence); } catch {}
+  const descriptionApplies = ['sku', 'product'].includes(evidence.descriptionScope)
+    || (!evidence.descriptionScope && !evidence.skuTitle);
+  const traditional = { 質:'质', 後:'后', 無:'无', 沒:'没', 號:'号', 說:'说', 負:'负', 責:'责', 並:'并', 會:'会', 絕:'绝' };
+  const title = normalized([raw?.title, evidence.skuTitle, descriptionApplies ? evidence.description : ''].filter(Boolean).join('。'))
+    .replace(/[質後無沒號說負責並會絕]/g, char => traditional[char])
+    // An explicitly negated disclaimer is not itself a disclaimer.
+    .replace(/(?:不是|并非|并不是|非)\s*(?:无\s*(?:任何\s*)?|没有\s*|不提供\s*|不支持\s*|不予\s*|不做\s*|不)(?:质保|售后)/g, '')
+    .replace(/封号\s*(?:不质保|不保)(?:\s*(?:和|及|、)?\s*不售后)?|封号\s*不售后/g, '');
   if (!title) return null;
 
   // “封号不质保”是对封禁风险的有限免责，并不等于商品完全无质保；仅在
-  // 标题明确声明整个商品无质保/无售后时从公开排行排除。
+  // 标题或受控 SKU 描述明确声明整个商品无质保/无售后时排除。
   const withoutBanOnlyDisclaimer = title
     .replace(/不质保\s*封号|封号\s*不质保|不保\s*封号|封号\s*不保/g, "")
     .trim();
