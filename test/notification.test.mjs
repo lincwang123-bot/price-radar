@@ -6,6 +6,8 @@ import {createMerchantApplication,reviewMerchantApplication,getMerchantApplicati
 import {importSupplyIntakes,updateIntakeEmail} from '../lib/merchant-intake.mjs';
 import {MAIL_STAGES,merchantMailMessage,merchantMailStatus,drainMerchantMail} from '../lib/merchant-mail.mjs';
 import {reconcileMerchantPublication} from '../lib/merchant-publication.mjs';
+import {advertiseContent} from '../lib/commerce-ui.mjs';
+import {decorateSeo} from '../lib/seo.mjs';
 const now=new Date('2026-09-07T12:00:00Z');
 function privateFixture(t){const db=openSubmissionsDb(':memory:');t.after(()=>db.close());return db;}
 const feedback={kind:'feedback',topic:'suggestion',subject:'改进建议',details:'测试用完整反馈说明',contact:'example-tg',email:'reader@example.org'};
@@ -13,13 +15,44 @@ const merchant={shopName:'测试商店',shopUrl:'https://mail-qa-shop.com/',prod
 test('every notification has branded HTML, useful next steps and a full text alternative; dynamic text cannot inject HTML',()=>{
   for(const stage of Object.keys(MAIL_STAGES)){
     const msg=merchantMailMessage({application_id:'MA-20260907-TEST',recipient:'owner@example.org',stage,event_key:'test:'+stage,public_reply:'资料已核对，请补充店铺介绍。\n<img src=x onerror=alert(1)>'},'notice@airadar.vip',{replyEnabled:true});
-    assert.match(msg.html,/max-width:600px/);assert.match(msg.html,/AirRadar/);assert.match(msg.html,/&lt;img/);
+    assert.match(msg.html,/max-width:600px/);assert.match(msg.html,/Airadar/);assert.match(msg.html,/&lt;img/);
+    assert.equal(msg.from.name,'Airadar 通知');assert.equal(msg.from.address,'notice@airadar.vip');
+    assert.match(msg.html,/Airadar · airadar\.vip/);assert.match(msg.subject,/^Airadar：/);
+    assert.doesNotMatch(JSON.stringify(msg),/AirRadar/);
     assert.doesNotMatch(msg.html,/<script|<img|onerror="|@import/);
     assert.match(msg.text,/接下来/);assert.ok(msg.text.length>150);assert.match(msg.text,/申请编号/);
     assert.match(msg.html,/href="https:\/\/airadar.vip\/"/);
   }
   const noReply=merchantMailMessage({application_id:'FB-TEST',stage:'need_info',event_key:'test'},'notice@airadar.vip');
   assert.doesNotMatch(noReply.text,/回复此邮件/);
+});
+test('public partnership content and metadata use Airadar without changing the domain',()=>{
+  const html=decorateSeo('<html><head><title>商家合作</title></head><body>'+advertiseContent()+'</body></html>',new URL('https://airadar.vip/advertise'),null);
+  assert.match(html,/Airadar · 商家合作/);
+  assert.match(html,/了解 Airadar 商品/);
+  assert.match(html,/https:\/\/airadar\.vip\/advertise/);
+  assert.doesNotMatch(html,/AirRadar/);
+});
+test('approval requires a valid owner email and atomically queues the approval notice',async t=>{
+  const db=privateFixture(t),{id}=createMerchantApplication(db,merchant,{now});
+  const review={action:'approve',expectedVersion:1,note:'内部核验记录不要外发',ownershipConfirmed:true,permissionConfirmed:true};
+  db.prepare('UPDATE merchant_applications SET email=NULL WHERE public_id=?').run(id);
+  assert.throws(()=>reviewMerchantApplication(db,id,review,{now,bridgeDir:null}),{status:422});
+  assert.equal(getMerchantApplication(db,id).status,'pending');
+  db.prepare('UPDATE merchant_applications SET email=? WHERE public_id=?').run(merchant.email,id);
+  db.exec("CREATE TRIGGER fail_approval_mail BEFORE INSERT ON merchant_mail_outbox WHEN NEW.stage='approved' BEGIN SELECT RAISE(ABORT,'approval mail fixture'); END");
+  assert.throws(()=>reviewMerchantApplication(db,id,review,{now,bridgeDir:null}),/approval mail fixture/);
+  assert.equal(getMerchantApplication(db,id).status,'pending');
+  db.exec('DROP TRIGGER fail_approval_mail');
+  reviewMerchantApplication(db,id,review,{now,bridgeDir:null});
+  assert.equal(getMerchantApplication(db,id).status,'approved');
+  const sent=[];
+  await drainMerchantMail(db,{transport:{sendMail:async m=>{sent.push(m);return {accepted:[m.to]};}},from:'notice@airadar.vip',now,env:{MERCHANT_MAIL_REPLY_TO:'hello@airadar.vip'}});
+  const approval=sent.filter(m=>m.subject==='Airadar：店铺审核已通过');
+  assert.equal(approval.length,1);assert.equal(approval[0].to,merchant.email);
+  assert.equal(approval[0].replyTo,'hello@airadar.vip');assert.match(approval[0].text,/审核通过不等于已经上架/);
+  assert.doesNotMatch(JSON.stringify(sent),/内部核验记录/);
+  assert.equal(merchantMailStatus(db,id).items.find(m=>m.stage==='approved').status,'accepted');
 });
 test('feedback receipt survives adoption; explicit reply and internal note remain separate; double submit is deduplicated',async t=>{
   const db=privateFixture(t),{id}=createSubmission(db,feedback,{now});
