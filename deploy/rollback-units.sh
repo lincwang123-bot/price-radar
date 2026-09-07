@@ -3,7 +3,7 @@ set -euo pipefail
 mode=$1
 snapshot=$2
 unit_dir=${UNIT_DIR:-/etc/systemd/system}
-units=(price-radar-web.service price-radar-collect.service price-radar-backup.service price-radar-backup.timer price-radar-named-tunnel.service)
+units=(price-radar-web.service price-radar-collect.service price-radar-preflight.service price-radar-backup.service price-radar-backup.timer price-radar-named-tunnel.service)
 if [ "$mode" = snapshot ]; then
   mkdir -p "$snapshot"
   for unit in "${units[@]}"; do

@@ -12,6 +12,12 @@ test('web bridge access does not grant market writes or expose private stores to
  assert.ok(!/^ReadWritePaths=.*\/price-radar\/data\b/m.test(web));
  assert.match(collect,/^InaccessiblePaths=.*\/submissions .*\/analytics /m);
  assert.ok(!/^ReadWritePaths=.*merchant-bridge/m.test(collect));
+ const immediate=readFileSync('deploy/price-radar-preflight.service','utf8');
+ assert.match(immediate,/^ReadWritePaths=\/opt\/linc\/apps\/price-radar\/data\/merchant-preflights$/m);
+ assert.match(immediate,/^ReadOnlyPaths=.*merchant-bridge$/m);
+ assert.match(immediate,/^InaccessiblePaths=.*\/submissions .*\/analytics .*\/web.env$/m);
+ assert.doesNotMatch(immediate,/^EnvironmentFile=/m);
+ assert.match(immediate,/^RuntimeDirectoryMode=0700$/m);
  const deploy=readFileSync('deploy/deploy.sh','utf8');
  assert.ok(deploy.includes("--exclude='./merchant-bridge'"));
  assert.ok(deploy.includes("--exclude 'merchant-bridge/'"));
@@ -36,7 +42,7 @@ test('unit rollback restores actual unit bytes including backup units and expose
  const root=mkdtempSync(path.join(os.tmpdir(),'radar-units-'));
  try{
   const dir=path.join(root,'units'),bin=path.join(root,'bin'),snapshot=path.join(root,'snapshot');mkdirSync(dir);mkdirSync(bin);
-  const names=['price-radar-web.service','price-radar-collect.service','price-radar-backup.service','price-radar-backup.timer','price-radar-named-tunnel.service'];
+  const names=['price-radar-web.service','price-radar-collect.service','price-radar-backup.service','price-radar-backup.timer','price-radar-named-tunnel.service','price-radar-preflight.service'];
   for(const name of names)writeFileSync(path.join(dir,name),`actual-${name}`);
   writeFileSync(path.join(bin,'systemctl'),'#!/bin/sh\ncase "$1" in\nis-active) echo active;;\nis-enabled) echo enabled;;\n*) test "${FAIL_RESTORE:-0}" = 0;;\nesac\n',{mode:0o755});
   const env={...process.env,UNIT_DIR:dir,PATH:`${bin}:${process.env.PATH}`};

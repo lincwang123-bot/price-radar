@@ -31,7 +31,7 @@ test('preflight renders actionable states, counts and escaped bounded samples',(
   for (const status of ['pending','queued','expired','invalid','no_valid_offers','waiting_adapter','unavailable']) {
     const html = merchantReviewContent({application,preflight:{status,canApprove:false}});
     assert.match(html,/value="approve" type="submit" disabled/);
-    assert.match(html,/重新测试接入/);
+    assert.match(html,/立即测试接入/);
     assert.doesNotMatch(html,/<script|fetch\(/);
     if (status==='queued') assert.match(html,/通常 5 分钟/);
   }
@@ -42,17 +42,17 @@ test('preflight renders actionable states, counts and escaped bounded samples',(
   assert.doesNotMatch(html,/<script|<img>|value="approve" type="submit" disabled/);
   assert.match(html,/不自动发布报价，也不验证真实交易/);
 });
-test('unread catalogues do not display invented zero counts and library is always available',()=>{
+test('unread catalogues keep diagnostics and email status without manual copy templates',()=>{
  for(const status of ['unavailable','waiting_adapter']){
   const html=merchantReviewContent({application,preflight:{status,result:{status,rawCount:0,validCount:0,reasonCode:status==='unavailable'?'not_found':'invalid_catalog',message:'Private stacktrace'}}});
   assert.doesNotMatch(html,/可收录报价：0 条|原始解析：0 条|Private stacktrace/);
   assert.match(html,status==='unavailable'?/未读取成功/:/尚未识别目录/);
-  assert.match(html,/preflight-current-message/);assert.match(html,/其他情况的沟通文案/);
+  assert.doesNotMatch(html,/preflight-current-message|其他情况的沟通文案|复制文案|发给店主的文案/);
+  assert.match(html,/邮件通知/);
  }
  for(const preflight of [null,{status:'unavailable',result:{status:'unavailable'}}]){
   const html=merchantReviewContent({application,preflight});
-  assert.match(html,/<details class="guidance-library"><summary>其他情况的沟通文案/);
-  assert.match(html,/data-copy-target="preflight-library-0"/);
+  assert.doesNotMatch(html,/guidance-library|data-copy-target/);
   if(preflight)assert.match(html,/历史测试未记录具体原因，请重新测试/);
  }
 });

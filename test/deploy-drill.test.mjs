@@ -77,7 +77,7 @@ for(const failure of ['rsync','smoke'])test(`real deploy EXIT trap restores fixt
   }
   writeFileSync(path.join(app,'config.json'),'fixture config retained');
   const envText=['PUBLIC_ORIGIN','SUBMISSIONS_DB_PATH','SUBMISSIONS_BACKUP_DIR','ANALYTICS_DB_PATH','ANALYTICS_BACKUP_DIR','SUBMISSION_HASH_SECRET'].map(k=>k+'=fixture').join('\n');writeFileSync(path.join(app,'.env'),envText);
-  const names=['price-radar-web.service','price-radar-collect.service','price-radar-backup.service','price-radar-backup.timer','price-radar-named-tunnel.service'];
+  const names=['price-radar-web.service','price-radar-collect.service','price-radar-backup.service','price-radar-backup.timer','price-radar-named-tunnel.service','price-radar-preflight.service'];
   const original=Object.fromEntries(names.map((name,i)=>[name,{active:i===2?'inactive':'active',enabled:i===2?'disabled':'enabled'}]));
   for(const name of names)writeFileSync(path.join(units,name),'old actual '+name);
   writeFileSync(path.join(root,'state.json'),JSON.stringify({units:original}));

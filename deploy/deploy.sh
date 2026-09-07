@@ -51,7 +51,7 @@ ssh "$REMOTE" "systemctl is-active --quiet price-radar-named-tunnel"
 
 echo "==> rsync code -> ${REMOTE}:${APP_DIR} (exclude data/, .env, .git)"
 CHANGED=1
-ssh "$REMOTE" "sudo systemctl stop price-radar-web price-radar-collect"
+ssh "$REMOTE" "if systemctl is-active --quiet price-radar-preflight; then sudo systemctl stop price-radar-preflight; fi; sudo systemctl stop price-radar-web price-radar-collect"
 rsync -az --delete \
   --exclude 'data/' \
   --exclude 'submissions/' \
@@ -68,7 +68,8 @@ echo "==> ensure data and submissions dirs + ownership deploy:deploy"
 ssh "$REMOTE" "sudo mkdir -p ${APP_DIR}/data ${APP_DIR}/submissions ${APP_DIR}/analytics ${APP_DIR}/merchant-bridge && sudo chown deploy:deploy ${APP_DIR}/data ${APP_DIR}/submissions ${APP_DIR}/analytics ${APP_DIR}/merchant-bridge && sudo chmod 700 ${APP_DIR}/submissions ${APP_DIR}/analytics ${APP_DIR}/merchant-bridge"
 
 echo "==> install systemd units"
-for u in price-radar-collect price-radar-web; do
+ssh "$REMOTE" "sudo mkdir -p ${APP_DIR}/data/merchant-preflights && sudo chown deploy:deploy ${APP_DIR}/data/merchant-preflights && sudo chmod 700 ${APP_DIR}/data/merchant-preflights"
+for u in price-radar-collect price-radar-web price-radar-preflight; do
   scp -q "$LOCAL_DIR/deploy/${u}.service" "${REMOTE}:/tmp/${u}.service"
   ssh "$REMOTE" "sudo install -o root -g root -m 644 /tmp/${u}.service /etc/systemd/system/${u}.service && rm -f /tmp/${u}.service"
 done
@@ -93,10 +94,10 @@ for env_file in "${APP_DIR}/.env" "$WEB_ENV"; do
 done
 
 echo "==> daemon-reload + enable + start"
-ssh "$REMOTE" "sudo systemctl daemon-reload && sudo systemctl enable price-radar-collect price-radar-web && sudo systemctl restart price-radar-collect price-radar-web && sudo systemctl start price-radar-named-tunnel && echo started"
+ssh "$REMOTE" "sudo systemctl daemon-reload && sudo systemctl enable price-radar-collect price-radar-web price-radar-preflight && sudo systemctl restart price-radar-collect price-radar-web price-radar-preflight && sudo systemctl start price-radar-named-tunnel && echo started"
 
 echo "==> service states"
-ssh "$REMOTE" "systemctl is-active price-radar-collect price-radar-web price-radar-named-tunnel"
+ssh "$REMOTE" "systemctl is-active price-radar-collect price-radar-web price-radar-preflight price-radar-named-tunnel"
 ssh "$REMOTE" "curl -A PriceRadarQA --retry 5 --retry-connrefused --retry-delay 1 -fsS --max-time 10 http://127.0.0.1:18090/ >/dev/null && curl -A PriceRadarQA --retry 6 --retry-all-errors --retry-delay 2 -fsS --max-time 15 https://airadar.vip/ >/dev/null && sudo systemctl start price-radar-backup.service && sudo systemctl enable --now price-radar-backup.timer"
 
 echo "==> deploy ${REVISION} healthy; collector owns scheduled data refresh"
