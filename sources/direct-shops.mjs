@@ -12,6 +12,9 @@ import { metaGet, metaSet } from "../lib/db.mjs";
 import { isAccessDeniedError } from '../lib/safe-fetch.mjs';
 import { readDirectImports } from '../lib/direct-transfer.mjs';
 import { readApprovedManifest, collectApprovedMerchants } from '../lib/merchant-collection.mjs';
+import {discover16688,loadDiscovered16688} from '../lib/direct-discovery.mjs';
+import {retryingPublicFetch} from '../lib/direct-read-retry.mjs';
+import {classifyPreflightError} from '../lib/merchant-preflight-guidance.mjs';
 
 export const sourceId = "direct-shops";
 export const sourceLabel = "原始店铺直采";
@@ -40,6 +43,19 @@ export async function pull(ctx) {
   const requestDelayMs = positiveNumber(cfg.request_delay_ms, 500);
   let attemptedTargets = 0;
   const deniedOrigins = new Map();
+  if(cfg.discovery?.platform16688===true) {
+    let discovered=loadDiscovered16688(ctx.dataDir);
+    if(timing.allowed) {
+      const result=await discover16688({dataDir:ctx.dataDir,fetchImpl:ctx.fetchImpl,sleep:ctx.sleep});
+      discovered=result.targets;
+      const {targets:ignored,...metrics}=result;
+      metaSet(ctx.db,'health:direct-discovery',JSON.stringify({...metrics,storeCount:discovered.length}));
+      if(result.blockedOrigin)deniedOrigins.set(result.blockedOrigin,Object.assign(new Error('16688 公开目录访问受限'),{code:result.reasonCode==='robots_disallowed'?'ROBOTS_DISALLOWED':'ACCESS_DENIED'}));
+      ctx.log?.(`[${sourceId}] 16688 原站发现：${result.status}，本轮新增 ${result.discoveredCount} 家，动态名单 ${discovered.length} 家。`);
+    }
+    const ids=new Set(targets.map(row=>row.id));
+    targets.push(...discovered.filter(row=>!ids.has(row.id)));
+  }
   let previousHealth = [];
   try { previousHealth = JSON.parse(metaGet(ctx.db,'health:direct-targets') || '{}').targets || []; } catch {}
 
@@ -53,10 +69,10 @@ export async function pull(ctx) {
       const status = usable ? (prior?.status === 'stale' ? 'stale' : 'cached') : 'unavailable';
       if (usable) allOffers.push(...withHealth(cached.offers,status,maxCacheAgeMinutes));
       if (status === 'stale' || status === 'unavailable') staleTargets.push(target.id);
-      health.push({target:target.id,name:target.name,status,lastSuccess:cached?.fetchedAt||null,ageMinutes:Number.isFinite(ageMinutes)?Math.round(ageMinutes):null});
+      health.push({target:target.id,name:target.name,status,lastSuccess:cached?.fetchedAt||null,ageMinutes:Number.isFinite(ageMinutes)?Math.round(ageMinutes):null,reasonCode:prior?.reasonCode||null});
       continue;
     }
-    if (!deniedOrigins.has(target.origin) && cached && Number.isFinite(ageMinutes) && ageMinutes < Math.min(target.intervalMinutes, maxCacheAgeMinutes)) {
+    if (!deniedOrigins.has(target.origin) && !['stale','unavailable'].includes(previousHealth.find(row=>row.target===target.id)?.status) && cached && Number.isFinite(ageMinutes) && ageMinutes >= 0 && ageMinutes < Math.min(target.intervalMinutes, maxCacheAgeMinutes)) {
       allOffers.push(...withHealth(cached.offers, 'cached', maxCacheAgeMinutes));
       health.push({target:target.id,name:target.name,status:"cached",lastSuccess:cached.fetchedAt,ageMinutes:Math.round(ageMinutes)});
       ctx.log?.(`[${sourceId}] ${target.name} 命中本地缓存（${ageMinutes.toFixed(0)}min / ${target.intervalMinutes}min）。`);
@@ -71,7 +87,7 @@ export async function pull(ctx) {
       const offers = validateTargetOffers(
         await collect(target, {
           capturedAt,
-          fetchImpl: ctx.fetchImpl ?? globalThis.fetch,
+          fetchImpl: retryingPublicFetch(ctx.fetchImpl ?? globalThis.fetch,{sleep:ctx.sleep,maxRetries:2}),
           requestDelayMs,
         }),
         target,
@@ -81,11 +97,11 @@ export async function pull(ctx) {
       health.push({target:target.id,name:target.name,status:"ok",lastSuccess:capturedAt,ageMinutes:0});
       ctx.log?.(`[${sourceId}] ${target.name}: ${offers.length} 条公开商品。`);
     } catch (error) {
-      if (isAccessDeniedError(error)) deniedOrigins.set(target.origin, error);
+      if (isAccessDeniedError(error)||error.code==='ROBOTS_DISALLOWED') deniedOrigins.set(target.origin, error);
       staleTargets.push(target.id);
       const usable = cached && Number.isFinite(ageMinutes) && ageMinutes <= maxCacheAgeMinutes;
       if (usable) allOffers.push(...withHealth(cached.offers, 'stale', maxCacheAgeMinutes));
-      health.push({target:target.id,name:target.name,status:usable?"stale":"unavailable",lastSuccess:cached?.fetchedAt||null,ageMinutes:Number.isFinite(ageMinutes)?Math.round(ageMinutes):null});
+      health.push({target:target.id,name:target.name,status:usable?"stale":"unavailable",lastSuccess:cached?.fetchedAt||null,ageMinutes:Number.isFinite(ageMinutes)?Math.round(ageMinutes):null,...classifyPreflightError(error)});
       ctx.log?.(`[${sourceId}] ${target.name} 采集失败，${usable?"暂用有效期内缓存":"无有效缓存，暂不参与当前报价"}: ${error.message}`);
     }
   }

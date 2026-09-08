@@ -8,11 +8,13 @@ import { PLATFORM16688_SHOPS, collect16688 } from './platform16688.mjs';
 import { collectAichong } from './aichong.mjs';
 import { collectBBShare } from './bbshare.mjs';
 import { collectNobrisk } from './nobrisk.mjs';
+import {collectDujiaokaHtml} from './dujiaoka-html.mjs';
 import {merchantUrlBlocked} from '../../lib/merchant-blocklist.mjs';
 
 // 这里只登记我们逐个核验过的原站公开入口。URL 不接受运行时任意传入，
 // 避免把采集器变成通用代理或 SSRF 入口。
 const TARGETS = [
+  {id:'fufaka',name:'桑丘自动发货资源店',kind:'dujiaokaHtml',origin:'https://fufaka.shop',intervalMinutes:60},
   {id:'nobrisk',name:'BriskAI',kind:'nobrisk',origin:'https://shop.nobrisk.com',endpoint:'/user/api/index/commodity',intervalMinutes:30,maxPages:5,pageSize:100},
   {id:'bbshare',name:'BBShare',kind:'bbshare',origin:'https://www.bbshare.site',intervalMinutes:60},
   ...PLATFORM16688_SHOPS.map(target => ({ ...target, kind: 'platform16688', intervalMinutes: 60 })),
@@ -142,6 +144,7 @@ const TARGETS = [
 ];
 
 const COLLECTORS = {
+  dujiaokaHtml:collectDujiaokaHtml,
   nobrisk: collectNobrisk,
   kami: collectKami,
   ikunlove: collectIkunLove,
@@ -158,7 +161,7 @@ const COLLECTORS = {
 // Listing here does not enable requests from the production server.
 export const SHOP_API_TARGET_IDS = Object.freeze(TARGETS.filter(target => target.kind === 'shopApi').map(target => target.id));
 // An adapter registration is not approval and does not add a default collector.
-export const MERCHANT_ONLY_TARGET_IDS=Object.freeze(['bbshare']);
+export const MERCHANT_ONLY_TARGET_IDS=Object.freeze(['bbshare','fufaka']);
 
 function shop(id, name, token) {
   return {
