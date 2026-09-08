@@ -157,8 +157,10 @@ function skuOffer(sku, product, context) {
   if (!sku || typeof sku !== "object" || sku.is_active === false || sku.deleted_at) return null;
 
   const skuId = identifier(sku.id ?? sku.sku_id ?? sku.sku_code);
-  const rawSkuTitle = localizedText(sku.spec_values)
-    || localizedText(sku.title ?? sku.name ?? sku.label ?? sku.spec)
+  // Default labels can appear in translated spec values as well as sku_code.
+  // A parent title is safe only when there is exactly one priced SKU.
+  const rawSkuTitle = nonDefaultSkuCode(localizedText(sku.spec_values))
+    || nonDefaultSkuCode(localizedText(sku.title ?? sku.name ?? sku.label ?? sku.spec))
     || nonDefaultSkuCode(sku.sku_code)
     || (context.skuCount === 1 ? context.productTitle : "");
   const skuTitle = withBrandPrefix(rawSkuTitle, context.productTitle, context.category);
@@ -317,7 +319,7 @@ function localizedText(value) {
 
 function nonDefaultSkuCode(value) {
   const code = cleanText(value);
-  return code && !/^(?:default|sku[-_]?\d+)$/i.test(code) ? code : "";
+  return code && !/^(?:default(?:\s+(?:sku|variant))?|默认(?:规格)?|默認(?:規格)?|预设|預設|sku[-_ ]?\d+)$/i.test(code) ? code : "";
 }
 
 function normalizedDeliveryMode(value) {
