@@ -1,4 +1,47 @@
-# price-radar —— AI 订阅/API 报价导航
+# AIradar · AI 订阅价格雷达
+
+比较 ChatGPT、Claude、Gemini 等 AI 产品的公开报价，先看清规格，再决定去哪里买。
+
+**[打开网站](https://airadar.vip/) · [第一次比价](https://airadar.vip/help/compare-prices) · [订阅指南](https://airadar.vip/guides) · [我的关注](https://airadar.vip/following)**
+
+AIradar 把公开商品目录中的报价、交付方式、期限、币种和记录时间放在一起，方便你缩小选择范围，再回原店核验商品和结算条件。网站提供比较与提醒，不售卖账号，也不代替商家处理交易。
+
+## 三步完成一次比价
+
+1. **选产品和交付方式。** 例如进入 [ChatGPT Plus](https://airadar.vip/?family=chatgpt&product=chatgpt-plus)，先区分给自己的账号充值、交付另一个账号，以及共享等不同购买对象。
+2. **选同一组条件。** 核对期限、地区与币种，再选择“价格从低到高”。月卡与年卡、质保期限与订阅期限，不能直接混在一起比较。
+3. **回原店确认，或保存关注。** 检查最新价格、库存和售后说明；还没决定时保存明确规格，设置目标价或到期日期。登录后需主动开启邮件提醒，本机收藏和注册账号不会自动订阅邮件。
+
+## 可以用它做什么
+
+| 需求 | 入口 |
+|---|---|
+| 比较同条件报价，查看来源和更新时间 | [产品目录](https://airadar.vip/) |
+| 保存产品、目标价和到期日期，导出日历提醒 | [我的关注](https://airadar.vip/following) · [设置方法](https://airadar.vip/help/price-alerts) |
+| 看懂交付方式、价差与续费条件 | [订阅指南](https://airadar.vip/guides) |
+| 回看已有的同规格价格变化 | [行情周报](https://airadar.vip/weekly) |
+| 了解排序、店铺标记和数据范围 | [数据与排序说明](https://airadar.vip/help/data-and-ranking) |
+| 提交商品信息错误或申请收录店铺 | [数据反馈](https://airadar.vip/submit?type=feedback) · [提交店铺](https://airadar.vip/submit-shop) |
+
+周报只展示真实观察到的同规格变化；样本不足时会明确说明，不补造一周行情。综合排序、店铺收录和 X 关联各有含义，均不等于交易担保；如需单纯比较金额，请选择价格排序。
+
+## 使用界面
+
+![AIradar 订阅指南实际页面](docs/images/subscription-guides.png)
+
+订阅指南实站截图，拍摄于 2026-09-08。页面用于说明使用方式；实时商品、价格和界面以网站为准。
+
+## English overview
+
+AIradar compares public AI subscription offers by product, delivery method, duration and currency. Check quote timestamps, return to the original shop to verify purchase terms, or save a specific configuration with a price or expiry reminder. Email reminders are opt-in. Historical reports use observed data only. AIradar is an information service, not a seller or transaction guarantor.
+
+[Visit AIradar](https://airadar.vip/) · [Comparison guide](https://airadar.vip/help/compare-prices) · [Data methodology](https://airadar.vip/help/data-and-ranking)
+
+---
+
+## 开发与部署文档
+
+以下为采集、运行、数据维护和部署说明。
 
 按产品查看 AI 订阅与中转 API 的店铺、规格和报价，支持固定登记的原始店铺公开目录采集、SQLite 历史记录与规则化盯盘提醒。
 行情使用 Node ≥ 22 内置 `fetch` + `node:sqlite`；邮件使用已锁定版本的 `nodemailer`。
@@ -342,7 +385,7 @@ node radar.mjs submission-status FB-20260905-ABC234 resolved
 
 ## 订阅指南与帮助中心
 
-- `/guides` 和 `/help` 提供六篇服务端渲染内容，正文无需 JavaScript；通过固定白名单路由、导航、产品购买参考、关注页和 sitemap 互相连接。
+- `/guides` 和 `/help` 提供八篇服务端渲染内容，正文无需 JavaScript；通过固定白名单路由、导航、产品购买参考、关注页和 sitemap 互相连接。
 - 内容集中在 `lib/guides.mjs`，样式在 `lib/guide-styles.mjs`。新增文章需核验事实与链接，并手动填写真实发布/修订日期；报价刷新不更改文章日期。实时价格保留在报价页，文章只解释条件和操作。
 - 文章具有独立标题、描述、canonical、Article 与 BreadcrumbList 元数据；无效文章返回 404/noindex，尾斜线跳转到唯一地址。目录筛选不再将缺少说明的内部规格编号作为显示文字，原筛选键与价格比较规则保留。
 - `/admin/analytics` 增加每篇文章的最近 7/30 天阅读请求、随后打开报价的请求数，并显示内容统计开始时间。只保存固定文章标识的按日汇总；不保存来源网址或新增用户轨迹，不能将其当作成交或完整关注归因。

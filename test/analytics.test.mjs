@@ -18,7 +18,7 @@ test('指南统计仅记录固定文章标识和同站下一步比价，不保�
   a.record(request(undefined,{url:article,headers:{...request().headers,'user-agent':'Mozilla/5.0 PriceRadarQA'}}),200,now);
   a.record(request(undefined,{url:'/guides/missing'}),200,now);
   a.record(request(undefined,{url:article}),404,now);
-  const r=a.contentReport(7,now),row=r.rows.find(r=>r.path===article);assert.equal(row.views,1);assert.equal(row.quoteVisits,1);assert.equal(r.rows.find(r=>r.path==='/help/price-alerts').views,1);assert.equal(r.rows.length,6);
+  const r=a.contentReport(7,now),row=r.rows.find(r=>r.path===article);assert.equal(row.views,1);assert.equal(row.quoteVisits,1);assert.equal(r.rows.find(r=>r.path==='/help/price-alerts').views,1);assert.equal(r.rows.length,8);
   const stored=JSON.stringify(a.db.prepare('SELECT * FROM analytics_content_days').all());assert.doesNotMatch(stored,/private|never-store|203\.0\.113|https:|secret/);
   const html=analyticsContent(a,7);assert.match(html,/指南阅读与后续比价/);assert.match(html,/ChatGPT Plus 代充/);assert.match(html,/不代表关注、下单或成交/);
  }finally{a.close();}

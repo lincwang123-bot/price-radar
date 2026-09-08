@@ -4,8 +4,8 @@ import {openDb,storeSnapshot} from '../lib/db.mjs';
 import {createApp} from '../lib/web.mjs';
 import {buildProductDirectory,directoryQuotes} from '../lib/product-directory.mjs';
 
-const paths=['/help/compare-prices','/help/price-alerts','/help/data-and-ranking','/guides/chatgpt-plus-delivery','/guides/why-prices-differ','/guides/renewal-checklist'];
-test('six public articles are readable without JavaScript, linked, canonical and discoverable',async()=>{
+const paths=['/help/compare-prices','/help/price-alerts','/help/data-and-ranking','/guides/chatgpt-plus-delivery','/guides/why-prices-differ','/guides/renewal-checklist','/guides/claude-pro-buying','/guides/gemini-membership-options'];
+test('public articles are readable without JavaScript, linked, canonical and discoverable',async()=>{
  const db=openDb(':memory:');
  storeSnapshot(db,{source:'direct-shops',snapshotId:'guides-fixture',products:[{productId:'chatgpt-plus-recharge',name:'ChatGPT Plus',currency:'CNY',offers:[{offerId:'guide-offer',title:'ChatGPT Plus 1个月代充',price:100,currency:'CNY',status:'in_stock',stockCount:1,url:'https://example.com/plus'}]}]});
  const app=createApp({db});await new Promise(r=>app.listen(0,'127.0.0.1',r));const origin=`http://127.0.0.1:${app.address().port}`;
@@ -19,7 +19,7 @@ test('six public articles are readable without JavaScript, linked, canonical and
    assert.ok(map.includes('<loc>https://airadar.vip'+path+'</loc>'));
    assert.equal([...html.matchAll(/<h1\b/g)].length,1);
    if(paths.includes(path)){
-    assert.match(html,/<article\b/);assert.ok(html.includes('2026-09-08'));assert.match(html,/依据与相关说明/);
+    assert.match(html,/<article\b/);assert.match(html,/2026-09-0[89]/);assert.match(html,/依据与相关说明/);
     const json=JSON.parse(html.match(/<script type="application\/ld\+json">(.*?)<\/script>/s)[1]);
     const article=json.find(s=>s['@type']==='Article');assert.equal(article.url,'https://airadar.vip'+path);assert.ok(article.headline);assert.equal(article.author.name,'AI订阅雷达');
     const body=html.split('<article')[1].split('</article>')[0];
