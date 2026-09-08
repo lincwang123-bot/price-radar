@@ -91,7 +91,7 @@ export function classifyDirectOffer({ title, category = "", sourceId = "", extra
       has(titleText, /(?:重置|恢复)\s*服务|联系客服|确认.*资格/)) return null;
 
   // 邮箱标题经常带有“已注册 OpenAI”等用途说明，需先于订阅关键词判断。
-  if (has(titleText, /gmail|outlook|hotmail|微软邮箱|谷歌邮箱|邮箱账号|邮箱老号|域名邮箱/) ||
+  if (has(titleText, /^google\s*个人邮箱(?:\s|$)|gmail|outlook|hotmail|微软邮箱|谷歌邮箱|邮箱账号|邮箱老号|域名邮箱/) ||
       (has(categoryText, /^邮箱产品$/) && has(titleText, /mail\.com|mail\.tm|rambler|gmx|firstmail/))) {
     return PRODUCTS["email-accounts"];
   }

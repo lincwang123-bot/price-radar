@@ -40,6 +40,8 @@ const cases = [
   ["Codex 点数额度充值", "ChatGPT", "api-cdk-credits"],
   ["OpenAI 哥伦比亚手机号短效接码 SMS", "ChatGPT", "verification-service"],
   ["Gmail 老号带辅助邮箱", "邮箱", "email-accounts"],
+  ["【Google个人邮箱】3个月新号｜2FA＋原手机号链接", "", "email-accounts"],
+  ["【Google个人邮箱】新号新号，账号+密码", "", "email-accounts"],
 ];
 
 test("明确的原店商品映射到稳定产品分类", () => {
