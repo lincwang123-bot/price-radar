@@ -62,11 +62,11 @@ test('自动识别新Dujiao/Kami；缓存按批准version隔离',async t=>{
   assert.equal(result.offers.length,1);assert.equal(calls,3);
 });
 
-test('未知系统仅探测两个公开API且WAF立即停止，无登录或挑战绕过',async t=>{
+test('未知系统补查公开页面，WAF立即停止，无登录或挑战绕过',async t=>{
   const f=fixture(t);f.save([merchant()]);let calls=0;
-  const ctx={...f,merchantFetchFactory:()=>async()=>{calls++;return json({data:[{id:1,email:'not-a-product'}]});}};
+  const ctx={...f,sleep:async()=>{},merchantFetchFactory:()=>async url=>{calls++;return url.endsWith('/robots.txt')?new Response('User-agent: *\nAllow: /'):json({data:[{id:1,email:'not-a-product'}]});}};
   let result=await collectApprovedMerchants(ctx,{manifest:readApprovedManifest(f.merchantBridgeDir),capturedAt:at()});
-  assert.equal(result.health[0].status,'waiting_adapter');assert.equal(calls,2);assert.equal(result.offers.length,0);
+  assert.equal(result.health[0].status,'waiting_adapter');assert.equal(calls,4);assert.equal(result.offers.length,0);
   f.save([merchant('https://blocked-shop.com/')]);calls=0;
   ctx.merchantFetchFactory=()=>async()=>{calls++;return json({message:'captcha required'},403);};
   result=await collectApprovedMerchants(ctx,{manifest:readApprovedManifest(f.merchantBridgeDir),capturedAt:at()});

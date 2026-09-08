@@ -58,7 +58,7 @@ test('拒绝访问立即停止且不泄露原响应；未知系统明确待适�
   await processMerchantPreflights({ ...f, merchantFetchFactory: () => async () => { calls++; return new Response('secret backend trace', { status: 403 }); } });
   assert.equal(calls, 1); assert.equal(f.result().status, 'unavailable'); assert.ok(!JSON.stringify(f.result()).includes('secret'));
   const g = fixture(t);
-  await processMerchantPreflights({ ...g, merchantFetchFactory: () => async () => json({ unrelated: true }) });
+  await processMerchantPreflights({ ...g, sleep:async()=>{}, merchantFetchFactory: () => async url => url.endsWith('/robots.txt')?new Response('User-agent: *\nAllow: /'):json({ unrelated: true }) });
   assert.equal(g.result().status, 'waiting_adapter');
 });
 
@@ -91,15 +91,15 @@ test('失败原因按可信状态和错误代码分类，HTTP 200 安全校验�
   }
 });
 
-test('仅记录实际探测证据：两个404、内容格式和未知系统分开；成功适配不受先前404影响', async t => {
-  for (const [respond, code, httpStatus] of [
-    [() => new Response('secret', { status: 404 }), 'not_found', 404],
-    [() => new Response('<html>普通店铺首页，不是故障</html>', { headers: { 'content-type': 'text/html' } }), 'invalid_catalog'],
-    [() => json({ unrecognized: true }), 'unsupported_platform'],
+test('接口和页面均404与无商品页面分开；成功适配不受先前404影响', async t => {
+  for (const [respond, code, httpStatus, count, status] of [
+    [() => new Response('secret', { status: 404 }), 'not_found', 404, 4, 'waiting_adapter'],
+    [() => new Response('<html>普通店铺首页，不是故障</html>', { headers: { 'content-type': 'text/html' } }), 'unsupported_platform', undefined, 4, 'waiting_adapter'],
+    [url => url.endsWith('/robots.txt')?new Response('User-agent: *\nAllow: /'):json({ unrecognized: true }), 'unsupported_platform', undefined, 4, 'waiting_adapter'],
   ]) {
     const f = fixture(t); let calls = 0;
-    await processMerchantPreflights({ ...f, merchantFetchFactory: () => async () => { calls++; return respond(); } });
-    assert.equal(calls, 2); assert.equal(f.result().status, 'waiting_adapter');
+    await processMerchantPreflights({ ...f, sleep:async()=>{}, merchantFetchFactory: () => async url => { calls++; return respond(url); } });
+    assert.equal(calls, count); assert.equal(f.result().status, status);
     assert.equal(f.result().reasonCode, code); assert.equal(f.result().httpStatus, httpStatus);
   }
   const f = fixture(t); let calls = 0;

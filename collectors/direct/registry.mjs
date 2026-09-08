@@ -9,6 +9,10 @@ import { collectAichong } from './aichong.mjs';
 import { collectBBShare } from './bbshare.mjs';
 import { collectNobrisk } from './nobrisk.mjs';
 import {merchantUrlBlocked} from '../../lib/merchant-blocklist.mjs';
+import { collectPublicHtml, PUBLIC_HTML_MAX_REQUESTS } from './public-html.mjs';
+import { authorizeMerchantTarget, isAuthorizedMerchantTarget } from '../../lib/merchant-target-capability.mjs';
+import { createPublicNetworkFetch } from '../../lib/public-network-fetch.mjs';
+import { classifyPreflightError } from '../../lib/merchant-preflight-guidance.mjs';
 
 // 这里只登记我们逐个核验过的原站公开入口。URL 不接受运行时任意传入，
 // 避免把采集器变成通用代理或 SSRF 入口。
@@ -198,5 +202,20 @@ export function collectorFor(target) {
   if(merchantUrlBlocked(target.origin))throw new Error('该店铺已被站方暂停采集');
   const collector = COLLECTORS[target.kind];
   if (!collector) throw new Error(`来源 ${target.id} 没有对应采集器: ${target.kind}`);
-  return collector;
+  if (target.shopNo || target.token || ['bbshare','aikashop','aichong'].includes(target.kind)) return collector;
+  return async (source, options = {}) => {
+    try { return await collector(source, options); }
+    catch (error) {
+      // Shared-domain marketplaces require their tenant-specific adapter. Never
+      // treat a host-wide catalogue as one merchant's stock, or retry a WAF.
+      const registered = TARGETS.some(row => row.id === source.id && row.origin === source.origin && row.kind === source.kind);
+      if ((!registered && !isAuthorizedMerchantTarget(source)) || source.shopNo || source.token || ['bbshare','aikashop','aichong'].includes(source.kind)
+        || !['not_found','invalid_catalog','server_error'].includes(classifyPreflightError(error).reasonCode)) throw error;
+      const fetchImpl = options.fetchImpl && options.fetchImpl !== globalThis.fetch ? options.fetchImpl
+        : (options.publicFetchFactory || createPublicNetworkFetch)(source.origin, { maxRequests: PUBLIC_HTML_MAX_REQUESTS, totalTimeoutMs: 30000 });
+      const publicTarget = authorizeMerchantTarget({ ...source });
+      try { return await collectPublicHtml(publicTarget, { ...options, fetchImpl }); }
+      catch (fallbackError) { if (fallbackError.code === 'UNSUPPORTED_PUBLIC_HTML') throw error; throw fallbackError; }
+    }
+  };
 }
