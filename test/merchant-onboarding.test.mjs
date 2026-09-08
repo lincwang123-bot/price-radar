@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { openSubmissionsDb } from '../lib/submissions.mjs';
 import { canonicalShopIdentity, createMerchantApplication, listMerchantApplications, getMerchantApplication,
-  reviewMerchantApplication, approvedMerchantBadges, syncApprovedMerchantManifest, merchantBridgeDir } from '../lib/merchant-onboarding.mjs';
+  reviewMerchantApplication, approvedMerchantBadges, syncApprovedMerchantManifest, merchantBridgeDir, updateMerchantEmail } from '../lib/merchant-onboarding.mjs';
 
 const payload = (over = {}) => ({ shopName: '测试商店', shopUrl: 'https://merchant-shop.com/', platform: 'auto', productAreas: ['chatgpt'], email:'owner@example.org', contact: 'owner@example.org', details: '公开商品目录', consent: true, ...over });
 const options = { now: new Date('2026-09-07T04:00:00Z'), clientAddress: '198.51.100.3', secret: 'x'.repeat(32) };
@@ -16,6 +16,20 @@ function fixture(t) {
   t.after(() => { db.close(); rmSync(dir, { recursive: true, force: true }); });
   return { db, dir };
 }
+
+test('operator can update email and approve without queuing unrequested notices while retaining audit and manifest', t => {
+  const {db,dir}=fixture(t);
+  const {id}=createMerchantApplication(db,payload(),options);
+  const before=db.prepare('SELECT COUNT(*) n FROM merchant_mail_outbox').get().n;
+  updateMerchantEmail(db,id,'confirmed@example.org',{expectedVersion:1,confirmed:true,notify:false});
+  const result=reviewMerchantApplication(db,id,approval(),{bridgeDir:dir,notify:false});
+  assert.equal(result.status,'approved');
+  assert.equal(result.email,'confirmed@example.org');
+  assert.equal(result.actions.at(-1).action,'approve');
+  assert.equal(db.prepare('SELECT COUNT(*) n FROM merchant_email_actions').get().n,1);
+  assert.equal(db.prepare('SELECT COUNT(*) n FROM merchant_mail_outbox').get().n,before);
+  assert.equal(JSON.parse(readFileSync(path.join(dir,'approved.json'),'utf8')).merchants.length,1);
+});
 
 test('shop identity keeps shared merchants separate and independent www hosts exact', () => {
   assert.equal(canonicalShopIdentity('https://www.16688.com.cn/shop/S123'), 'shop:16688:S123');
