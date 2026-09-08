@@ -17,12 +17,12 @@
   const expired=row.status==='draft'&&Date.parse(row.expiresAt)<=Date.now();$('[data-x-proof]').hidden=row.status!=='draft'||expired;
   if(expired)$('[data-x-status]').textContent='认领码已过期，请重新申请';
   $('[data-x-code]').textContent=row.code;
-  const proof='我是这家店铺的经营者，申请在 AirRadar 关联我的 X 账号 @'+row.xHandle+'。\n店铺：'+row.shopUrl+'\n认领码：'+row.code+'\n店铺页：https://airadar.vip/shop?id='+row.shopId;
+  const proof='我是这家店铺的经营者，申请在 AIradar 关联我的 X 账号 @'+row.xHandle+'。\n店铺：'+row.shopUrl+'\n认领码：'+row.code+'\n店铺页：https://airadar.vip/shop?id='+row.shopId;
   $('[data-x-proof-text]').value=proof;
   $('[data-x-intent]').href='https://twitter.com/intent/tweet?'+new URLSearchParams({text:proof});
   $('[data-x-published]').hidden=row.status!=='approved';
   $('[data-x-shop]').href='/shop?id='+row.shopId;
-  $('[data-x-share]').href='https://twitter.com/intent/tweet?'+new URLSearchParams({text:'我的店铺 '+row.shopName+' 已在 AirRadar 关联 X 账号 @'+row.xHandle+'，欢迎查看公开报价。',url:'https://airadar.vip/shop?id='+row.shopId});
+  $('[data-x-share]').href='https://twitter.com/intent/tweet?'+new URLSearchParams({text:'我的店铺 '+row.shopName+' 已在 AIradar 关联 X 账号 @'+row.xHandle+'，欢迎查看公开报价。',url:'https://airadar.vip/shop?id='+row.shopId});
  }
  const start=$('[data-x-start]');
  start.addEventListener('submit',async e=>{e.preventDefault();const b=start.querySelector('button[type=submit]');b.disabled=true;try{const input=Object.fromEntries(new FormData(start));input.consent=start.elements.consent.checked;const row=await api('start',input);capability={id:row.id,token:row.token};storeReceipt(capability);history.replaceState(null,'',receiptUrl());render(row);message('认领码已生成。请保存进度链接，完成证明后再提交审核。');}catch(error){message(error.message,true);}finally{b.disabled=false;}});

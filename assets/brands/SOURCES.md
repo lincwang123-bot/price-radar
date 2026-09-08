@@ -2,11 +2,11 @@
 
 Verified: 2026-09-07.
 
-These are third-party trademarks, included only to identify the named products in the directory. They do not imply partnership, certification, or endorsement. Availability for download is not a grant of trademark rights; follow each owner’s current brand guidelines. Keep Airadar’s own branding distinct.
+These are third-party trademarks, included only to identify the named products in the directory. They do not imply partnership, certification, or endorsement. Availability for download is not a grant of trademark rights; follow each owner’s current brand guidelines. Keep AIradar’s own branding distinct.
 
 No AI-generated approximations or third-party icon library replacements are used. SVG originals are not redrawn or recolored. The PNG wrappers embed the original image bytes without cropping, resampling, or recoloring. `color-scheme: light` selects the supplied light-background variant of adaptive favicons for this light interface.
 
-Assets are stored and served locally through a fixed allowlist; opening Airadar does not request these images from third-party hosts. Filenames receive content-hash query strings for immutable caching. This document is not served by the public asset route.
+Assets are stored and served locally through a fixed allowlist; opening AIradar does not request these images from third-party hosts. Filenames receive content-hash query strings for immutable caching. This document is not served by the public asset route.
 
 | File | Identifies | Official page | Asset URL | Notes |
 | --- | --- | --- | --- | --- |

@@ -15,10 +15,10 @@ const merchant={shopName:'测试商店',shopUrl:'https://mail-qa-shop.com/',prod
 test('every notification has branded HTML, useful next steps and a full text alternative; dynamic text cannot inject HTML',()=>{
   for(const stage of Object.keys(MAIL_STAGES)){
     const msg=merchantMailMessage({application_id:'MA-20260907-TEST',recipient:'owner@example.org',stage,event_key:'test:'+stage,public_reply:'资料已核对，请补充店铺介绍。\n<img src=x onerror=alert(1)>'},'notice@airadar.vip',{replyEnabled:true});
-    assert.match(msg.html,/max-width:600px/);assert.match(msg.html,/Airadar/);assert.match(msg.html,/&lt;img/);
-    assert.equal(msg.from.name,'Airadar 通知');assert.equal(msg.from.address,'notice@airadar.vip');
-    assert.match(msg.html,/Airadar · airadar\.vip/);assert.match(msg.subject,/^Airadar：/);
-    assert.doesNotMatch(JSON.stringify(msg),/AirRadar/);
+    assert.match(msg.html,/max-width:600px/);assert.match(msg.html,/AIradar/);assert.match(msg.html,/&lt;img/);
+    assert.equal(msg.from.name,'AIradar 通知');assert.equal(msg.from.address,'notice@airadar.vip');
+    assert.match(msg.html,/AIradar · airadar\.vip/);assert.match(msg.subject,/^AIradar：/);
+    assert.doesNotMatch(JSON.stringify(msg),/AirRadar|AIRRADAR|Airadar\b|AIRADAR/);
     assert.doesNotMatch(msg.html,/<script|<img|onerror="|@import/);
     assert.match(msg.text,/接下来/);assert.ok(msg.text.length>150);assert.match(msg.text,/申请编号/);
     assert.match(msg.html,/href="https:\/\/airadar.vip\/"/);
@@ -26,12 +26,12 @@ test('every notification has branded HTML, useful next steps and a full text alt
   const noReply=merchantMailMessage({application_id:'FB-TEST',stage:'need_info',event_key:'test'},'notice@airadar.vip');
   assert.doesNotMatch(noReply.text,/回复此邮件/);
 });
-test('public partnership content and metadata use Airadar without changing the domain',()=>{
+test('public partnership content and metadata use AIradar without changing the domain',()=>{
   const html=decorateSeo('<html><head><title>商家合作</title></head><body>'+advertiseContent()+'</body></html>',new URL('https://airadar.vip/advertise'),null);
-  assert.match(html,/Airadar · 商家合作/);
-  assert.match(html,/了解 Airadar 商品/);
+  assert.match(html,/AIradar · 商家合作/);
+  assert.match(html,/了解 AIradar 商品/);
   assert.match(html,/https:\/\/airadar\.vip\/advertise/);
-  assert.doesNotMatch(html,/AirRadar/);
+  assert.doesNotMatch(html,/AirRadar|AIRRADAR|Airadar\b|AIRADAR/);
 });
 test('approval requires a valid owner email and atomically queues the approval notice',async t=>{
   const db=privateFixture(t),{id}=createMerchantApplication(db,merchant,{now});
@@ -48,7 +48,7 @@ test('approval requires a valid owner email and atomically queues the approval n
   assert.equal(getMerchantApplication(db,id).status,'approved');
   const sent=[];
   await drainMerchantMail(db,{transport:{sendMail:async m=>{sent.push(m);return {accepted:[m.to]};}},from:'notice@airadar.vip',now,env:{MERCHANT_MAIL_REPLY_TO:'hello@airadar.vip'}});
-  const approval=sent.filter(m=>m.subject==='Airadar：店铺审核已通过');
+  const approval=sent.filter(m=>m.subject==='AIradar：店铺审核已通过');
   assert.equal(approval.length,1);assert.equal(approval[0].to,merchant.email);
   assert.equal(approval[0].replyTo,'hello@airadar.vip');assert.match(approval[0].text,/审核通过不等于已经上架/);
   assert.doesNotMatch(JSON.stringify(sent),/内部核验记录/);

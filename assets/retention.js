@@ -1,4 +1,4 @@
-/* AirRadar opt-in follow list. Plain browser JavaScript; no external resources. */
+/* AIradar opt-in follow list. Plain browser JavaScript; no external resources. */
 (() => {
  'use strict';
  const $=(s,p=document)=>p.querySelector(s),$$=(s,p=document)=>[...p.querySelectorAll(s)];
@@ -113,8 +113,8 @@
   const w=watches().find(w=>w.id===id);if(!w?.renewalDate)return;
   const p=product(w.productKey),escape=v=>String(v).replace(/\\/g,'\\\\').replace(/\n/g,'\\n').replace(/[,;]/g,'\\$&');
   const date=w.renewalDate.replaceAll('-',''),next=new Date(Date.parse(w.renewalDate)+86400000).toISOString().slice(0,10).replaceAll('-','');
-  const text=['BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//AirRadar//Renewal//ZH','CALSCALE:GREGORIAN','BEGIN:VEVENT','UID:'+w.id+'@airadar.vip','DTSTAMP:'+new Date().toISOString().replace(/[-:]/g,'').replace(/\.\d{3}Z/,'Z'),'DTSTART;VALUE=DATE:'+date,'DTEND;VALUE=DATE:'+next,'SUMMARY:'+escape((p?.name||w.productKey)+' 订阅到期'),'DESCRIPTION:'+escape('你自行设置的到期记录。续费前查看最新报价：https://airadar.vip'+href(w)),'URL:https://airadar.vip'+href(w),'BEGIN:VALARM','TRIGGER:-P'+Number(w.leadDays||0)+'D','ACTION:DISPLAY','DESCRIPTION:订阅即将到期','END:VALARM','END:VEVENT','END:VCALENDAR',''].join('\r\n');
-  download(new Blob([text],{type:'text/calendar;charset=utf-8'}),'AirRadar-'+w.productKey+'-'+date+'.ics');toast('日历文件已生成，导入后由日历应用提醒。');
+  const text=['BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//AIradar//Renewal//ZH','CALSCALE:GREGORIAN','BEGIN:VEVENT','UID:'+w.id+'@airadar.vip','DTSTAMP:'+new Date().toISOString().replace(/[-:]/g,'').replace(/\.\d{3}Z/,'Z'),'DTSTART;VALUE=DATE:'+date,'DTEND;VALUE=DATE:'+next,'SUMMARY:'+escape((p?.name||w.productKey)+' 订阅到期'),'DESCRIPTION:'+escape('你自行设置的到期记录。续费前查看最新报价：https://airadar.vip'+href(w)),'URL:https://airadar.vip'+href(w),'BEGIN:VALARM','TRIGGER:-P'+Number(w.leadDays||0)+'D','ACTION:DISPLAY','DESCRIPTION:订阅即将到期','END:VALARM','END:VEVENT','END:VCALENDAR',''].join('\r\n');
+  download(new Blob([text],{type:'text/calendar;charset=utf-8'}),'AIradar-'+w.productKey+'-'+date+'.ics');toast('日历文件已生成，导入后由日历应用提醒。');
  }
  function wrap(ctx,text,x,y,maxWidth,lineHeight,maxLines=3){let line='',n=0;for(const char of text){if(ctx.measureText(line+char).width>maxWidth&&line){ctx.fillText(line,x,y+n*lineHeight);n++;line='';if(n>=maxLines)return y+n*lineHeight;}line+=char;}if(line)ctx.fillText(line,x,y+n*lineHeight);return y+(n+1)*lineHeight;}
  async function share(groupId,date=''){
@@ -122,14 +122,14 @@
   const historical=date?await api('share?group='+encodeURIComponent(groupId)+'&date='+date):null;
   const data=historical?.group||g;if(!historical&&g.state!=='available')throw new Error('当前没有有效报价可生成卡片');
   const canvas=document.createElement('canvas');canvas.width=1200;canvas.height=675;const c=canvas.getContext('2d');
-  c.fillStyle='#f3f6ee';c.fillRect(0,0,1200,675);c.fillStyle='#1d654f';c.fillRect(0,0,16,675);c.font='600 22px system-ui';c.fillText('AIRRADAR / AI 产品价格观察',65,65);
+  c.fillStyle='#f3f6ee';c.fillRect(0,0,1200,675);c.fillStyle='#1d654f';c.fillRect(0,0,16,675);c.font='600 22px system-ui';c.fillText('AIradar / AI 产品价格观察',65,65);
   c.fillStyle='#1d3227';c.font='700 56px system-ui';wrap(c,data.name,65,158,1070,65,2);
   c.font='400 24px system-ui';c.fillStyle='#607567';wrap(c,data.spec+' · '+data.currency,65,260,1060,36,2);
   c.fillStyle='#1d654f';c.font='700 90px system-ui';c.fillText(data.currency+' '+data.price,65,425);c.font='400 22px system-ui';c.fillStyle='#607567';c.fillText(historical?'最后观察起价 · 此前 '+historical.firstPrice:'当前已收录的同规格挂牌起价',65,468);
   c.fillStyle='#d6e1d5';c.fillRect(65,522,1070,1);c.font='400 22px system-ui';c.fillStyle='#344e3d';c.fillText('airadar.vip · 查价格，看变化',65,570);
   c.font='400 17px system-ui';c.fillStyle='#788779';c.fillText('观察截至 '+(date||new Date(g.observedAt).toLocaleString('zh-CN'))+' · 最终价格与适用条件以店铺结算页为准',65,616);
   const blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/png'));if(!blob)throw new Error('卡片生成失败');
-  download(blob,'AirRadar-'+g.productKey+'-'+(date||new Date().toISOString().slice(0,10))+'.png');
+  download(blob,'AIradar-'+g.productKey+'-'+(date||new Date().toISOString().slice(0,10))+'.png');
   const link=date?'https://airadar.vip/weekly?date='+date:'https://airadar.vip'+href({productKey:g.productKey,groupId:g.id});
   try{await navigator.clipboard.writeText(link);toast('分享卡片已生成，页面链接已复制。');}catch{toast('分享卡片已生成；可复制浏览器中的页面地址。');}event('share',g.id,true);
  }

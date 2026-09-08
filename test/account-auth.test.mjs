@@ -131,7 +131,7 @@ test('注册、重置邮件用途准确，不发送密码；第五次正确验�
   const challenge=f.code();
   const row=f.db.prepare('SELECT * FROM retention_mail').get();
   const message=retentionMessage(f.store,row,{groups:[]},'notice@airadar.vip',{now:new Date('2026-09-08T10:00:00Z')});
-  assert.match(message.subject,/Airadar.*注册/);assert.match(message.html,/验证码/);assert.ok(!message.text.includes(password));assert.ok(!message.headers?.['List-Unsubscribe']);
+  assert.match(message.subject,/AIradar.*注册/);assert.match(message.html,/验证码/);assert.ok(!message.text.includes(password));assert.ok(!message.headers?.['List-Unsubscribe']);
   let sent=0;
   const transport={sendMail:async mail=>{sent++;assert.match(mail.subject,/注册/);assert.ok(mail.text.includes(challenge.code));assert.ok(!mail.text.includes(password));return {accepted:[mail.to]};}};
   await drainRetentionMail(f.store,{groups:[]},{transport,from:'notice@airadar.vip',now:new Date('2026-09-08T10:00:00Z')});
