@@ -195,6 +195,13 @@ export function classifyDirectOffer({ title, category = "", sourceId = "", extra
     // Max 不应因为标题同时含“代充 / 月卡”而掉入 Pro 排行。
     return null;
   }
+  // Some storefronts abbreviate Claude Max as “Claude 5x/20x”. Only a
+  // confirmed Claude category plus one unambiguous multiplier may fill Max;
+  // a contradictory explicit Pro label remains unclassified, never Pro-priced.
+  if (claude && (fiveX || twentyX)) {
+    if (has(titleText, /\bpro\b/) || !has(categoryText, /claude|anthropic/)) return null;
+    return PRODUCTS[twentyX ? 'claude-max-20x' : 'claude-max-5x'];
+  }
   if (claude && has(titleText, /\bpro\b|月卡|订阅|直充|代充/)) return PRODUCTS["claude-pro-month"];
 
   if (gemini && has(titleText, /激活.*权限|权限.*激活/)) return PRODUCTS["gemini-activation-service"];

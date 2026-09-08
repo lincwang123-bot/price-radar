@@ -8,6 +8,15 @@ import {
   stableDirectSnapshotId,
 } from "../collectors/direct/catalog.mjs";
 
+test('confirmed Claude category with a single multiplier never falls into Pro',()=>{
+ for(const [multiplier,expected] of [['5x','claude-max-5x'],['20x','claude-max-20x']]){
+  assert.equal(classifyDirectOffer({title:`Claude ${multiplier} · 1个月 · 代充`,category:'Claude'})?.id,expected);
+  assert.equal(classifyDirectOffer({title:`Claude Pro ${multiplier} 代充`,category:'Claude'}),null);
+ }
+ assert.equal(classifyDirectOffer({title:'Claude 5x/20x 代充',category:'Claude'}),null);
+ assert.equal(classifyDirectOffer({title:'Claude 5x 代充',category:'未核对'}),null);
+});
+
 const cases = [
   ["GPT PLUS 充值卡密(IOS美区质保)", "ChatGPT", "chatgpt-plus-recharge"],
   ["ChatGPT Plus年卡 正价订阅 IOS CDK", "ChatGPT", "chatgpt-plus-recharge-12m"],

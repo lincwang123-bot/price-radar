@@ -6,11 +6,13 @@ import { collectDujiao } from "./dujiao.mjs";
 import { collectAikaShop } from './aikashop.mjs';
 import { PLATFORM16688_SHOPS, collect16688 } from './platform16688.mjs';
 import { collectAichong } from './aichong.mjs';
+import { collectBBShare } from './bbshare.mjs';
 import {merchantUrlBlocked} from '../../lib/merchant-blocklist.mjs';
 
 // 这里只登记我们逐个核验过的原站公开入口。URL 不接受运行时任意传入，
 // 避免把采集器变成通用代理或 SSRF 入口。
 const TARGETS = [
+  {id:'bbshare',name:'BBShare',kind:'bbshare',origin:'https://www.bbshare.site',intervalMinutes:60},
   ...PLATFORM16688_SHOPS.map(target => ({ ...target, kind: 'platform16688', intervalMinutes: 60 })),
   { id: 'aichong', name: 'AI补给站', kind: 'aichong', origin: 'https://aichong.xin', intervalMinutes: 60 },
   {id:'aikashop',name:'AI卡商城',kind:'aikashop',origin:'https://aikashop.com',intervalMinutes:720},
@@ -146,11 +148,14 @@ const COLLECTORS = {
   aikashop: collectAikaShop,
   platform16688: collect16688,
   aichong: collectAichong,
+  bbshare: collectBBShare,
 };
 
 // Fixed public storefronts eligible for an explicitly operated local collector.
 // Listing here does not enable requests from the production server.
 export const SHOP_API_TARGET_IDS = Object.freeze(TARGETS.filter(target => target.kind === 'shopApi').map(target => target.id));
+// An adapter registration is not approval and does not add a default collector.
+export const MERCHANT_ONLY_TARGET_IDS=Object.freeze(['bbshare']);
 
 function shop(id, name, token) {
   return {

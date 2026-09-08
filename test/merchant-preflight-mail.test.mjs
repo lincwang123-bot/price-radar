@@ -106,6 +106,22 @@ test('all known failure reasons have bounded, safe owned copy; no valid quotes r
  assert.equal(notice.stage,'need_info');assert.match(notice.publicReply,/代充或成品号/);assert.match(notice.publicReply,/不需要为了通过测试修改实际商品条件/);
 });
 
+test('actionable mail offers simple steps and a forwardable AI brief, never asks merchants to invent an API',()=>{
+ for(const reasonCode of ['not_found','unsupported_platform','invalid_catalog','redirect_disallowed','access_denied','login_required','robots_disallowed','rate_limited','no_valid_quotes']){
+  const status=reasonCode==='no_valid_quotes'?'no_valid_offers':'unavailable';
+  const notice=preflightFailureNotice(merchant,{status,result:{status,reasonCode,checkedAt:now.toISOString()}});
+  assert.match(notice.publicReply,/请回复以下资料/);assert.match(notice.publicReply,/转发给建站服务商或 AI/);
+  assert.match(notice.publicReply,/不会操作/);assert.match(notice.publicReply,/不要猜测接口/);
+  assert.match(notice.publicReply,/不要修改代码或关闭防护/);
+  assert.match(notice.publicReply,/无法确认.*无法确认/);
+  assert.doesNotMatch(notice.publicReply,/必须.*(?:API|代码)|新建.*接口/);
+ }
+ for(const reasonCode of ['unknown','internal_error','timeout','network_error','tls_error','dns_error','server_error','collector_limit']){
+  const notice=preflightFailureNotice(merchant,{status:'unavailable',result:{status:'unavailable',reasonCode,checkedAt:now.toISOString()}});
+  assert.equal(notice.stage,'test_delayed');assert.doesNotMatch(notice.publicReply,/转发给建站服务商或 AI/);
+ }
+});
+
 test('missing recipient and invalid result do not enqueue mail; stale automatic ready is retired even when reason was mailed already',t=>{
  const a=fixture(t),options=a.result();
  a.db.prepare('UPDATE merchant_applications SET email=NULL WHERE public_id=?').run(a.id);
