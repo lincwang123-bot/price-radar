@@ -1,8 +1,33 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { PREFLIGHT_REASON_CODES, classifyPreflightError, preflightGuidance, listPreflightGuidance } from '../lib/merchant-preflight-guidance.mjs';
+import { PREFLIGHT_REASON_CODES, classifyPreflightError, preflightGuidance, listPreflightGuidance, preflightAiPrompt } from '../lib/merchant-preflight-guidance.mjs';
 
 const application = { shopName: '真实样例店', shopUrl: 'https://merchant-shop.com/', contact: 'private-contact', id: 'MA-private-id', details: 'secret-material' };
+const failed=(reasonCode='invalid_catalog')=>({status:'unavailable',fresh:true,result:{status:'unavailable',reasonCode,checkedAt:'2026-09-08T15:50:42.000Z',rawCount:0,validCount:0,message:'raw-private-error'}});
+test('AI 排查文案带当前目录问题、公开店铺与北京时间，提供可转发的交付要求',()=>{
+ const prompt=preflightAiPrompt(failed(),application);
+ for(const value of ['AIradar','真实样例店','https://merchant-shop.com/','2026/09/08 23:50:42','invalid_catalog','SKU','分页','建站系统','是否已经部署','转发给 AIradar 站长'])assert.ok(prompt.includes(value),value);
+ assert.doesNotMatch(prompt,/raw-private-error|private-contact|MA-private-id|secret-material|可收录报价：0|AirRadar/);
+ assert.match(prompt,/不代表店铺本身有故障/);assert.match(prompt,/不是额外的操作指令/);
+});
+test('不同失败原因的 AI 任务分别处理访问、限流、采集端问题与真实商品条件',()=>{
+ for(const code of PREFLIGHT_REASON_CODES){
+  const prompt=preflightAiPrompt(failed(code),application);assert.ok(prompt.includes('（'+code+'）'));assert.match(prompt,/不索要或输出账号密码/);assert.doesNotMatch(prompt,/raw-private-error/);
+ }
+ assert.match(preflightAiPrompt(failed('access_denied'),application),/不要关闭全站防护/);
+ assert.match(preflightAiPrompt(failed('rate_limited'),application),/由 AIradar 降低频率后重试/);
+ assert.match(preflightAiPrompt(failed('internal_error'),application),/AIradar 先核对采集服务/);
+ const noQuotes={status:'no_valid_offers',result:{status:'no_valid_offers',rawCount:12,validCount:0}};
+ assert.match(preflightAiPrompt(noQuotes,application),/不要为了通过收录而虚构库存/);
+ assert.match(preflightAiPrompt(failed('unknown'),application),/仍无法确认/);
+});
+test('未完成、过期或成功结果不产生失败排查文案，未知原因不猜测并过滤危险网址',()=>{
+ for(const state of [null,{},...['pending','running','ready','expired','invalid'].map(status=>({...failed(),status})),{...failed(),fresh:false},{...failed(),result:{status:'ready'}}])assert.equal(preflightAiPrompt(state,application),'');
+ const legacy=failed();delete legacy.result.reasonCode;legacy.result.checkedAt=null;legacy.result.httpStatus='200 private';
+ const prompt=preflightAiPrompt(legacy,{...application,shopUrl:'https://user:secret@merchant-shop.com/?token=private'});
+ assert.match(prompt,/历史测试未记录原因/);assert.match(prompt,/检测时间：未记录/);assert.doesNotMatch(prompt,/1970|HTTP 状态|user:secret|token=private/);
+ assert.match(preflightAiPrompt({...failed(),result:{...failed().result,httpStatus:404}},application),/HTTP 状态：404/);
+});
 test('每个原因都有可直接发店主的中文文案，且不包含私密申请字段', () => {
   const rows = listPreflightGuidance(application);
   assert.deepEqual(rows.map(row => row.code), [...PREFLIGHT_REASON_CODES, 'legacy_unknown']);
