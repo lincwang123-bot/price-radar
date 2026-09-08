@@ -124,8 +124,10 @@ test('merchant admin protects private intake and requires tested samples before 
     ] }));
     clock += 60_001;
     assert.equal((await post(detailPath, { ...fields, version: '3' }, session)).status, 422, 'old version samples cannot reapprove');
-    await finishPreflight(3);
-    assert.equal((await post(detailPath, { ...fields, version: '3' }, session)).status, 303);
+    assert.equal((await post(detailPath, {...fields,action:'test',version:'3'},session)).status,422,'paused applications must be restored before testing');
+    assert.equal((await post(detailPath, {...fields,action:'restore',version:'3',queueAction:'true'},session)).status,303);
+    await finishPreflight(4);
+    assert.equal((await post(detailPath, { ...fields, version: '4' }, session)).status, 303);
     for (const target of [detailPath, '/admin/merchants?status=approved']) {
       const reapproved = await (await get(target)).text();
       assert.match(reapproved, /badge">等待采集/);
