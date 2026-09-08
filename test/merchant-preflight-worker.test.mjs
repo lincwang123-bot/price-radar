@@ -83,9 +83,9 @@ test('失败原因按可信状态和错误代码分类，HTTP 200 安全校验�
   ];
   for (const [respond, reasonCode, httpStatus] of variants) {
     const f = fixture(t); let calls = 0;
-    await processMerchantPreflights({ ...f, merchantFetchFactory: () => async () => { calls++; return respond(); } });
+    await processMerchantPreflights({ ...f, sleep:async()=>{}, merchantFetchFactory: () => async () => { calls++; return respond(); } });
     const result = f.result();
-    assert.equal(calls, 1); assert.equal(result.status, 'unavailable');
+    assert.equal(calls, ['timeout','network_error'].includes(reasonCode)?2:1); assert.equal(result.status, 'unavailable');
     assert.equal(result.reasonCode, reasonCode); assert.equal(result.httpStatus, httpStatus);
     assert.doesNotMatch(JSON.stringify(result), /secret|private|captcha DNS timeout/);
   }
