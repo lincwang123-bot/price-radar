@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 
 import { collectDujiao, parseDujiaoProducts } from "../collectors/direct/dujiao.mjs";
 import { groupDirectOffers } from "../collectors/direct/catalog.mjs";
+import { offerDelivery, offerSpec } from '../lib/offer-spec.mjs';
 
 const capturedAt = "2026-09-05T00:00:00.000Z";
 const burstTarget = {
@@ -158,6 +159,30 @@ test("自动生成的 SKU-1 仅在单规格时回退父标题，多规格不得�
   assert.equal(groupDirectOffers(one)[0].productId, "gemini-claim-link");
   const multiple = parseDujiaoProducts({data: [{...base, skus: [sku, {...sku, id: 2, sku_code: "SKU-2"}]}]}, burstTarget, capturedAt);
   assert.deepEqual(multiple, []);
+});
+
+test('单规格的默认规格名称回退父商品，Plus 不漏收录且质保不冒充订阅期限', () => {
+  const parent = { id: 1, slug: 'gpt plus', title: {'zh-CN':'【官方充值】Chat gpt plus 菲区卡冲cdk（质保30天）'},
+    category: {name:{'zh-CN':'Chat gpt'}}, fulfillment_type: 'auto' };
+  for (const placeholder of ['默认', '默认规格', '默認', '默認規格', '预设', '預設', 'DEFAULT', 'Default SKU', 'SKU-1']) {
+    const offers = parseDujiaoProducts({data:[{...parent, skus:[{id:1,sku_code:'DEFAULT',spec_values:{'zh-CN':placeholder},price_amount:113,auto_stock_available:678}]}]}, burstTarget, capturedAt);
+    assert.equal(offers[0].title, parent.title['zh-CN']);
+    assert.equal(groupDirectOffers(offers)[0].productId, 'chatgpt-plus-recharge');
+    assert.equal(offerDelivery(offers[0]).kind, 'recharge');
+    assert.match(offerSpec(offers[0]).key, /^unknown:/);
+    assert.equal(offers[0].price, 113);
+  }
+});
+
+test('默认名称不覆盖具体 SKU，多个默认规格也不能套用父商品套餐', () => {
+  const parent = {id:1,title:{'zh-CN':'ChatGPT Plus / Pro 5x / Pro 20x'},fulfillment_type:'auto'};
+  const sku = {id:1,sku_code:'DEFAULT',spec_values:{'zh-CN':'默认'},price_amount:113,auto_stock_available:1};
+  assert.deepEqual(parseDujiaoProducts({data:[{...parent,skus:[sku,{...sku,id:2}]}]},burstTarget,capturedAt), []);
+  const specific = parseDujiaoProducts({data:[{...parent,skus:[{...sku,title:'Pro 5x'}]}]},burstTarget,capturedAt);
+  assert.equal(specific[0].title,'ChatGPT Pro 5x');
+  assert.equal(groupDirectOffers(specific)[0].productId,'chatgpt-pro-5x');
+  const descriptive = parseDujiaoProducts({data:[{...parent,skus:[{...sku,spec_values:{'zh-CN':'默认 Plus 月卡'}}]}]},burstTarget,capturedAt);
+  assert.equal(descriptive[0].title,'ChatGPT 默认 Plus 月卡');
 });
 
 test("父商品标为售罄时，不因 SKU 残留库存发布有货报价", () => {
