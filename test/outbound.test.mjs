@@ -30,6 +30,48 @@ test('merchant schema upgrade preserves pre-existing analytics totals and visito
  }finally{a?.close();rmSync(root,{recursive:true,force:true});}
 });
 function follow(context,href=outboundHref(offer),req=request()){const res={headers:{},setHeader(k,v){this.headers[k]=v;},end(v){this.body=v;}};handleOutbound(req,res,new URL(href+(href.includes('ack=')?'':'&ack=1'),'https://airadar.test'),{...context,now:date.getTime()});return res;}
+function refresh(ctx,changes={}){storeSnapshot(ctx.db,{source:'fixture',snapshotId:'s2',fetchedAt:date.toISOString(),products:[{productId:'p',name:'fixture',offers:[{offerId:'o',sourceId:'merchant',price:12,currency:'CNY',status:'in_stock',url:'https://shop.example/buy',...changes}]}]});}
+test('links from an open page survive a new snapshot and resolve the latest quote',()=>{
+ const ctx=fixture();try{
+  const href=outboundHref(offer),confirmation={setHeader(){},end(body){this.body=body;}};
+  handleOutbound(request(),confirmation,new URL(href,'https://airadar.test'),{...ctx,now:date.getTime()});
+  assert.equal(confirmation.statusCode,200);
+  refresh(ctx);
+  const current=resolveOutboundOffer(ctx.db,{source:'fixture',snapshot:'s1',product:'p',offer:'o'},date.getTime());
+  assert.equal(current?.snapshot_id,'s2');assert.equal(current.price,12);
+  assert.equal(follow(ctx,href).statusCode,302);assert.equal(follow(ctx,href).headers.Location,'https://shop.example/buy');
+  assert.equal(follow(ctx,outboundHref({...offer,snapshot_id:'never-existed'})).statusCode,404);
+ }finally{ctx.analytics.close();ctx.db.close();}
+});
+test('old links cannot fall back to removed quotes or follow reused IDs to another destination',()=>{
+ for(const changes of [{offerId:'other'},{sourceId:'other'},{url:'https://other.example/buy'},{url:'https://shop.example/different-product'}]){
+  const ctx=fixture();try{refresh(ctx,changes);assert.equal(follow(ctx).statusCode,404,JSON.stringify(changes));}finally{ctx.analytics.close();ctx.db.close();}
+ }
+ const ctx=fixture();try{
+  refresh(ctx);ctx.db.prepare("DELETE FROM offers WHERE snapshot_id='s2'").run();assert.equal(follow(ctx).statusCode,404);
+ }finally{ctx.analytics.close();ctx.db.close();}
+});
+test('old links enforce latest stock, expiry, freshness, price and merchant identity',()=>{
+ for(const changes of [{status:'sold_out'},{stockCount:0},{expiresAt:'2026-09-06T07:00:00Z'},{title:'ChatGPT 无质保 无售后'},{price:null}]){
+  const ctx=fixture();try{refresh(ctx,changes);assert.equal(follow(ctx).statusCode,404,JSON.stringify(changes));}finally{ctx.analytics.close();ctx.db.close();}
+ }
+ for(const sql of ["UPDATE snapshots SET fetched_at='2026-09-01T00:00:00Z'","UPDATE snapshots SET fetched_at='2026-09-07T00:00:00Z' WHERE snapshot_id='s2'","UPDATE snapshots SET stale=1 WHERE snapshot_id='s2'","UPDATE offers SET merchant_id='domain:other.example' WHERE snapshot_id='s2'"]){
+  const ctx=fixture();try{refresh(ctx);ctx.db.exec(sql);assert.equal(follow(ctx).statusCode,404,sql);}finally{ctx.analytics.close();ctx.db.close();}
+ }
+});
+test('shared platform old links retain the same shop product and campaign checks use the latest quote',()=>{
+ const ctx=fixture();try{
+  ctx.db.prepare("UPDATE offers SET url='https://16688.com.cn/goods/1',merchant_id=NULL").run();
+  refresh(ctx,{url:'https://16688.com.cn/goods/1'});assert.equal(follow(ctx).statusCode,302);
+  ctx.db.prepare("UPDATE offers SET url='https://16688.com.cn/goods/2' WHERE snapshot_id='s2'").run();assert.equal(follow(ctx).statusCode,404);
+ }finally{ctx.analytics.close();ctx.db.close();}
+ const sponsored=fixture();try{
+  const campaign={id:'refresh-ad',merchant_id:'domain:shop.example',source:'fixture',product_id:'p',offer_id:'o',label:'fixture',placement:'sponsored_product',start_at:'2026-09-01',end_at:'2026-10-01'};
+  sponsored.analytics.outbound.saveCampaign(campaign,{approve:true,now:date});refresh(sponsored);
+  const href=outboundHref(offer,{}, {placement:'sponsored_product',campaignId:campaign.id});assert.equal(follow(sponsored,href).statusCode,302);
+  sponsored.analytics.outbound.saveCampaign({...campaign,end_at:'2026-09-05'},{approve:true,now:date});assert.equal(follow(sponsored,href).statusCode,404);
+ }finally{sponsored.analytics.close();sponsored.db.close();}
+});
 test('redirect resolves exact current quote, rejects unsafe destinations and forged query fields',()=>{
  const ctx=fixture();try{
   const confirmation={headers:{},setHeader(k,v){this.headers[k]=v;},end(body){this.body=body;}};

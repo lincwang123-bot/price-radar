@@ -46,3 +46,15 @@ test('跨店新入口保留被自然去重来源的已批准广告，单次GET�
  await fetch(base+route,{method:'HEAD'});assert.equal(impressions,1);
  const link=after.match(/<article class="sponsor-card">[\s\S]*?href="([^\"]+)"/)[1].replaceAll('&amp;','&');assert.equal(new URL(link,base).searchParams.get('source'),'priceai');assert.equal((await fetch(base+link,{redirect:'manual'})).status,200);
 }));
+test('页面打开后采集更新，原报价链接仍按同一商品的最新状态跳转',async()=>fixture(async({base,db})=>{
+ const html=await(await fetch(base+'/?family=chatgpt&product=chatgpt-plus')).text();
+ const href=html.match(/href="(\/go\?[^\"]+)"/)[1].replaceAll('&amp;','&'),url=new URL(href,base);
+ const confirmation=await fetch(url);assert.equal(confirmation.status,200);
+ const old=db.prepare('SELECT * FROM offers WHERE snapshot_id=? AND offer_id=?').get(url.searchParams.get('snapshot'),url.searchParams.get('offer'));
+ storeSnapshot(db,{source:'direct-shops',snapshotId:'commerce-next',products:[{productId:'chatgpt-plus-recharge',name:'ChatGPT Plus',platform:'ChatGPT',currency:'CNY',offers:[{offerId:old.offer_id,title:old.title,storeName:old.store_name,price:120,currency:'CNY',status:'in_stock',stockCount:1,url:old.url}]}]});
+ url.searchParams.set('ack','1');
+ const redirect=await fetch(url,{method:'HEAD',redirect:'manual'});assert.equal(redirect.status,302);assert.equal(redirect.headers.get('location'),old.url);
+ assert.equal(redirect.headers.get('cache-control'),'no-store');
+ db.prepare("UPDATE offers SET status='sold_out' WHERE snapshot_id='commerce-next'").run();
+ assert.equal((await fetch(url,{method:'HEAD',redirect:'manual'})).status,404);
+}));
