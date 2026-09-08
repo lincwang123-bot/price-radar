@@ -91,5 +91,5 @@ test('admin policy copy distinguishes cancelled notices from provider acceptance
  assert.match(mailSummary({items:[{status:'superseded',errorCode:'mail_policy_limit'}]}),/未发送/);
  assert.match(mailSummary({items:[{status:'accepted'}]}),/发送服务已接受/);
  const html=mailPanel({...payload,id:'MA-TEST',version:1},{items:[]},'csrf',{configured:true});
- assert.match(html,/最多两封自动邮件/);assert.match(html,/重测、改邮箱或后续批准不会再追加/);
+ assert.match(html,/常规流程两封/);assert.match(html,/同一封来信、相同资料和普通重测不重复发信/);
 });

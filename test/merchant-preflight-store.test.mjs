@@ -6,6 +6,7 @@ import path from 'node:path';
 import { openSubmissionsDb } from '../lib/submissions.mjs';
 import { createMerchantApplication, getMerchantApplication, reviewMerchantApplication } from '../lib/merchant-onboarding.mjs';
 import { queueMerchantPreflight, latestMerchantPreflight, syncPreflightManifest, assertPreflightApproval } from '../lib/merchant-preflight-store.mjs';
+import {recordMerchantReply} from '../lib/merchant-replies.mjs';
 
 const now = new Date('2026-09-07T04:00:00.000Z');
 const review = { ownershipConfirmed: true, permissionConfirmed: true, expectedVersion: 1, actor: 'owner', sampleReviewed: true };
@@ -22,6 +23,18 @@ function validResult(request, overrides = {}) {
     identity: request.identity, startedAt: request.requestedAt, checkedAt: request.requestedAt, status: 'ready', rawCount: 1, validCount: 1,
     samples: [{ title: '月付商品', price: 20, currency: 'USD', url: 'https://merchant-0.com/item/1' }], message: '测试采集完成', ...overrides };
 }
+test('new reply cannot use an earlier successful test to approve; a new check restores eligibility',t=>{
+ const {db,dir,makeApp,options}=fixture(t),id=makeApp();
+ const old=queueMerchantPreflight(db,id,review,options);
+ writeFileSync(path.join(dir,old.id+'.json'),JSON.stringify(validResult(old)));
+ assert.equal(latestMerchantPreflight(db,id,options).canApprove,true);
+ const later=new Date(+now+120000);
+ recordMerchantReply(db,{applicationId:id,messageId:'roundfresh123',threadId:'roundfresh123',sender:'owner-0@example.org',authentication:'gmail-aligned',expectedVersion:1,receivedAt:later.toISOString(),summary:'补充新的商品目录',publicUrls:['https://merchant-0.com/products']},{now:later});
+ assert.equal(latestMerchantPreflight(db,id,{...options,now:later}).canApprove,false);
+ const fresh=queueMerchantPreflight(db,id,review,{...options,now:later});
+ writeFileSync(path.join(dir,fresh.id+'.json'),JSON.stringify(validResult(fresh)));
+ assert.equal(latestMerchantPreflight(db,id,{...options,now:later}).canApprove,true);
+});
 test('preflight requests are permission checked, privately audited, bounded and expire after one hour', t => {
   const { db, dir, makeApp, options } = fixture(t), id = makeApp();
   for (const change of [{ ownershipConfirmed: false }, { permissionConfirmed: false }])
