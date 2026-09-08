@@ -5,7 +5,7 @@
  const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
  const local={read(key,fallback){try{return JSON.parse(localStorage.getItem(key))??fallback;}catch{return fallback;}},write(key,value){try{localStorage.setItem(key,JSON.stringify(value));return true;}catch{return false;}}};
  const guestKey='airadar_follows_v1',seenKey='airadar_follow_seen_v1';
- let state=null,market=null,loading=null,tab='all',requestId='',toastTimer;
+ let state=null,market=null,loading=null,tab='all',toastTimer;
  const guest=()=>{const value=local.read(guestKey,[]);return Array.isArray(value)?value.filter(w=>w&&typeof w.productKey==='string'&&typeof w.id==='string').slice(0,40):[];};
  const watches=()=>state?.account?state.watches:guest();
  function visitor(create=false){let id=local.read('airadar_follow_visitor_v1','');if(!id&&create){id=crypto.randomUUID();local.write('airadar_follow_visitor_v1',id);}return id;}
@@ -35,11 +35,13 @@
   const list=$('[data-watch-list]');if(!list)return;
   const a=state?.account;
   $('[data-account-title]').textContent=a?a.email:'本机关注清单';
-  $('[data-account-copy]').textContent=a?(a.emailEnabled?'关注已同步。仅发送你选择的条件提醒，每个邮箱每天最多一封行情或续费汇总。':'邮箱提醒已停止，关注清单仍保留。'):'保存在当前浏览器。确认邮箱后可跨设备同步，并接收自选提醒。';
-  $('[data-account-actions]').innerHTML=a?'<button class="retention-button" data-email-toggle>'+ (a.emailEnabled?'暂停全部邮件':'重新开启邮件')+'</button><button class="retention-button" data-logout>退出</button><button class="retention-link" data-delete-account>删除账号数据</button>':'<button class="retention-button" data-login>确认邮箱并同步</button>';
+  $('[data-account-copy]').textContent=a?(a.emailEnabled?'关注已同步。仅发送你选择的条件提醒，每个邮箱每天最多一封行情或续费汇总。':'关注已同步，邮件提醒尚未开启。你可以只收藏，不收邮件。'):'保存在当前浏览器。登录后可跨设备同步，邮件提醒由你自行开启。';
+  $('[data-account-actions]').innerHTML=a?'<button class="retention-button" data-email-toggle>'+ (a.emailEnabled?'暂停全部邮件':'开启自选邮件提醒')+'</button><a class="retention-button" href="/account">账号设置</a><button class="retention-button" data-logout>退出</button><button class="retention-link" data-delete-account>删除账号数据</button>':'<a class="retention-button" data-login href="/login?next=%2Ffollowing">登录并同步</a>';
+  const nav=$('[data-reader-nav]');if(nav){nav.textContent=a?'我的账号':'登录 / 注册';nav.href=a?'/account':'/login';}
+  const importer=$('[data-guest-import]');if(importer){importer.hidden=!a||!guest().length;$('[data-import-copy]').textContent='当前浏览器还有 '+guest().length+' 项本机关注。确认属于你后，可加入当前账号；未导入的数据继续保留在本机。';}
   const all=watches(),rows=tab==='renewal'?all.filter(w=>w.renewalDate):all;
   $('[data-watch-empty]').hidden=all.length>0||tab==='notices';
-  $('[data-list-summary]').textContent=tab==='notices'?(a?'最近 90 天内的最新动态；历史通知保留当时信息。':'确认邮箱后可查看跨设备保存的提醒。'):`${all.length} 项关注${tab==='renewal'?' · '+rows.length+' 项到期记录':''} · 报价按明确规格比较`;
+  $('[data-list-summary]').textContent=tab==='notices'?(a?'最近 90 天内的最新动态；历史通知保留当时信息。':'登录后可查看跨设备保存的提醒。'):`${all.length} 项关注${tab==='renewal'?' · '+rows.length+' 项到期记录':''} · 报价按明确规格比较`;
   if(tab==='notices'){
    list.innerHTML=(state?.notices||[]).map(n=>{const p=n.payload,w={productKey:p.productKey,groupId:p.groupId};return '<article class="retention-card"><h2>'+esc(p.name)+'</h2><p>'+esc(p.spec)+'</p><p>'+esc(p.kind==='renewal'?'你记录的到期日期：'+p.renewalDate:p.kind==='restock'?'已观察到恢复有货':p.kind==='weekly'?'本周关注报价':'已观察到符合条件的降价')+'</p><p class="retention-muted">'+esc(new Date(n.created_at).toLocaleString('zh-CN'))+'</p><a class="retention-button" href="'+esc(href(w))+'">查看当前报价</a></article>';}).join('')||'<div class="retention-empty"><h2>暂时没有新动态</h2><p>符合条件的价格变化和到期提醒会出现在这里。</p></div>';return;
   }
@@ -73,7 +75,7 @@
   if(w)for(const name of ['mode','targetPrice','dropPct','renewalDate','leadDays'])f.elements[name].value=w[name]??'';
   f.elements.paused.checked=!!w?.paused;updateFields();
   if(w?.renewalDate)$('.retention-renewal',f).open=true;
-  $('[data-save-note]',f).textContent=state.account?'关注将同步到此邮箱。可随时暂停或删除。':'先保存到本机。确认邮箱后，你设置的提醒才会发送。';
+  $('[data-save-note]',f).textContent=state.account?(state.account.emailEnabled?'关注将同步到此账号。可随时暂停或删除。':'关注将同步到此账号；需要收邮件时，请在“我的关注”开启自选邮件提醒。'):'先保存到本机。登录并开启自选邮件提醒后，你设置的提醒才会发送。';
   dialog.showModal();
  }
  async function submitWatch(e){
@@ -89,27 +91,22 @@
     if(!local.write(guestKey,[...rows.filter(x=>x.id!==w.id),w]))throw new Error('当前浏览器不能保存数据，请允许网站存储后再试。');
     if(!data.id)event('follow',w.id,true);if(w.renewalDate)event('renewal',w.id,true);
    }
-   $('#retention-watch-dialog').close();render();toast(state.account?'关注已保存':data.mode==='off'?'已保存到当前浏览器':'已保存到本机；确认邮箱后才会收到提醒');
+   $('#retention-watch-dialog').close();render();toast(state.account?'关注已保存':data.mode==='off'?'已保存到当前浏览器':'已保存到本机；登录并开启邮件后才会收到提醒');
   }catch(err){error.textContent=err.message;}finally{button.disabled=false;}
  }
- async function openLogin(){await init();if(!state.mailConfigured){toast('邮件同步暂不可用，可继续保存本机关注。');return;}$('#retention-login-dialog').showModal();}
- async function emailSubmit(e){
-  e.preventDefault();const f=e.currentTarget,b=$('[type=submit]',f),err=$('[data-form-error]',f);b.disabled=true;err.textContent='';
-  try{requestId=(await api('request-code',{email:f.elements.email.value,consent:f.elements.consent.checked})).requestId;f.hidden=true;$('#retention-code-form').hidden=false;$('#retention-code-form input').focus();}
-  catch(error){err.textContent=error.message;}finally{b.disabled=false;}
- }
- async function verifySubmit(e){
-  e.preventDefault();const f=e.currentTarget,b=$('[type=submit]',f),err=$('[data-form-error]',f);b.disabled=true;err.textContent='';
+ function openLogin(){location.assign('/login?next='+encodeURIComponent(location.pathname+location.search));}
+ async function importWatches(button){
+  button.disabled=true;
   try{
-   await api('verify-code',{requestId,code:f.elements.code.value});local.write('airadar_reader_hint_v1',true);await init(true);
+   await init(true);if(!state.account)throw new Error('请先登录');
    const localRows=guest(),remaining=[];let imported=0;
    for(const w of localRows){
     if(state.watches.some(x=>x.productKey===w.productKey&&x.groupId===w.groupId))continue;
     try{const {id,...input}=w;await api('save-watch',input);imported++;}catch{remaining.push(w);}
    }
-   local.write(guestKey,remaining);await init(true);$('#retention-login-dialog').close();render();
-   toast(remaining.length?'邮箱已确认；部分失效规格保留在本机，稍后退出邮箱可调整。':'邮箱已确认，已同步关注清单'+(imported?'（新增 '+imported+' 项）':''));
-  }catch(error){err.textContent=error.message;}finally{b.disabled=false;}
+   local.write(guestKey,remaining);await init(true);render();
+   toast(remaining.length?'部分失效规格保留在本机，退出登录后可调整。':'已同步关注清单'+(imported?'（新增 '+imported+' 项）':''));
+  }catch(error){toast(error.message);}finally{button.disabled=false;}
  }
  function download(blob,name){const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),5000);}
  function calendar(id){
@@ -137,11 +134,11 @@
   try{await navigator.clipboard.writeText(link);toast('分享卡片已生成，页面链接已复制。');}catch{toast('分享卡片已生成；可复制浏览器中的页面地址。');}event('share',g.id,true);
  }
  document.addEventListener('click',async e=>{
-  const button=e.target.closest('[data-follow-product],[data-add-watch],[data-edit-watch],[data-login],[data-remove-watch],[data-list-tab],[data-close-dialog],[data-logout],[data-email-toggle],[data-calendar],[data-share-group],[data-delete-account],[data-retry-code]');if(!button)return;
+  const button=e.target.closest('[data-follow-product],[data-add-watch],[data-edit-watch],[data-login],[data-remove-watch],[data-list-tab],[data-close-dialog],[data-logout],[data-email-toggle],[data-calendar],[data-share-group],[data-delete-account],[data-import-watches]');if(!button)return;
   e.preventDefault();
   try{
    if(button.hasAttribute('data-close-dialog'))return button.closest('dialog').close();
-   if(button.hasAttribute('data-retry-code')){$('#retention-code-form').hidden=true;$('#retention-email-form').hidden=false;return;}
+   if(button.hasAttribute('data-import-watches'))return await importWatches(button);
    if(button.hasAttribute('data-follow-product'))return await openWatch(button.dataset.followProduct,'',button.dataset.followGroup,button.dataset.followSpec);
    if(button.hasAttribute('data-add-watch'))return await openWatch();
    if(button.hasAttribute('data-edit-watch'))return await openWatch('',button.dataset.editWatch);
@@ -162,8 +159,6 @@
  $('#retention-watch-form')?.elements.productKey.addEventListener('change',()=>refreshGroupOptions());
  $('#retention-watch-form')?.elements.groupId.addEventListener('change',updateFields);
  $('#retention-watch-form')?.elements.mode.addEventListener('change',updateFields);
- $('#retention-email-form')?.addEventListener('submit',emailSubmit);
- $('#retention-code-form')?.addEventListener('submit',verifySubmit);
  $('[data-unsubscribe-form]')?.addEventListener('submit',async e=>{e.preventDefault();const f=e.currentTarget;try{await api('unsubscribe',{token:f.elements.token.value});$('[data-form-error]',f).textContent='已退订所有邮箱提醒，关注清单仍保留。';$('button',f).disabled=true;}catch(error){$('[data-form-error]',f).textContent=error.message;}});
  if($('[data-following-page]'))init().then(async()=>{
   render();event('visit');if(new URL(location.href).searchParams.get('from')==='reminder')event('notice_visit');

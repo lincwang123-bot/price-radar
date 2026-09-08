@@ -5,6 +5,7 @@ for(const dir of ["lib","sources","collectors","scripts"]){
  for(const file of readdirSync(dir,{recursive:true}))if(file.endsWith(".mjs"))execFileSync(process.execPath,["--check",path.join(dir,file)],{stdio:"inherit"});
 }
 execFileSync(process.execPath,["--check","assets/retention.js"],{stdio:"inherit"});
+execFileSync(process.execPath,["--check","assets/account.js"],{stdio:"inherit"});
 execFileSync(process.execPath,["--check","assets/merchant-x.js"],{stdio:"inherit"});
 execFileSync(process.execPath,["--check","radar.mjs"],{stdio:"inherit"});
 execFileSync(process.execPath,["--test"],{stdio:"inherit"});
