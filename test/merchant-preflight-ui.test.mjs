@@ -42,19 +42,27 @@ test('preflight renders actionable states, counts and escaped bounded samples',(
   assert.doesNotMatch(html,/<script|<img>|value="approve" type="submit" disabled/);
   assert.match(html,/不自动发布报价，也不验证真实交易/);
 });
-test('unread catalogues keep diagnostics and email status without manual copy templates',()=>{
+test('current failed catalogues show a contextual AI prompt beside diagnostics and keep mail status',()=>{
  for(const status of ['unavailable','waiting_adapter']){
   const html=merchantReviewContent({application,preflight:{status,result:{status,rawCount:0,validCount:0,reasonCode:status==='unavailable'?'not_found':'invalid_catalog',message:'Private stacktrace'}}});
   assert.doesNotMatch(html,/可收录报价：0 条|原始解析：0 条|Private stacktrace/);
   assert.match(html,status==='unavailable'?/未读取成功/:/尚未识别目录/);
-  assert.doesNotMatch(html,/preflight-current-message|其他情况的沟通文案|复制文案|发给店主的文案/);
+  assert.match(html,/给店主的 AI 排查文案/);assert.match(html,/复制 AI 排查文案/);
+  assert.match(html,/data-copy-target="preflight-ai-prompt"/);assert.match(html,/readonly rows="6"/);
+  assert.match(html,/https:\/\/wzyp.cn\/shop\/zhipuai/);assert.doesNotMatch(html,/其他情况的沟通文案|guidance-library/);
   assert.match(html,/邮件通知/);
  }
  for(const preflight of [null,{status:'unavailable',result:{status:'unavailable'}}]){
   const html=merchantReviewContent({application,preflight});
-  assert.doesNotMatch(html,/guidance-library|data-copy-target/);
+  assert.doesNotMatch(html,/guidance-library/);
+  if(!preflight)assert.doesNotMatch(html,/data-copy-target/);
   if(preflight)assert.match(html,/历史测试未记录具体原因，请重新测试/);
  }
+});
+test('AI copy text escapes merchant markup and excludes raw failure and private review content',()=>{
+ const html=merchantReviewContent({application:{...application,shopName:'</textarea><img onerror=x>'},preflight:{status:'unavailable',result:{status:'unavailable',reasonCode:'invalid_catalog',message:'private-failure-body'}}});
+ const prompt=html.match(/id="preflight-ai-prompt" readonly rows="6">([\s\S]*?)<\/textarea>/)[1];
+ assert.doesNotMatch(prompt,/private-failure-body|owner@example.org|MA-EXAMPLE|onerror|<img/);assert.match(prompt,/AIradar/);
 });
 test('conversion provenance links back to original supply record and escapes audit note',()=>{
  const html=merchantReviewContent({application:{...application,conversion:{sourceSubmissionId:'CO-EXAMPLE',convertedAt:'2026-09-07T00:00:00Z',note:'<img onerror=x>'}}});
