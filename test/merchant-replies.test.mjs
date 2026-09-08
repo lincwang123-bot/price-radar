@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {openSubmissionsDb} from '../lib/submissions.mjs';
-import {createMerchantApplication,getMerchantApplication,reviewMerchantApplication} from '../lib/merchant-onboarding.mjs';
+import {openSubmissionsDb,createSubmission} from '../lib/submissions.mjs';
+import {createMerchantApplication,getMerchantApplication,reviewMerchantApplication,convertSupplySubmission} from '../lib/merchant-onboarding.mjs';
+import {importSupplyIntakes} from '../lib/merchant-intake.mjs';
 import {recordMerchantReply,listMerchantReplies,queueReplyClarification} from '../lib/merchant-replies.mjs';
 import {queueMerchantMail,drainMerchantMail,merchantMailStatus} from '../lib/merchant-mail.mjs';
 import {queuePreflightResultMail} from '../lib/merchant-preflight-mail.mjs';
@@ -64,4 +65,15 @@ test('a reply needing identity clarification gets one accurate email, without fa
  assert.match(f.messages[2].text,/暂时无法确认/);assert.match(f.messages[2].text,/不是.*店铺无法打开/);
  assert.throws(()=>queueReplyClarification(f.db,f.id,{replyId:r.reply.id,reason:'invented'}));
  assert.equal(getMerchantApplication(f.db,f.id).status,'pending');
+});
+test('supply conversion keeps reply-material deduplication across original and canonical IDs',t=>{
+ const db=openSubmissionsDb(':memory:');t.after(()=>db.close());
+ const payload={shopName:'供应转换测试',shopUrl:'https://reply-converted-shop.com/',productAreas:['chatgpt'],contact:'owner',email:'owner@example.org',consent:true};
+ const source=createSubmission(db,{kind:'cooperation',topic:'supply',subject:payload.shopName,metadata:{productArea:'chatgpt',scale:'trial',assurance:'full_warranty',settlement:'cny'},contextUrl:payload.shopUrl,details:'公开目录的供应测试资料',contact:payload.contact,email:payload.email,consent:true},{now:start});
+ importSupplyIntakes(db,[source.id],{now:start});
+ const data={applicationId:source.id,messageId:'beforeconvert',threadId:'conversion',sender:payload.email,authentication:'gmail-aligned',expectedVersion:1,receivedAt:new Date(+start+1000).toISOString(),summary:'公开目录已确认',publicUrls:[payload.shopUrl]};
+ const reply=recordMerchantReply(db,data,{now:new Date(+start+2000)});
+ const app=convertSupplySubmission(db,source.id,{...payload,ownershipConfirmed:true,permissionConfirmed:true,note:'确认公开读取和来源资料'},{now:new Date(+start+3000)});
+ const duplicate=recordMerchantReply(db,{...data,applicationId:app.id,messageId:'afterconvert',receivedAt:new Date(+start+4000).toISOString()},{now:new Date(+start+5000)});
+ assert.equal(duplicate.created,false);assert.equal(duplicate.reply.id,reply.reply.id);
 });
