@@ -9,7 +9,7 @@ import { createApp } from '../lib/web.mjs';
 import { reviewMerchantApplication } from '../lib/merchant-onboarding.mjs';
 import { merchantApplicationHref } from '../lib/merchant-badges.mjs';
 
-test('public merchant intake persists privately and neutral listing badges follow approval without affecting quote order', async () => {
+test('public merchant intake stays private; approval prioritizes comprehensive results and preserves pure price order', async () => {
   const directory=mkdtempSync(path.join(os.tmpdir(),'merchant-web-'));
   const db=openDb(':memory:'),submissionsDb=openSubmissionsDb(':memory:');
   const app=createApp({db,submissionsDb,adminOptions:{merchantBridgeDir:directory}});
@@ -58,7 +58,9 @@ test('public merchant intake persists privately and neutral listing badges follo
     assert.match(after,/合成测试商店1<span class="merchant-verified"/);
     assert.match(after,/>店铺已收录<\/span>/);
     assert.doesNotMatch(after,/店主已核验|站长已核验店铺经营身份/);
-    assert.ok(after.indexOf('合成测试商店0')<after.indexOf('合成测试商店1'));
+    assert.ok(after.indexOf('合成测试商店1')<after.indexOf('合成测试商店0'));
+    const byPrice=await(await fetch(base+route+'&sort=price_asc')).text();
+    assert.ok(byPrice.indexOf('合成测试商店0')<byPrice.indexOf('合成测试商店1'));
     assert.doesNotMatch(after,/private-contact|仅限后台|已用店内公告|merchantIdentity/);
     const detail=await(await fetch(base+'/product?source=direct-shops&id=chatgpt-plus-recharge')).text();
     assert.equal((detail.match(/<span class="merchant-verified"/g)||[]).length,2,'desktop and mobile render badge');
