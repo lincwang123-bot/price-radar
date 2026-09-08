@@ -177,9 +177,9 @@ export function classifyDirectOffer({ title, category = "", sourceId = "", extra
     if (twentyX || has(titleText, /200\s*(?:刀|美金|usd|dollar)/)) return PRODUCTS["chatgpt-pro-20x"];
     if (fiveX || has(titleText, /100\s*(?:刀|美金|usd|dollar)/)) return PRODUCTS["chatgpt-pro-5x"];
   }
-  // 部分 Kami 店铺在标题中只写“5x / 20x”，品类名才标明 ChatGPT。
-  // 只有品类已经确认品牌时才使用这个补充规则，避免普通数字误分类。
-  if (chatgpt && has(categoryText, /chat\s*gpt|openai/i)) {
+  // Accept a confirmed category OR the explicit product phrase “GPT 5x/20x”.
+  // The latter remains available after storage, where category isn't always retained.
+  if (chatgpt && (has(categoryText, /chat\s*gpt|openai/i) || has(titleText, /(?:chat\s*gpt|\bgpt)\s+(?:5|20)\s*x(?![\d.])/))) {
     if (twentyX) return PRODUCTS["chatgpt-pro-20x"];
     if (fiveX) return PRODUCTS["chatgpt-pro-5x"];
   }
@@ -196,10 +196,10 @@ export function classifyDirectOffer({ title, category = "", sourceId = "", extra
     return null;
   }
   // Some storefronts abbreviate Claude Max as “Claude 5x/20x”. Only a
-  // confirmed Claude category plus one unambiguous multiplier may fill Max;
+  // confirmed Claude category or explicit Claude multiplier phrase may fill Max;
   // a contradictory explicit Pro label remains unclassified, never Pro-priced.
   if (claude && (fiveX || twentyX)) {
-    if (has(titleText, /\bpro\b/) || !has(categoryText, /claude|anthropic/)) return null;
+    if (has(titleText, /\bpro\b/) || !(has(categoryText, /claude|anthropic/) || has(titleText, /\bclaude\s+(?:5|20)\s*x(?![\d.])/))) return null;
     return PRODUCTS[twentyX ? 'claude-max-20x' : 'claude-max-5x'];
   }
   if (claude && has(titleText, /\bpro\b|月卡|订阅|直充|代充/)) return PRODUCTS["claude-pro-month"];

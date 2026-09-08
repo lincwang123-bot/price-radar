@@ -4,15 +4,24 @@ import {parseBBShareCatalog,parseBBShareProduct,collectBBShare} from '../collect
 import {probeMerchantCatalog} from '../lib/merchant-collection.mjs';
 import {deliveryForm} from '../lib/offer-spec.mjs';
 import {directTargets,DEFAULT_DIRECT_TARGET_IDS} from '../collectors/direct/registry.mjs';
+import {summarizeMerchantOffers} from '../lib/merchant-quote-preview.mjs';
 const origin='https://www.bbshare.site',target={id:'bbshare',origin,name:'BBShare'};
 const jsonld=graph=>`<script id="bbshare-prerender-jsonld" type="application/ld+json">${JSON.stringify({'@graph':graph})}</script>`;
 const item=(id='gpt-plus')=>({'@type':'ListItem',name:id,url:origin+'/products/'+id});
 const catalog=rows=>jsonld([{'@type':'ItemList',itemListElement:rows}]);
-function detail({id='gpt-plus',name='GPT Plus · 1个月',price='138',currency='CNY',availability='https://schema.org/InStock',duration='1个月',warranty='30天',url=origin+'/products/'+id}={}){
- return jsonld([{'@type':'Product',sku:id,name,description:name+'代充',brand:{name:'ChatGPT'},offers:{'@type':'Offer',price,priceCurrency:currency,availability,url}}])+`<main><h1>${name}</h1><strong>微信支付¥${price}</strong><dl><dt>订阅周期</dt><dd>${duration}</dd><dt>质保期限</dt><dd>${warranty}</dd></dl></main>`;
+function detail({id='gpt-plus',name='GPT Plus · 1个月',brand='ChatGPT',price='138',currency='CNY',availability='https://schema.org/InStock',duration='1个月',warranty='30天',url=origin+'/products/'+id}={}){
+ return jsonld([{'@type':'Product',sku:id,name,description:name+'代充',brand:{name:brand},offers:{'@type':'Offer',price,priceCurrency:currency,availability,url}}])+`<main><h1>${name}</h1><strong>微信支付¥${price}</strong><dl><dt>订阅周期</dt><dd>${duration}</dd><dt>质保期限</dt><dd>${warranty}</dd></dl></main>`;
 }
 const robots='User-agent: *\nAllow: /\nDisallow: /api/\nDisallow: /admin\n';
 const response=body=>new Response(body,{headers:{'content-type':'text/html'}});
+
+test('abbreviated GPT and Claude tiers survive the stored quote and directory projection',()=>{
+ const offers=['5x','20x'].flatMap(tier=>['GPT','Claude'].map(brand=>{
+  const id=brand.toLowerCase()+'-'+tier;
+  return parseBBShareProduct(detail({id,brand:brand==='GPT'?'ChatGPT':brand,name:`${brand} ${tier} · 1个月`}),origin+'/products/'+id,target);
+ }));
+ const preview=summarizeMerchantOffers(offers);assert.equal(preview.rawCount,4);assert.equal(preview.validCount,4);
+});
 
 test('public detail validates real price/currency/period/availability and separates account from recharge',()=>{
  const offer=parseBBShareProduct(detail(),origin+'/products/gpt-plus',target);

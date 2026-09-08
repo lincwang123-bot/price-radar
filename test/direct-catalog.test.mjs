@@ -14,7 +14,7 @@ test('confirmed Claude category with a single multiplier never falls into Pro',(
   assert.equal(classifyDirectOffer({title:`Claude Pro ${multiplier} 代充`,category:'Claude'}),null);
  }
  assert.equal(classifyDirectOffer({title:'Claude 5x/20x 代充',category:'Claude'}),null);
- assert.equal(classifyDirectOffer({title:'Claude 5x 代充',category:'未核对'}),null);
+ assert.equal(classifyDirectOffer({title:'Claude 礼包 5x 代充',category:'未核对'}),null);
 });
 
 const cases = [
