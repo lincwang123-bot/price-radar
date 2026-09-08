@@ -6,6 +6,7 @@
  let state=null,requestId='',challengeEmail='',sending=false,resendAt=0;
  const form=$('[data-auth-form]'),status=$('[data-auth-status]')||$('[data-account-status]'),error=$('[data-auth-error]');
  const mode=root.dataset.authMode;
+ const profileForm=$('[data-profile-form]');
  async function api(action,input){
   const r=await fetch('/api/retention/'+action,{credentials:'same-origin',...(input===undefined?{}:{method:'POST',headers:{'Content-Type':'application/json','X-CSRF-Token':state?.csrf||''},body:JSON.stringify(input)})});
   let data;try{data=await r.json();}catch{throw new Error('暂时无法连接，请刷新后重试');}
@@ -50,7 +51,7 @@
   }
   const b=form.querySelector('[type=submit]');b.disabled=true;
   try{
-   await api(mode==='reset'?'reset-password':mode,{email,password,requestId,code:form.elements.code?.value});
+   await api(mode==='reset'?'reset-password':mode,{email,password,requestId,code:form.elements.code?.value,...(mode==='register'?{phone:form.elements.phone.value,contactType:form.elements.contactType.value,contactValue:form.elements.contactValue.value}:{})});
    form.reset();
    if(mode==='reset'){
     hint(false);form.hidden=true;clearInterval(timer);
@@ -67,11 +68,21 @@
   e.currentTarget.disabled=true;
   try{await api('logout',{});hint(false);location.replace('/login');}catch(err){status.textContent=err.message;e.currentTarget.disabled=false;}
  });
+ profileForm?.addEventListener('submit',async e=>{
+  e.preventDefault();if(!profileForm.reportValidity())return;
+  const button=profileForm.querySelector('[type=submit]'),message=$('[data-profile-status]');button.disabled=true;message.textContent='正在保存…';
+  try{
+   await api('profile',{phone:profileForm.elements.phone.value,contactType:profileForm.elements.contactType.value,contactValue:profileForm.elements.contactValue.value});
+   message.textContent='联系资料已保存。手机号尚未进行短信验证。';
+   const next=root.dataset.profileNext;if(next&&next!=='/account'){const u=new URL(next,location.origin);if(u.origin===location.origin&&u.pathname==='/submit-shop')location.assign(u.href);}
+  }catch(err){message.textContent=err.message;}finally{button.disabled=false;}
+ });
  api('state').then(value=>{
   state=value;status.textContent='';
   if(form){$('[data-auth-fields]').disabled=false;
    if(mode!=='login'&&!state.mailConfigured){$('[data-auth-fields]').disabled=true;status.textContent='验证码邮件暂不可用，请稍后再试。已有账号仍可返回登录。';}
    updateSend();
   }else if(!state.account)location.replace('/login?next=%2Faccount');
+  else if(profileForm)$('[data-profile-fields]').disabled=false;
  }).catch(e=>{status.textContent=e.message;});
 })();

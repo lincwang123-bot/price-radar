@@ -7,6 +7,8 @@ import { openDb, storeSnapshot } from '../lib/db.mjs';
 import { openSubmissionsDb } from '../lib/submissions.mjs';
 import { createApp } from '../lib/web.mjs';
 import { reviewMerchantApplication } from '../lib/merchant-onboarding.mjs';
+import {createRetentionStore} from '../lib/retention-store.mjs';
+import {createAccountAuth} from '../lib/account-auth.mjs';
 import { merchantApplicationHref } from '../lib/merchant-badges.mjs';
 
 test('public merchant intake stays private; approval prioritizes comprehensive results and preserves pure price order', async () => {
@@ -22,7 +24,12 @@ test('public merchant intake stays private; approval prioritizes comprehensive r
     }]});
     await new Promise(r=>app.listen(0,'127.0.0.1',r));
     const base='http://127.0.0.1:'+app.address().port;
-    const form=await fetch(base+'/submit-shop'),html=await form.text();
+    const store=createRetentionStore(submissionsDb,{secret:'fixture-merchant-reader-'.repeat(3)}),auth=createAccountAuth(store);
+    const challenge=auth.requestCode('owner@example.org','fixture','register');
+    const code=JSON.parse(submissionsDb.prepare('SELECT payload FROM retention_mail WHERE event_key=?').get('code:'+challenge.requestId).payload).code;
+    const registered=await auth.register({...challenge,code,password:'fixture merchant password 73',phone:'13800138000',contactType:'wechat',contactValue:'private_contact'});
+    const readerCookie='airadar_reader='+registered.token;
+    const form=await fetch(base+'/submit-shop',{headers:{cookie:readerCookie}}),html=await form.text();
     assert.equal(form.status,200);
     assert.match(form.headers.get('x-robots-tag'),/noindex/);
     assert.match(html,/<form id="merchant-submission" action="\/api\/merchant-applications" method="post">/);
@@ -33,7 +40,7 @@ test('public merchant intake stays private; approval prioritizes comprehensive r
     assert.match(privacy,/收录状态标识/);
     assert.doesNotMatch(privacy,/身份核验标识|店主已核验/);
     const csrf=html.match(/name="csrf-token" content="([^"]+)"/)[1];
-    const headers={origin:base,'content-type':'application/json',cookie:'airadar_csrf='+csrf,'x-csrf-token':csrf};
+    const headers={origin:base,'content-type':'application/json',cookie:readerCookie+'; airadar_csrf='+csrf,'x-csrf-token':csrf};
     const payload={shopName:'合成测试商店1',shopUrl:'https://merchant-1.com/',platform:'auto',productAreas:['chatgpt','grok_x','api_relay','mail_verify'],email:'owner@example.org', contact:'private-contact@merchant-1.com',details:'仅限后台的合成审核说明',consent:true};
     const send=(body,extra={})=>fetch(base+'/api/merchant-applications',{method:'POST',headers:{...headers,...extra},body:JSON.stringify(body)});
     assert.equal((await fetch(base+'/api/merchant-applications')).status,405);

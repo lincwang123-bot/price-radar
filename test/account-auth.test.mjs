@@ -9,6 +9,7 @@ import {openSubmissionsDb} from '../lib/submissions.mjs';
 import {retentionMessage,drainRetentionMail} from '../lib/retention-mail.mjs';
 
 const password='a private test passphrase 73';
+const profile={phone:'13800138000',contactType:'telegram',contactValue:'fixture_owner'};
 function setup(){
  const db=new DatabaseSync(':memory:');let time=new Date('2026-09-08T10:00:00Z');
  const store=createRetentionStore(db,{secret:'test-secret-'.repeat(8),now:()=>time});
@@ -23,15 +24,15 @@ function setup(){
 test('注册必须验证邮箱并设置密码；密码加盐存储，账号会话隔离',async()=>{
  const f=setup();try{
   const challenge=f.code();
-  await assert.rejects(f.auth.register({...challenge,password:'short'}),/15/);
-  await assert.rejects(f.auth.register({...challenge,code:'000000',password}),/验证码/);
-  const a=await f.auth.register({...challenge,password});
+  await assert.rejects(f.auth.register({...profile,...challenge,password:'short'}),/15/);
+  await assert.rejects(f.auth.register({...profile,...challenge,code:'000000',password}),/验证码/);
+  const a=await f.auth.register({...profile,...challenge,password});
   assert.equal(f.store.session(a.token).email,'reader@example.com');
   assert.equal(a.account.email_enabled,0,'registration must not opt into reminders');
   const saved=f.db.prepare('SELECT * FROM reader_credentials').get();
   assert.match(saved.password_hash,/^scrypt\$131072\$8\$1\$/);
   assert.ok(!saved.password_hash.includes(password));
-  await assert.rejects(f.auth.register({...challenge,password}),/验证码/);
+  await assert.rejects(f.auth.register({...profile,...challenge,password}),/验证码/);
   const logged=await f.auth.login('READER@example.com',password,'local');
   assert.equal(logged.account.id,a.account.id);assert.notEqual(logged.token,a.token);
   await assert.rejects(f.auth.login('reader@example.com','incorrect password value','local'),/邮箱或密码不正确/);
@@ -41,9 +42,9 @@ test('注册必须验证邮箱并设置密码；密码加盐存储，账号会�
 });
 test('重置码绑定用途、用后失效；重置撤销全部会话，不自动登录',async()=>{
  const f=setup();try{
-  const first=await f.auth.register({...f.code(),password});
+  const first=await f.auth.register({...profile,...f.code(),password});
   f.advance(61000);const challenge=f.code('reader@example.com','reset');
-  await assert.rejects(f.auth.register({...challenge,password}),/验证码/);
+  await assert.rejects(f.auth.register({...profile,...challenge,password}),/验证码/);
   assert.throws(()=>f.store.verifyCode(challenge.requestId,challenge.code),/验证码/);
   const result=await f.auth.reset({...challenge,password:password+' new'});
   assert.deepEqual(result,{ok:true});assert.equal(f.store.session(first.token),null);
@@ -60,20 +61,20 @@ test('已有无密码邮箱账号设置密码时保留原 ID、关注和退订�
   f.store.setEmail(legacy.account.id,false);
   f.store.saveWatch(legacy.account.id,{productKey:'chatgpt-plus',mode:'off'},{products:[{key:'chatgpt-plus'}],groups:[]});
   f.advance(61000);
-  const a=await f.auth.register({...f.code(),password});
+  const a=await f.auth.register({...profile,...f.code(),password});
   assert.equal(a.account.id,legacy.account.id);assert.equal(a.account.email_enabled,0);
   assert.equal(f.store.watches(a.account.id).length,1);assert.equal(f.store.session(legacy.token),null);
   f.advance(61000);
-  await assert.rejects(f.auth.register({...f.code(),password:password+' other'}),/已设置密码/);
+  await assert.rejects(f.auth.register({...profile,...f.code(),password:password+' other'}),/已设置密码/);
  }finally{f.db.close();}
 });
 test('验证码五次错误、过期、限流及并发提交不会重复创建账号或覆盖密码',async()=>{
  const f=setup();try{
-  const bad=f.code();for(let i=0;i<5;i++)await assert.rejects(f.auth.register({...bad,code:'000000',password}),/验证码/);
-  await assert.rejects(f.auth.register({...bad,password}),/验证码/);
+  const bad=f.code();for(let i=0;i<5;i++)await assert.rejects(f.auth.register({...profile,...bad,code:'000000',password}),/验证码/);
+  await assert.rejects(f.auth.register({...profile,...bad,password}),/验证码/);
   f.advance(61000);const expired=f.code();f.advance(601000);
-  await assert.rejects(f.auth.register({...expired,password}),/验证码/);
-  const good=f.code();const results=await Promise.allSettled([f.auth.register({...good,password}),f.auth.register({...good,password:password+'2'})]);
+  await assert.rejects(f.auth.register({...profile,...expired,password}),/验证码/);
+  const good=f.code();const results=await Promise.allSettled([f.auth.register({...profile,...good,password}),f.auth.register({...profile,...good,password:password+'2'})]);
   assert.equal(results.filter(r=>r.status==='fulfilled').length,1);
   assert.equal(f.db.prepare('SELECT COUNT(*) n FROM retention_accounts').get().n,1);
   assert.throws(()=>f.code(),e=>e.status===429);
@@ -81,7 +82,7 @@ test('验证码五次错误、过期、限流及并发提交不会重复创建�
 });
 test('登录限流持久化，重置不存在的账号不会发信或创建账号',async()=>{
  const f=setup();try{
-  await f.auth.register({...f.code(),password});
+  await f.auth.register({...profile,...f.code(),password});
   for(let i=0;i<10;i++)await assert.rejects(f.auth.login('reader@example.com','wrong but long password','client'),e=>e.status===401);
   const restarted=createAccountAuth(f.store,{now:()=>new Date('2026-09-08T10:00:30Z')});
   await assert.rejects(restarted.login('reader@example.com',password,'client'),e=>e.status===429);
@@ -115,7 +116,7 @@ test('HTTP 注册登录退出完整链路：CSRF、Cookie、安全头、旧接�
   r=await post('request-code',{email:'reader@example.com',consent:true,purpose:'register'});assert.equal(r.status,200);const {requestId}=await r.json();
   const code=JSON.parse(privateDb.prepare('SELECT payload FROM retention_mail WHERE event_key=?').get('code:'+requestId).payload).code;
   r=await post('verify-code',{requestId,code});assert.equal(r.status,410);assert.equal((await state()).account,null);
-  r=await post('register',{requestId,code,password});assert.equal(r.status,200);
+  r=await post('register',{...profile,requestId,code,password});assert.equal(r.status,200);
   assert.match(r.headers.getSetCookie().find(c=>c.startsWith('airadar_reader=')),/HttpOnly; SameSite=Lax; Secure/);
   const firstToken=jar.get('airadar_reader');assert.equal((await state()).account.email,'reader@example.com');
   const cookie=[...jar].map(([k,v])=>k+'='+v).join('; ');
@@ -137,8 +138,8 @@ test('注册、重置邮件用途准确，不发送密码；第五次正确验�
   await drainRetentionMail(f.store,{groups:[]},{transport,from:'notice@airadar.vip',now:new Date('2026-09-08T10:00:00Z')});
   await drainRetentionMail(f.store,{groups:[]},{transport,from:'notice@airadar.vip',now:new Date('2026-09-08T10:00:00Z')});
   assert.equal(sent,1);assert.equal(f.db.prepare('SELECT payload FROM retention_mail').get().payload,'{}');
-  for(let n=0;n<4;n++)await assert.rejects(f.auth.register({...challenge,password,code:'000000'}));
-  await f.auth.register({...challenge,password});
+  for(let n=0;n<4;n++)await assert.rejects(f.auth.register({...profile,...challenge,password,code:'000000'}));
+  await f.auth.register({...profile,...challenge,password});
   f.advance(61000);f.code('reader@example.com','reset');
   const reset=f.db.prepare('SELECT * FROM retention_mail ORDER BY id DESC LIMIT 1').get();
   assert.match(retentionMessage(f.store,reset,{groups:[]},'notice@airadar.vip',{now:new Date('2026-09-08T10:01:01Z')}).subject,/重置密码/);

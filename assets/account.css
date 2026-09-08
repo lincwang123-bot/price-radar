@@ -4,3 +4,4 @@
 .app-header .app-nav{max-width:100%;flex-wrap:wrap}
 @media(max-width:1200px){.app-header .header-main{grid-template-columns:minmax(0,1fr) auto;gap:10px;padding:10px 0}.app-header .app-nav{grid-column:1 / -1;grid-row:2;justify-self:center}.app-header .nav-link{min-width:0}}
 @media(max-width:600px){.app-header .app-nav{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));width:100%;border-radius:14px;gap:2px}.app-header .nav-link{min-height:38px;padding:0 10px;white-space:nowrap}.app-header .header-main{gap:8px}}
+.reader-form select{box-sizing:border-box;width:100%;min-height:46px;padding:10px 12px;margin:0 0 18px;border:1px solid #cbd8d1;border-radius:8px;background:#fff;color:#21382f;font:inherit;font-size:16px}.reader-form select:focus-visible{outline:3px solid #bbdace;outline-offset:2px}.reader-profile{margin:28px 0;padding-top:24px;border-top:1px solid #e6ebe8}.reader-profile h2{font-size:20px;margin:0 0 10px}
