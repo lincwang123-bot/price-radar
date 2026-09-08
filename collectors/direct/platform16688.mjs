@@ -1,6 +1,6 @@
 import { safeFetchJson } from '../../lib/safe-fetch.mjs';
 import { deliveryEvidence } from '../../lib/delivery-evidence.mjs';
-import { directOfferExclusionReason } from './catalog.mjs';
+import { directOfferExclusionReason, classifyDirectOffer } from './catalog.mjs';
 import { isAuthorizedMerchantTarget } from '../../lib/merchant-target-capability.mjs';
 
 // Verified 2026-09-06 from existing public /goods/G… links, then the public
@@ -91,17 +91,21 @@ export function parse16688Goods(payload, target, capturedAt = new Date().toISOSt
     const count = Number.isSafeInteger(number) && number >= 0 ? number : null;
     const state = String(item.stock_available_status ?? '').toLowerCase();
     // Explicit sold-out takes precedence even when upstream quantities conflict.
+    // The public purchase panel accepts manual fulfillment with the -1 sentinel;
+    // it is not a counted card inventory. Preserve an unknown quantity, not -1 or infinity.
+    const manualAvailable = Number(item.delivery_method) === 2 && number === -1 && state === '';
     const status = state === 'out' || count === 0 ? 'out_of_stock'
       : state === 'low' ? 'low_stock'
-      : count > 0 || ['normal', 'high'].includes(state) ? 'in_stock' : 'unknown';
+      : count > 0 || ['normal', 'high'].includes(state) || manualAvailable ? 'in_stock' : 'unknown';
+    const evidence=deliveryEvidence({ productTitle:title, category:item.category?.name ?? item.category_name, description:item.description });
     return [{
       offerId: `${source.id}:${item.goods_no}`, sourceId: source.id,
-      sourceName: '16688', storeName: String(target.name || source.name), title,
+      sourceName: '16688', storeName: String(target.name || source.name), title, category:evidence.category,
       price, listedPrice: price, feeAmount: null, priceBasis: 'listed', currency: 'CNY',
       status, stockCount: status === 'out_of_stock' ? 0 : count,
       url: `${source.origin}/goods/${item.goods_no}`, capturedAt, expiresAt: null,
       extra: { shopNo: source.shopNo, shopUrl: `${source.origin}/shop/${source.shopNo}`,
-        deliveryEvidence: deliveryEvidence({ productTitle:title, category:item.category?.name ?? item.category_name, description:item.description }) },
+        deliveryEvidence:evidence },
     }];
   });
 }
@@ -115,5 +119,26 @@ export async function collect16688(target, options = {}) {
     fetchImpl: options.fetchImpl, timeoutMs: options.timeoutMs ?? 15000,
     maxBytes: options.maxBytes ?? 4 * 1024 * 1024, maxRedirects: 0,
   });
-  return parse16688Goods(payload, target, options.capturedAt ?? new Date().toISOString());
+  const capturedAt=options.capturedAt??new Date().toISOString();
+  const initial=parse16688Goods(payload,target,capturedAt);
+  // Fetch the same shop-scoped category map as the public storefront only when
+  // a product omits its brand and the list provides a category ID, not its name.
+  const needsCategory=payload?.data?.list?.some(item=>/^C\d+$/.test(item.goods_category_no||'')
+    && !item.category?.name && !item.category_name && !classifyDirectOffer({title:item.name}));
+  if(needsCategory) {
+    const categories=await safeFetchJson(`${source.origin}/shopApi/goodsCategory/list`,{
+      allowedOrigins:[source.origin],allowedMethods:['POST'],method:'POST',headers:{Accept:'application/json','Content-Type':'application/json'},
+      body:JSON.stringify({shop_no:source.shopNo}),fetchImpl:options.fetchImpl,timeoutMs:options.timeoutMs??15000,
+      maxBytes:128*1024,maxRedirects:0,
+    });
+    if(Number(categories?.code)!==1||!Array.isArray(categories.data)||categories.data.length>200)throw new Error('16688 商品分类目录无效');
+    const names=new Map();
+    for(const row of categories.data) {
+      if(!/^C\d+$/.test(row?.goods_category_no||'')||typeof row.name!=='string'||!row.name.trim()||row.name.length>500
+        ||names.has(row.goods_category_no)||(row.shop_no&&row.shop_no!==source.shopNo))throw new Error('16688 商品分类身份不匹配');
+      names.set(row.goods_category_no,row.name);
+    }
+    payload.data.list=payload.data.list.map(item=>({...item,category_name:item.category?.name||item.category_name||names.get(item.goods_category_no)||''}));
+  }
+  return needsCategory?parse16688Goods(payload,target,capturedAt):initial;
 }

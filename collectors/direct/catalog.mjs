@@ -61,6 +61,11 @@ function has(text, pattern) {
 }
 
 export function classifyDirectOffer({ title, category = "", sourceId = "", extra }) {
+  let evidence={};
+  try { evidence=deliveryEvidence((typeof extra==='string'?JSON.parse(extra):extra)?.deliveryEvidence); } catch {}
+  // Single-product category evidence survives SQLite storage. Never inherit a
+  // parent or another SKU's category when the selected title does not match.
+  if(!category&&!evidence.skuTitle&&evidence.productTitle===title)category=evidence.category;
   const titleText = normalized(title);
   const categoryText = normalized(category);
   const text = normalized(`${category} ${title}`);
@@ -151,8 +156,12 @@ export function classifyDirectOffer({ title, category = "", sourceId = "", extra
 
   // 品牌和套餐必须在商品标题中出现；店铺分类只做辅助信息。
   // 否则某个“ChatGPT Plus”分类下误放的其他品牌商品会污染最低价。
+  const otherBrand=/claude|cladue|gemini|google|grok|suno|cursor|perplexity|notion|manus|copilot|microsoft|midjourney|canva|adobe|豆包|即梦|可灵|腾讯|百度|夸克|\bwps\b/i;
+  const bareWords=new Set(['plus','pro','go','team','business','x','ios','android','web','app','cdk','cdkey','free','usd','cny','usdt','m','month','months','year','years','monthly','yearly','recharge','account']);
+  const categoryGpt=has(categoryText,/chat\s*gpt|openai|\bgpt\b/i)&&!otherBrand.test(categoryText)&&!otherBrand.test(titleText)
+    &&(titleText.match(/[a-z]+/g)||[]).every(word=>bareWords.has(word));
   const chatgpt = has(titleText, /chat\s*gpt|openai|\bgpt\b|\bg\s*plus\b|\bgplus\b|codex/i) ||
-    (has(categoryText, /chat\s*gpt|openai/i) && has(titleText, /\bplus\b|\bpro\b|pro(?=\d)|team|business|\bgo\b|(?:5|20)\s*x|x\s*(?:5|20)/i)) ||
+    (categoryGpt && has(titleText, /\bplus\b|\bpro\b|pro(?=\d)|team|business|\bgo\b|(?:5|20)\s*x|x\s*(?:5|20)/i)) ||
     (sourceId === "redeemgpt" && categoryText === "cdk" && has(titleText, /1个月plus代充/) && has(titleText, /ios/));
   const claude = has(titleText, /claude|cladue/i);
   const gemini = has(titleText, /gemini|google\s*ai|反重力|antigravity/i);
@@ -179,7 +188,7 @@ export function classifyDirectOffer({ title, category = "", sourceId = "", extra
   }
   // Accept a confirmed category OR the explicit product phrase “GPT 5x/20x”.
   // The latter remains available after storage, where category isn't always retained.
-  if (chatgpt && (has(categoryText, /chat\s*gpt|openai/i) || has(titleText, /(?:chat\s*gpt|\bgpt)\s+(?:5|20)\s*x(?![\d.])/))) {
+  if (chatgpt && (categoryGpt || has(titleText, /(?:chat\s*gpt|\bgpt)\s+(?:5|20)\s*x(?![\d.])/))) {
     if (twentyX) return PRODUCTS["chatgpt-pro-20x"];
     if (fiveX) return PRODUCTS["chatgpt-pro-5x"];
   }
@@ -257,8 +266,12 @@ export function directOfferExclusionReason(raw) {
   const descriptionApplies = ['sku', 'product'].includes(evidence.descriptionScope)
     || (!evidence.descriptionScope && !evidence.skuTitle);
   const traditional = { 質:'质', 後:'后', 無:'无', 沒:'没', 號:'号', 說:'说', 負:'负', 責:'责', 並:'并', 會:'会', 絕:'绝' };
-  const title = normalized([raw?.title, evidence.skuTitle, descriptionApplies ? evidence.description : ''].filter(Boolean).join('。'))
+  const warrantyText=[raw?.title, evidence.skuTitle, descriptionApplies ? evidence.description : ''].filter(Boolean).join('。')
     .replace(/[質後無沒號說負責並會絕]/g, char => traditional[char])
+    // Keep punctuation until the bounded ban-only clause is removed. A separate
+    // whole-product disclaimer must still exclude the offer, even with warranty elsewhere.
+    .replace(/封号(?:\s*(?:\d+(?:\.\d+)?\s*%\s*)?的?原因(?:是)?(?:由于|为)?(?:(?!本商品|所有|任何问题|一律|无论)[^，,。；;！？!?\n]){0,60})?[，,]?\s*(?:不提供|不予|没有|无|不)\s*(?:任何\s*)?售后/g,'');
+  const title = normalized(warrantyText)
     // An explicitly negated disclaimer is not itself a disclaimer.
     .replace(/(?:不是|并非|并不是|非)\s*(?:无\s*(?:任何\s*)?|没有\s*|不提供\s*|不支持\s*|不予\s*|不做\s*|不)(?:质保|售后)/g, '')
     .replace(/封号\s*(?:不质保|不保)(?:\s*(?:和|及|、)?\s*不售后)?|封号\s*不售后/g, '');
