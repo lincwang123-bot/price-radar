@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { safeExternalLink } from '../lib/admin-links.mjs';
 import { merchantReviewContent } from '../lib/merchant-ui.mjs';
 
-const application = {id:'MA-EXAMPLE',shopName:'Example',shopUrl:'https://wzyp.cn/shop/zhipuai',status:'pending',version:3};
+const application = {id:'MA-EXAMPLE',shopName:'Example',email:'owner@example.org',shopUrl:'https://wzyp.cn/shop/zhipuai',status:'pending',version:3};
 test('proof and shop links only link safe HTTP(S) URLs in isolated new tabs',()=>{
   for (const value of ['https://wzyp.cn/shop/zhipuai','http://example.com/path?q=a&b=c']) {
     const html = safeExternalLink(value);

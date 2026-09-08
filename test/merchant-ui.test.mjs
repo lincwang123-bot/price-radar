@@ -3,6 +3,16 @@ import assert from 'node:assert/strict';
 import {merchantSubmissionContent,merchantInboxContent,merchantReviewContent} from '../lib/merchant-ui.mjs';
 
 const application={id:'MA-20260907-abc',shopName:'Example',shopUrl:'https://example.com',platform:'independent',productAreas:['chatgpt'],contact:'private@example.com',details:'Private evidence',status:'pending',version:1,createdAt:'2026-09-07',updatedAt:'2026-09-07'};
+test('legacy missing email is explicit and cannot be approved despite ready quote samples',()=>{
+  const inbox=merchantInboxContent({items:[application],total:1});
+  assert.match(inbox,/<span class="badge">待补邮箱<\/span>/);
+  assert.match(inbox,/旧记录.*补齐邮箱后才能批准/);
+  const missing=merchantReviewContent({application,preflightCanApprove:true});
+  assert.match(missing,/value="approve" type="submit" disabled/);
+  assert.match(missing,/请先补充并核对申请人的通知邮箱/);
+  const complete=merchantReviewContent({application:{...application,email:'owner@example.org'},preflightCanApprove:true});
+  assert.doesNotMatch(complete,/value="approve" type="submit" disabled/);
+});
 test('merchant times use Beijing timezone across day boundary and tolerate invalid dates',()=>{
   const app={...application,createdAt:'2026-09-06T16:45:23.000Z',updatedAt:'bad timestamp'};
   const review=merchantReviewContent({application:app,actions:[{action:'approve',note:'核验记录',createdAt:app.createdAt},{action:'pause',createdAt:null}]});

@@ -10,6 +10,8 @@ test('conversion prefills source facts but requires actual shop name and fresh c
  assert.match(html,/name="shopName"[^>]*value=""/);
  assert.match(html,/name="shopUrl"[^>]*value="https:\/\/merchant-qa-only.com\/"/);
  assert.match(html,/name="contact"[^>]*value="private@example.org"/);
+ assert.match(html,/<input[^>]*name="email"[^>]*required/);
+ assert.doesNotMatch(html,/旧投稿可先留空/);
  assert.match(html,/<option value="claude" selected/);
  assert.match(html,/name="note" required minlength="5"/);
  assert.match(html,/name="ownershipConfirmed" value="true" required/);

@@ -24,14 +24,14 @@ test('conversion routes protect authorization, preserve editable failures and on
     const page=await get(route),html=await page.text();assert.equal(page.status,200);
     assert.match(html,/private-source@example.org/);assert.match(html,/name="shopName"[^>]*value=""/);
     const csrf=/name="csrf" value="([^"]+)"/.exec(html)[1];
-    const fields={csrf,shopName:'已核实的店铺',shopUrl:'https://conversion-shop.com/',contact:'confirmed@example.org',details:'已补充核验材料',productAreas:'chatgpt',ownershipConfirmed:'true',permissionConfirmed:'true',note:'已核实归属及公开商品目录采集授权'};
+    const fields={csrf,shopName:'已核实的店铺',shopUrl:'https://conversion-shop.com/',email:'owner@example.org',contact:'confirmed@example.org',details:'已补充核验材料',productAreas:'chatgpt',ownershipConfirmed:'true',permissionConfirmed:'true',note:'已核实归属及公开商品目录采集授权'};
     assert.equal((await post(route,fields,cookie,{origin:'https://evil.test'})).status,403);
     assert.equal((await post(route,{...fields,csrf:'forged'},cookie)).status,403);
     assert.equal((await post(route,{...fields,details:'x'.repeat(17000)},cookie)).status,413);
     for(const [url,status]of [['/admin/submission/CO-20260907-000000000002/merchant',422],['/admin/submission/FB-20260907-000000000001/merchant',404]]) {
       assert.equal((await get(url)).status,status);assert.equal((await post(url,fields,cookie)).status,status);
     }
-    for(const change of [{ownershipConfirmed:'false'},{permissionConfirmed:'false'},{shopUrl:'https://127.0.0.1/'},{note:'no'}]) {
+    for(const change of [{ownershipConfirmed:'false'},{permissionConfirmed:'false'},{email:''},{email:'invalid'},{shopUrl:'https://127.0.0.1/'},{note:'no'}]) {
       const failed=await post(route,{...fields,...change},cookie);assert.equal(failed.status,422);
       const body=await failed.text();assert.match(body,/已核实的店铺/);assert.match(body,/已补充核验材料/);
       assert.doesNotMatch(body,/<input[^>]*type="checkbox"[^>]*checked/);

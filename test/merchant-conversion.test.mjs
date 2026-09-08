@@ -45,7 +45,7 @@ test('only supply can convert and authorization plus canonical field validation 
   assert.throws(()=>convertSupplySubmission(db,'FB-20260907-000000000001',fields,options),{status:404});
   for(const change of [{ownershipConfirmed:false},{permissionConfirmed:false},{note:'yes'},{note:'password=secret'},{note:'字'.repeat(1501)},
     {shopName:''},{shopUrl:'http://wzyp.cn/shop/sample-shop'},{shopUrl:'https://127.0.0.1/'},{shopUrl:'https://wzyp.cn/item/abc'},
-    {contact:''},{details:'api_key=secret'},{productAreas:['bad']}])
+    {contact:''},{email:undefined},{email:''},{email:' '},{email:'invalid'},{details:'api_key=secret'},{productAreas:['bad']}])
     assert.throws(()=>convertSupplySubmission(db,id,{...fields,...change},options),{status:422});
   assert.equal(db.prepare('SELECT COUNT(*) n FROM merchant_applications').get().n,0);
 });

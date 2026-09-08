@@ -44,7 +44,7 @@ test('transferred supplies leave the inbox and its counts while originals remain
     assert.match(await get('/admin/merchants/'+id(3)),new RegExp('/admin/submission/'+id(3)));
     // Direct conversion without an intake record is another transfer path.
     const converted=await post('/admin/submission/'+id(4)+'/merchant',{
-      csrf,shopName:'已转正式申请',shopUrl:'https://supply-4.example.org/',contact:'owner@example.org',
+      csrf,shopName:'已转正式申请',shopUrl:'https://supply-4.example.org/',email:'owner@example.org',contact:'owner@example.org',
       details:'原始供应资料',productAreas:'chatgpt',ownershipConfirmed:'true',permissionConfirmed:'true',note:'已核实店铺归属及公开目录展示授权'
     },cookie);
     assert.equal(converted.status,303);
