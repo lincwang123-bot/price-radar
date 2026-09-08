@@ -1,7 +1,7 @@
-# price-radar —— 多源 AI 订阅/API 比价雷达（个人整合站）
+# price-radar —— AI 订阅/API 报价导航
 
-把「AI 订阅 / 中转 API / 卡网渠道」的**比价聚合站**（如 PriceAI、OpenPrice 等）与固定登记的原始店铺公开目录当作数据源，
-统一拉取 → 存 SQLite 历史 → 规则化盯盘提醒。行情使用 Node ≥ 22 内置 `fetch` + `node:sqlite`；邮件使用已锁定版本的 `nodemailer`。
+按产品查看 AI 订阅与中转 API 的店铺、规格和报价，支持固定登记的原始店铺公开目录采集、SQLite 历史记录与规则化盯盘提醒。
+行情使用 Node ≥ 22 内置 `fetch` + `node:sqlite`；邮件使用已锁定版本的 `nodemailer`。
 
 ## 关注与回访功能（2026-09-08）
 
@@ -24,7 +24,7 @@
 
 > 2026-09-06 更新：扩源、覆盖验收、报价来源字段、P0 商业化入口和 Mac 回执已完成首轮发布验收。既有历史记录继续保留；完整商家账号、API 与信用体系仍属于后续阶段。
 
-> 同日第二轮扩源：默认原店目标由 23 增至 54（新增 30 家已核验的 16688 店铺与 AI 补给站），链动补充查询扩为 12 个关键词及有限分页。目标数不是有效报价数，也不是独立域名数；验证范围与未接入原因见 [扩源记录](docs/source-expansion-2026-09-06.md)。
+> 原店采集范围持续维护，当前启用目标以配置和 registry 为准。登记目标数不等于有效报价数，也不等于独立域名数；可用性以最近一次采集记录为准。
 
 ## 联系方式
 
@@ -33,26 +33,26 @@
 
 ```text
 ┌─────────────┐   ┌──────────────┐   ┌──────────────────┐   ┌───────────────┐
-│ priceai.cc  │──▶│  适配器(源)    │──▶│  SQLite 历史库     │──▶│ 盯盘规则引擎    │──▶ 控制台 / JSONL / Webhook
-│ openprice…  │──▶│ sources/*.mjs │   │  snapshots/…      │   │  min_below…    │
+│ 公开商品目录 │──▶│  适配器(源)    │──▶│  SQLite 历史库     │──▶│ 盯盘规则引擎    │──▶ 控制台 / JSONL / Webhook
+│ 店铺报价     │──▶│ sources/*.mjs │   │  snapshots/…      │   │  min_below…    │
 └─────────────┘   └──────────────┘   └──────────────────┘   └───────────────┘
 ```
 
 ## 设计原则
 
-- **源 = 适配器**：每个同类比价站一个文件，`pull(ctx)` 返回统一规范化快照即可接入，
+- **源 = 适配器**：每类公开目录通过独立适配器读取，`pull(ctx)` 返回统一规范化快照即可接入，
   新增站点不动核心逻辑（采集/存储/盯盘全复用）。
 - **幂等三层**：HTTP 指针层 ETag/304 → 不可变快照本地 raw 缓存 → SQLite 主键去重。
 - **历史可回填**：`radar.mjs import <raw.json>` 可把旧快照灌入，立即形成价格序列。
 - **盯盘去噪**：规则按「事件」触发而非每次轮询都报——跌破阈值只提醒首次与再创新低；
   跌幅只在进入窗口阈值时提醒，回升后解除；换源/下架只在状态翻转时提醒。
-- **合规**：只消费各站公开接口/页面数据；频率克制（PriceAI 官方要求指针 ≥1min/次）。
+- **采集边界**：仅访问公开接口/页面，核对适用的访问规则与许可，遵守限速要求。
   原始店铺直采只访问固定白名单，不绕过登录、验证码或 WAF，也不接受运行时任意 URL。
   报价仅作情报，不自动认定 SKU 等价、不自动采购、不据此直接上架。
 
 ## 快速开始
 
-内置默认配置即可直接运行（含 `priceai`、`direct-shops` 等数据源与一组示例盯盘规则）。要改关键词/规则/通知，复制 `config.example.json` → `config.json` 再改（写 null/缺省即用内置默认）。
+内置默认配置包含采集设置与一组示例盯盘规则，实际启用项以 `lib/config.mjs` 和本地配置为准。要改采集范围/规则/通知，复制 `config.example.json` → `config.json` 再改（写 null/缺省即用内置默认）。
 
 ```sh
 node radar.mjs pull                  # 拉取所有启用源并入库
@@ -65,8 +65,8 @@ Web 页面（零依赖、服务端渲染，给身边人看）：
 
 ```sh
 node radar.mjs serve --host 127.0.0.1 --port 8090
-# http://127.0.0.1:8090/           整合总览：官方区价 vs 卡网渠道 vs LDXP 货源
-# /product?source=priceai&id=chatgpt-plus-recharge   产品报价 + 走势图
+# http://127.0.0.1:8090/           按产品查看报价与店铺
+# /?family=chatgpt&product=chatgpt-plus   ChatGPT Plus 店铺与规格
 # /alerts                          盯盘提醒
 # /sources                         数据源状态
 ```
@@ -74,9 +74,9 @@ node radar.mjs serve --host 127.0.0.1 --port 8090
 查看数据：
 
 ```sh
-node radar.mjs products [--source ldxp-goods]   # 最新快照产品一览（默认 priceai）
-node radar.mjs offers chatgpt-plus [--source X] # 某产品最新报价（价格升序）
-node radar.mjs history chatgpt-plus --n 20      # 跨快照最低价走势
+node radar.mjs products --source direct-shops   # 原店采集的最新产品一览
+node radar.mjs offers chatgpt-plus-recharge --source direct-shops # 最新报价（价格升序）
+node radar.mjs history chatgpt-plus-recharge --source direct-shops --n 20 # 跨快照最低价走势
 node radar.mjs alerts --limit 20                # 最近告警
 node radar.mjs sources                          # 数据源与最新快照
 node radar.mjs import <raw.json>                # 历史 raw 快照回填（幂等）
@@ -90,8 +90,6 @@ node radar.mjs import <raw.json>                # 历史 raw 快照回填（幂�
 复制 `config.example.json` → `config.json`（`.gitignore` 已忽略本地配置与数据）。
 
 - `sources.<id>.enabled`：启用/停用源。
-  - `ldxp-goods.keywords[]`：LDXP 盯价关键词（建议含“代充/月/年/成品”等收敛词）。
-  - `ldxp-goods.min_interval_minutes`：该源轮询节流（默认 15）。
   - `direct-shops.targets[]`：只接受内置固定目标 id，不接受任意域名或 URL。
   - `direct-shops.min_interval_minutes`：直采源实际请求的最短间隔（默认 30）。
   - `direct-shops.request_delay_ms`：同一轮分页请求之间的延迟（默认 500ms）。
@@ -118,7 +116,7 @@ node radar.mjs import <raw.json>                # 历史 raw 快照回填（幂�
 
 ## 原始店铺直采（`direct-shops`）
 
-`direct-shops` 是本项目独立实现的原始店铺公开目录采集器，与 `priceai` 的 Top 5 公开快照是两个独立数据源：分别拉取、缓存并生成快照。候选店铺可通过公开商品链接发现，经原站和生产 VPS 核验后人工登记；不会自动导入第三方完整渠道表，PriceAI 也不作为直采失败时的回退。跨源商品仍须由业务侧确认是否等价。
+`direct-shops` 是本项目独立实现的原始店铺公开目录采集器，负责拉取、缓存并生成原店报价快照。候选店铺可通过公开商品链接发现，经原站和生产 VPS 核对后人工登记；固定目标白名单由本项目维护，不接受运行时任意 URL。不同店铺的商品仍须按具体规格确认是否可比。
 
 首批来源是代码内固定登记的公开 HTTPS 入口：
 
@@ -137,7 +135,6 @@ node radar.mjs import <raw.json>                # 历史 raw 快照回填（幂�
 | `google7676` | 以太AI | Kami：`google7676.top/user/api/index/commodity` | 30min |
 | `tehuio` | Tehuio | Kami：`tehuio.com/user/api/index/commodity` | 30min |
 | `codesky` | 花生店铺 | Kami：`store.codesky.qzz.io/user/api/index/commodity` | 30min |
-| `fk10886` | 10886源头发卡网 | Kami：`fk.10886.xyz/user/api/index/commodity` | 30min |
 | `gugugaga` | Gpt全自助发货 | Kami：`gugugugagaga.taootp.com/user/api/index/commodity` | 30min |
 | `flyai` | FlyAI | Dujiao：`flyai.qzz.io/api/v1/public/products` | 30min |
 | `whh985` | 王哈哈AI | Dujiao：`shop.whh985.com/api/v1/public/products` | 30min |
@@ -147,11 +144,11 @@ node radar.mjs import <raw.json>                # 历史 raw 快照回填（幂�
 | `burstpro-ai` | BurstPro AI | Dujiao：`burstpro-ai.online/api/v1/public/products` | 30min |
 | `ikunlove` | IkunLove | IkunLove JSON：`ikunlove.best/api/shop/products` | 30min |
 | `mooncake` | Mooncake | Mooncake JS 目录：`fk1.ybkjs.top/mooncake-official-media/catalog.js` | 12h |
-| `16688-s…`（30 家） | 固定店铺名单见 `collectors/direct/platform16688.mjs` | 16688 原店公开 `/shopApi/goods/list`，按已核验 `shop_no` 读取完整列表，不依赖 PriceAI 报价 | 60min |
+| `16688-s…`（30 家） | 固定店铺名单见 `collectors/direct/platform16688.mjs` | 16688 原店公开 `/shopApi/goods/list`，按已核对 `shop_no` 读取列表 | 60min |
 | `aichong` | AI补给站 | `aichong.xin/api/products`，仅在原站明确启用本地购买 `self_pay=true` 时收录 | 60min |
 | `wzyp-harvey`、`wzyp-paimon`、`wzyp-ai-choice`、`wzyp-direct`、`wzyp-lightyear` | 派大星、派蒙AI、AI优选站、GPTplus直营、光年AI | ShopApi：固定登记的 `wzyp.cn` 店铺，读取 `/shopApi/Shop/categoryList` 与 `/shopApi/Shop/goodsList` | 60min，非默认 |
 
-默认目标已从早期 21、23 个扩为 54 个；新增原站入口均在本机和生产 VPS 核验可达，自动采集仍遵循缓存和最小间隔。默认清单统一由 registry 提供，配置不再维护另一份重复数组。AikaShop 的 6 条 Suno 套餐没有明确库存证据，均为“待核验”，不参与可售起价或覆盖成绩。`web3chirou` 的 Kami 目录会出现“请求 100 条但首页仅返回 96 条”的情况；采集器在存在 `total` 时不再以单页长度提前结束，并用唯一 ID、重复页、连续空页和最大页数共同限定请求。Dujiao 多规格商品按 SKU 独立生成报价，只补充已确认的品牌名，不把父商品中的 Plus / Pro 5x / Pro 20x 混入每个 SKU。自动生成的 `SKU-1` 仅在单规格商品中回退到父标题，多规格仍不猜测。
+默认清单统一由 registry 提供，配置不再维护另一份重复数组；停用及屏蔽规则优先于历史登记清单，自动采集遵循缓存和最小间隔。AikaShop 的 6 条 Suno 套餐没有明确库存证据，均为“待核验”，不参与可售起价或覆盖成绩。`web3chirou` 的 Kami 目录会出现“请求 100 条但首页仅返回 96 条”的情况；采集器在存在 `total` 时不再以单页长度提前结束，并用唯一 ID、重复页、连续空页和最大页数共同限定请求。Dujiao 多规格商品按 SKU 独立生成报价，只补充已确认的品牌名，不把父商品中的 Plus / Pro 5x / Pro 20x 混入每个 SKU。自动生成的 `SKU-1` 仅在单规格商品中回退到父标题，多规格仍不猜测。
 
 `otaor`（`acc.otaor.com`）在 2026-09-05 核验时全部售罄，曾仅登记为候选；2026-09-06 复核 41 条 SKU 中 1 条 Gemini 权益兑换链接标有库存，其余 40 条售罄，故本次恢复默认目标。兑换链接不是完整订阅，不能计作订阅覆盖；旧地址 `xtacc.top` 不重复计入。无法正常访问、返回挑战页或已不再是商品站的候选不启用。
 
@@ -173,13 +170,7 @@ node radar.mjs import <raw.json>                # 历史 raw 快照回填（幂�
 
 页面展示的是原站公开商品列表中的**挂牌价**，不等同于最终结算价。优惠券、支付渠道、手续费、汇率、购买数量/规格和结账页变动都可能改变实付金额；ShopApi 采集器也不调用结算询价接口。购买前必须回到原店铺核对商品说明与最终应付金额。
 
-### 与 PriceAI 的许可证边界
-
-目前未能核实 PriceAI 当前仓库许可：此前引用的 `main/LICENSE` 链接不可用，不能据此声称已获得特定许可、已确认当前条款或可复用其源码。本项目仅接入其公开文档说明的快照接口，公开接口存在也不自动构成对所有再利用方式的授权；如需扩大使用范围，应先核实当前条款或联系权利方。
-
-本项目的 `direct-shops` 按上述原站公开入口独立实现；没有复制 PriceAI 当前 `main` 的采集代码，也没有复制其线上完整渠道表。固定目标白名单由本项目单独登记与维护。
-
-## 新增一个数据源（同类型比价站）
+## 运行与维护
 
 ### 站长后台与投稿备份
 
@@ -226,16 +217,11 @@ node --disable-warning=ExperimentalWarning scripts/mac-backup.mjs restore /绝�
 - 按站长选择保留所有历史版本，空间会随运行时间增长。统计摘要在线保留 31 天，服务器备份最多 14 份；加密异机历史可能长期保留，仅用于灾难恢复，不用于延长访问追踪。
 - 弱网传输默认最多等待 15 分钟；到时终止本轮并清理未完成档案，保留所有旧版本。正常中断会清理临时目录并等待子进程退出；断电或 SIGKILL 无法执行清理，遗留 `.running` 锁需先确认没有活动备份后人工处理，不自动猜测解锁。
 
-### 本轮覆盖验收与 P0 边界
+### 数据记录与功能边界
 
-```sh
-node scripts/source-coverage.mjs --db /绝对路径/radar.sqlite --json
-node scripts/source-coverage.mjs --db /绝对路径/radar.sqlite --report /尚不存在的报告.md
-```
+采集覆盖应按同产品、同规格、周期、币种及质保口径核对有效在售报价。目标登记数、缓存条目数和过去抽样数量不能代替实际覆盖证明；过期或失败记录不能作为新鲜报价。
 
-采集轮次结束后轻量评估同产品、同规格/周期/币种及质保口径的有效在售报价，按 UTC 日原子保存到 `data/source-coverage-ledger.json`，最多 90 日，同一快照重复评估不堆叠。初次不可判定可由随后有效样本补齐，但同日有效失败不能被稍后通过擦除。至少连续 7 个不同日、相同验收范围内，每个 PriceAI 有效组均有直采覆盖且最低价不劣于基线，才建议人工复核停用；不自动关源。PriceAI 自身 stale 或源发布时间过旧时一律不可判定，不能用刚下载的时间伪造新鲜度。当前 gate 未达标，不能删除 PriceAI 或原始历史。过去的抽样数量对比不等于全站同 SKU 覆盖证明，23 个目标也不等于 23 个有效供货店。详见 [覆盖政策](docs/source-coverage-policy.md) 与 [扩源核验](docs/source-coverage-expansion.md)。
-
-新报价持久化 `source_type/source_name/source_url/merchant_id/last_updated_at/last_verified_at/recorded_at`。来源由适配器决定，不能由第三方 payload 自报：`direct-shops` 是 `original_crawl`（原店采集），不是 `merchant_direct`（商家主动提交/API）；现有第三方转录的“官方区价”也不是官方直连。目前没有商家直连接入。更新时刻与最近抓取核验时刻分开，核验不代表购买认证；相同价格继续记录观察，A→B→A 不丢失。writer 幂等迁移新增列，旧库只读仍兼容，旧记录不伪造回填。详见 [来源与历史语义](docs/source-coverage-provenance.md)。
+新报价持久化 `source_type/source_name/source_url/merchant_id/last_updated_at/last_verified_at/recorded_at`。来源由受控适配器决定，不能由外部 payload 自报。`direct-shops` 使用 `original_crawl`（原店采集）类型；原店公开目录采集不等于商家主动提交报价。更新时刻与最近抓取核验时刻分开，核验不代表购买认证；相同价格继续记录观察，A→B→A 不丢失。writer 幂等迁移新增列，旧库只读仍兼容，旧记录不伪造回填。
 
 本轮 P0 还包含统一 `/go` 店铺跳转及最小点击统计、独立 Sponsored 广告模型/展示、`/advertise` 合作申请和商家认领申请入口。广告不改变自然价格排序；申请不自动通过身份认证、开通商家权限或上架广告。P1 的完整认领验证、商家后台/报价编辑/API、第一方占比 Dashboard、用户价格有效性反馈及专门的 30 日价格统计尚未实现；P2 信用体系也未做，不能把现有访问统计、历史曲线或覆盖验收页称为这些功能。
 
@@ -249,13 +235,15 @@ node scripts/source-coverage.mjs --db /绝对路径/radar.sqlite --report /尚�
 
 直采每条报价保留对应店铺健康信息，一个店铺失败不会让其他正常店铺全部失效。采集整体失败或报价超过有效期时不参与当前最低价；提醒对不完整采集轮次保守跳过，避免把失败误认成下架。ShopApi 目录未取完时拒绝发布不完整结果。
 
-用户页面展示商品、可比规格、挂牌价格、库存与更新时间、原始店铺和交易平台，不宣传聚合站品牌。现阶段仍有第三方公开汇总补充，不能宣称全部由本站独立采集；真实来源保留在内部数据和后台。品牌、交易平台、关键词、用途、已核验框架组合筛选支持服务器渲染；反馈和合作表单有安全 POST 兜底，脚本失效时不会把正文和联系方式写进网址。
+用户页面展示商品、可比规格、挂牌价格、库存与更新时间、原始店铺和交易平台；真实来源保留在内部数据和后台。品牌、交易平台、关键词、用途、已核验框架组合筛选支持服务器渲染；反馈和合作表单有安全 POST 兜底，脚本失效时不会把正文和联系方式写进网址。
 
 直采失败时最多使用 24 小时缓存（`direct-shops.max_cache_age_minutes` 可配置），超龄来源退出当轮报价并展示“不可用、不代表售罄”；原始历史保留。持续停机仍需通过后台和日志监控发现，不能把旧快照时间当作实时保证。
 
 渠道筛选与产品品牌独立：16688、链动小铺、登记独立站及未确认渠道。框架标签只写已识别接口类型，不能推导托管或担保。渠道选择会重算当前报价、最低价、总数及趋势，保留分页和返回品牌状态。
 
 `npm run check` 执行语法检查与完整测试；部署脚本要求干净且已提交的版本，先备份投稿、统计和旧代码，再停止本项目服务同步，检查本机与公网 HTTP。失败时精确恢复旧代码，以及 web、collector、备份 service/timer 和既有 Tunnel 的单元文件与启用/运行状态；数据库不做倒退恢复。旧代码归档在 `/opt/linc/backups/price-radar/code-before-<commit>-<timestamp>.tar.gz`。首次新版本部署前须确认管理员凭据交付，或保持后台关闭。不要把脚本与隔离测试通过当成已完成生产回滚演练。
+
+### 扩展采集适配器
 
 1. 在 `sources/` 新建 `xxx.mjs`，实现：
 
@@ -340,27 +328,14 @@ node radar.mjs submission-status FB-20260905-ABC234 resolved
 
 ## 现状与已知限制
 
-### 已接入源
+### 原店采集能力
 
 | 源 | 数据形态 | 更新节奏 | 备注 |
 | --- | --- | --- | --- |
-| `priceai` | PriceAI 官方公开快照流：45 产品 / 每产品 Top5+ 最低价 offer（含库存、来源店、原站 URL） | 约 5min 一代（指针 ≥1min 轮询） | 官方为脚本/Agent 发布的只读流，见 <https://priceai.cc/price-radar-api.md> |
-| `ldxp-goods` | RelayWatch 聚合的**链动小铺(LDXP) 卡网商品**：12 个关键词，在售筛选、有限分页和去重 | 默认 30min，每关键词最多 2 页、100 条/页，整轮最多 24 次商品请求，间隔至少 1s | 仍是第三方补充，不是独立直采；代码许可不代表数据库许可，不做全量镜像 |
-| `cardnav-official` | CardNav **官方订阅 App Store 区价**：17 产品 × 39-40 地区，本地价+折算 CNY（SSR 表格） | 官方价约每日刷新，默认 12h 拉一次 | 个人非商用低频使用；不镜像全量 |
-| `goaihop-relay` | GoAIHop **中转 API 站套餐+可用性**：12 家中转站 × 73 套餐，全 CNY；含实测 success/availability/P50 延迟快照 | 默认 6h 拉一次 | 同域公开 JSON API（见 `docs/goaihop-relay-packages-parsing-spec.md`）；含赞助站已在 extra 标注 |
 | `direct-shops` | 固定白名单内原始店铺的公开 JSON/JS/ShopApi 商品目录 | 源级 ≥30min；单目标 30min / 60min / 12h 缓存 | 独立实现；失败可沿用旧缓存并标记 `stale`；展示挂牌价而非最终结算价 |
 
-### 候选源评估结论（未接入的理由）
+### 商品差异与风险提醒
 
-- **openprice.cc**：产品数据客户端渲染（无 SSR/公开 JSON），需无头浏览器逆向；其源码许可还禁止把线上数据快照用于竞品/商业服务 → 不爬（非商用小站可另议，但技术上仍是 C 级）。
-- **relaywatch `/api/models` 全量**：约 1.6 万模型 × 站点倍率、分页极多且慢，整爬过重（只用其 LDXP 商品定向端点）。
-- **cardnav `/shops` 商家/商品目录**：表格为客户端渲染（无 SSR），不爬。
-- PriceAI 匿名档每产品只给 Top 5 offer + 最低价；任意搜索/全量报价导出不在公开流内。
-
-### 跨源差异提醒
-
-- 链动查询的截断原因、逐词总数、页数和去重收录量保存在行情库 `meta` 的 `coverage:ldxp-goods` 中。关键词结果相互重叠，查询总数之和不是独立商品总数；达到分页预算时明确记为有限样本，不宣称全站完整。
-
-- 各源的产品 id 与商品规格体系不同（priceai 用 `chatgpt-plus-recharge` 等品类 id；ldxp-goods 用关键词 slug 如 `gpt-pro`；direct-shops 只发布可可靠分类的原店条目），跨源对比请自行在业务侧映射，工具不臆断 SKU 等价。
-- ldxp-goods 的搜索为商品名 `contains` 匹配，同词可能混入成品号/额度/会员等形态，盯盘阈值请按需收敛关键词。
-- 快照含灰产形态报价（成品号/共享/无售后等），仅作情报参考；不据此自动采购、不据此直接上架。
+- 不同店铺的产品 id 与商品规格体系不同，必须按实际商品说明确认对应关系，不能仅凭名称或价格认定 SKU 等价。
+- 成品号、代充、共享/合租、席位及用途未明确的卡密分别展示，不将不同交付方式的价格混作同一最低价。
+- 报价仅供信息导航；店铺收录不代表交易安全保证，不据此自动采购或认定商品可信。
