@@ -7,11 +7,13 @@ import { collectAikaShop } from './aikashop.mjs';
 import { PLATFORM16688_SHOPS, collect16688 } from './platform16688.mjs';
 import { collectAichong } from './aichong.mjs';
 import { collectBBShare } from './bbshare.mjs';
+import { collectNobrisk } from './nobrisk.mjs';
 import {merchantUrlBlocked} from '../../lib/merchant-blocklist.mjs';
 
 // 这里只登记我们逐个核验过的原站公开入口。URL 不接受运行时任意传入，
 // 避免把采集器变成通用代理或 SSRF 入口。
 const TARGETS = [
+  {id:'nobrisk',name:'BriskAI',kind:'nobrisk',origin:'https://shop.nobrisk.com',endpoint:'/user/api/index/commodity',intervalMinutes:30,maxPages:5,pageSize:100},
   {id:'bbshare',name:'BBShare',kind:'bbshare',origin:'https://www.bbshare.site',intervalMinutes:60},
   ...PLATFORM16688_SHOPS.map(target => ({ ...target, kind: 'platform16688', intervalMinutes: 60 })),
   { id: 'aichong', name: 'AI补给站', kind: 'aichong', origin: 'https://aichong.xin', intervalMinutes: 60 },
@@ -140,6 +142,7 @@ const TARGETS = [
 ];
 
 const COLLECTORS = {
+  nobrisk: collectNobrisk,
   kami: collectKami,
   ikunlove: collectIkunLove,
   mooncake: collectMooncake,
@@ -180,7 +183,7 @@ export const DEFAULT_DIRECT_TARGET_IDS = Object.freeze([
   "lynnzee", "zhanghao66", "yufenggpt", "google7676", "tehuio",
   "codesky", "fk10886", "gugugaga", "flyai", "whh985", "aictk", "ccdawang",
   ...PLATFORM16688_SHOPS.map(target => target.id),
-  'aichong',
+  'aichong', 'nobrisk',
 ]);
 
 export function directTargets(ids = DEFAULT_DIRECT_TARGET_IDS) {
