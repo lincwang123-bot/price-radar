@@ -51,7 +51,8 @@ test('LDXP 拒绝无效分页/无限预算，HTTP阻挡不重试', async () => {
   let calls = 0;
   await assert.rejects(queryKeyword('claude', { fetchImpl: async () => { calls++; return new Response('denied', { status: 403 }); } }), /403/);
   assert.equal(calls, 1);
-  assert.equal(recommendedKeywords.length, 12);
+  assert.equal(recommendedKeywords.length, 11);
+  assert.ok(!recommendedKeywords.includes('接码'));
 });
 test('LDXP 持久化有限样本统计，修改scope会产生新快照', async () => {
   const db = openDb(':memory:');

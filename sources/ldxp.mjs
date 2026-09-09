@@ -9,6 +9,7 @@
 import { claimSourceAttempt } from "../lib/source-timing.mjs";
 import { safeFetchJson, isAccessDeniedError } from "../lib/safe-fetch.mjs";
 import { metaSet } from "../lib/db.mjs";
+import { retiredCatalogItem } from '../lib/catalog-policy.mjs';
 
 const BASE = "https://relaywatch.online";
 const UA =
@@ -18,7 +19,7 @@ export const sourceId = "ldxp-goods";
 export const sourceLabel = "RelayWatch·链动小铺(LDXP) 卡网商品价";
 export const recommendedKeywords = Object.freeze([
   "gpt plus", "gpt pro", "claude pro", "claude max", "gemini pro", "gemini ultra",
-  "邮箱", "cursor", "perplexity", "接码", "codex", "grok",
+  "邮箱", "cursor", "perplexity", "codex", "grok",
 ]);
 
 function limit(value, fallback, min, max, name) {
@@ -81,7 +82,7 @@ function fnv1a(str) {
  */
 export async function pull(ctx) {
   const cfg = ctx.config?.sources?.[sourceId] ?? {};
-  const keywords = Array.isArray(cfg.keywords) ? [...new Set(cfg.keywords.map(kw => String(kw).trim()).filter(Boolean))] : [];
+  const keywords = Array.isArray(cfg.keywords) ? [...new Set(cfg.keywords.map(kw => String(kw).trim()).filter(kw=>kw&&!retiredCatalogItem({title:kw})))] : [];
   if (keywords.length > 16) throw new Error("ldxp 关键词上限为16，禁止整库镜像");
   const budget = { remaining: limit(cfg.max_requests, 24, 1, 24, "max_requests"), requests: 0 };
   if (!keywords.length) {

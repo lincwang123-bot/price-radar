@@ -12,7 +12,7 @@ test('referral adverts, notices and invitation discounts are not retail subscrip
   for (const title of ['推广赚10%可提现返利｜Codex验证码接马｜G Plus接马｜低至0.5元', '邀请推广返利可提现 Codex接马', '接马推广 可提现返利', 'codex api 更变', 'Cursor ultra半价邀请链接']) {
     assert.equal(classifyDirectOffer({ title }), null, title);
   }
-  assert.equal(classifyDirectOffer({ title: '推广优惠 Codex验证码接马 单次' })?.id, 'verification-service');
+  assert.equal(classifyDirectOffer({ title: '推广优惠 Codex验证码接马 单次' }), null);
   assert.equal(classifyDirectOffer({ title: 'ChatGPT Plus 月卡 推广优惠' })?.id, 'chatgpt-plus-recharge');
   for (const title of ['API Cursor Pro 2600 积分 1 个月全保', 'API Cursor Pro 6500积分', 'API Cursor Pro 每天400积分']) {
     assert.equal(classifyDirectOffer({ title })?.id, 'api-cdk-credits', title);

@@ -11,7 +11,6 @@ test('explicit classified G Plus and Codex offers survive the bare-tier fallback
     ['chatgpt-plus-recharge', 'chatgpt-plus', 'G Plus [官方直充] CDK 全自动充值 直充自己账号'],
     ['chatgpt-plus-recharge', 'chatgpt-plus', '【官方充值】Codex Plus 1 个月丨菲区正价代充丨带账单丨质保丨无法覆盖'],
     ['chatgpt-pro-5x', 'chatgpt-pro-5x', '【美区IOS】JPT Codex Pro 5X 官方充值 质保30天'],
-    ['verification-service', 'verification-service', 'codex 短效接🐎未接到可换号 包接马成功100% 不限次数 南非实卡codex 单次接马plus'],
   ];
   for (const source of ['direct-shops', 'priceai', 'ldxp-goods']) for (const [id, key, title] of cases) {
     const directory = buildProductDirectory([list(source, source === 'ldxp-goods' ? 'search-mixed' : id, [quote(title)])]);
@@ -68,7 +67,7 @@ test('16688 deduplication does not collapse meaningful query variants, other hos
 
 test('seven primary categories plus more retain known extra products', () => {
   const directory = buildProductDirectory([list('direct-shops', 'suno-pro-1m', [quote('Suno Pro 1个月')])]);
-  assert.deepEqual(directory.filter(row => row.primary).map(row => row.label), ['ChatGPT', 'Claude', 'Gemini', 'Grok', 'X', 'API / 中转', '邮箱 / 接码']);
+  assert.deepEqual(directory.filter(row => row.primary).map(row => row.label), ['ChatGPT', 'Claude', 'Gemini', 'Grok', 'X', 'API / 中转', '邮箱']);
   assert.equal(directory.find(row => row.key === 'suno').products[0].name, 'Suno Pro');
   assert.equal(directory.find(row => row.key === 'other').products.length, 0);
 });

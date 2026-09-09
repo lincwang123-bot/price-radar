@@ -84,7 +84,7 @@ test('首页直接列产品，一步展示全部规格店铺，旧详情仍可�
   const links=[...detail.matchAll(/class="spec-choice" aria-current="false" href="([^\"]+)"/g)].map(match=>match[1].replaceAll('&amp;','&'));assert.equal(links.length,1);
   const year=await(await fetch(base+links[0])).text();assert.match(year,/price-display">¥90</);assert.match(year,/共 1 条公开报价/);assert.doesNotMatch(year,/quote-provenance">|原店采集|第三方采集/);
   const empty=await(await fetch(base+'/?family=microsoft')).text();assert.match(empty,/暂无可用报价/);assert.match(empty,/data-directory-family="microsoft"/);
-  const alias=await(await fetch(base+'/?family=otp')).text();assert.match(alias,/data-directory-family="mail"/);
+  const alias=await fetch(base+'/?family=otp');assert.equal(alias.status,410);assert.match(await alias.text(),/该业务已下架/);
   const more=await(await fetch(base+'/?family=cursor')).text();assert.match(more,/<details class="category-more active">/);assert.doesNotMatch(more,/<details class="category-more[^\"]*"[^>]*\bopen\b/);assert.match(more,/data-family-filter="cursor" aria-current="page"/);
  }finally{if(app.listening)await new Promise(r=>app.close(r));db.close();}
 });

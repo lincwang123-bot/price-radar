@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { offerSpec, deliveryForm } from '../../lib/offer-spec.mjs';
 import { deliveryEvidence } from '../../lib/delivery-evidence.mjs';
+import { retiredCatalogItem } from '../../lib/catalog-policy.mjs';
 
 // 独立维护的小型明确分类表。它只覆盖当前站点实际展示的产品族；规则不确定时
 // 返回 null，避免把低价但不同形态的商品错误混入排行榜。
@@ -36,7 +37,6 @@ const PRODUCTS = {
     [`cursor-${id}-1m`, product(`cursor-${id}-1m`, `Cursor ${name} · 1 个月`, "Cursor", "订阅/账号", "1 个月；以原店交付说明为准")],
   ])),
   "api-cdk-credits": product("api-cdk-credits", "API / CDK / 额度", "API/CDK", "额度/开发服务"),
-  "verification-service": product("verification-service", "接码 / 验证服务", "接码", "辅助服务"),
   "email-accounts": product("email-accounts", "邮箱账号", "邮箱", "账号"),
 };
 
@@ -61,6 +61,7 @@ function has(text, pattern) {
 }
 
 export function classifyDirectOffer({ title, category = "", sourceId = "", extra }) {
+  if (retiredCatalogItem({title,category,extra})) return null;
   let evidence={};
   try { evidence=deliveryEvidence((typeof extra==='string'?JSON.parse(extra):extra)?.deliveryEvidence); } catch {}
   // Single-product category evidence survives SQLite storage. Never inherit a
@@ -99,11 +100,6 @@ export function classifyDirectOffer({ title, category = "", sourceId = "", extra
   if (has(titleText, /^google\s*个人邮箱(?:\s|$)|gmail|outlook|hotmail|微软邮箱|谷歌邮箱|邮箱账号|邮箱老号|域名邮箱/) ||
       (has(categoryText, /^邮箱产品$/) && has(titleText, /mail\.com|mail\.tm|rambler|gmx|firstmail/))) {
     return PRODUCTS["email-accounts"];
-  }
-  // “手机号注册”只是账号属性，不等于卖家在提供接码服务。
-  if (has(titleText, /接码|接马|验证码|短信验证|\bsms\b|phone\s*(?:number|verify)|手机号\s*(?:接码|验证|接收)/i) ||
-      (has(categoryText, /^实卡\s*接码$/) && has(titleText, /手机号/) && has(titleText, /临时|单次/))) {
-    return PRODUCTS["verification-service"];
   }
   // 纯教程/额度说明不是会员报价，避免把低价资料当成代充最低价。
   if (has(titleText, /教程|教学|攻略|邀请额度/) && !has(titleText, /直充|代充|卡密|成品|月卡|年卡|会员|账号/)) {
@@ -253,6 +249,7 @@ function singleSubscriptionMonths(text) {
 }
 
 export function directOfferExclusionReason(raw) {
+  if (retiredCatalogItem(raw)) return 'retired_business';
   const status = String(raw?.status ?? "").trim().toLowerCase().replace(/[\s-]+/g, "_");
   const stockCount = raw?.stockCount == null ? null : Number(raw.stockCount);
   if (["out_of_stock", "sold_out", "soldout", "unavailable"].includes(status) || stockCount === 0) {
