@@ -65,17 +65,17 @@ test('home/category/product show their own sponsors only, current availability e
  for(const route of ['/','/?family=chatgpt','/?family=chatgpt&product=chatgpt-plus'])assert.doesNotMatch(await(await get(route)).text(),/<article class="sponsor-card"/);
 }));
 
-test('12 public demos stay fictional, application calculates price on server and stores privately',()=>fixture(async({get,base,submissionsDb,analytics})=>{
+test('public sponsor inquiry hides fees, preserves demos and stores no implied quote',()=>fixture(async({get,base,submissionsDb,analytics})=>{
  for(const placement of ['product','category','home'])for(const count of [1,2,3,4]){
-  const html=await(await get(`/advertise?placement=${placement}&count=${count}`)).text();assert.equal(html.match(/<article class="sponsor-card"/g).length,count);assert.match(html,/虚构示例/);assert.doesNotMatch(html,/data-sponsor-token=/);
+  const html=await(await get(`/advertise?placement=${placement}&count=${count}`)).text();assert.equal(html.match(/<article class="sponsor-card"/g).length,count);assert.match(html,/虚构示例/);assert.doesNotMatch(html,/data-sponsor-token=/);assert.doesNotMatch(html,/首期试行价|价目版本|prices["']?\s*:/);assert.match(html,/获取报价/);for(const amount of [159,299,449,549,849,999,1499])assert.doesNotMatch(html,new RegExp('¥'+amount+'(?![0-9])'));
  }
- const page=await(await get('/submit?topic=sponsor_apply&placement=category&duration=14d')).text(),csrf=page.match(/name="csrf-token" content="([^"]+)"/)[1];assert.match(page,/¥549/);
+ const page=await(await get('/submit?topic=sponsor_apply&placement=category&duration=14d')).text(),csrf=page.match(/name="csrf-token" content="([^"]+)"/)[1];assert.match(page,/合作费用与档期由人工沟通确认/);assert.doesNotMatch(page,/¥|首期参考费用|prices["']?\s*:/);
  const payload={kind:'feedback',topic:'sponsor_apply',subject:'测试店铺申请',contextUrl:'https://merchant.test',contact:'private-fixture@example.test',details:'测试提交，验证人工处理的赞助申请与费用。',consent:true,metadata:{rateVersion:SPONSOR_RATE_VERSION,placement:'category',duration:'14d',targetPage:'/?family=chatgpt',amount:1}};
  const send=body=>fetch(base+'/api/submissions',{method:'POST',headers:{origin:base,'content-type':'application/json',cookie:'airadar_csrf='+csrf,'x-csrf-token':csrf},body:JSON.stringify(body)});
  assert.equal((await send({...payload,metadata:{...payload.metadata,targetPage:'https://evil.test'}})).status,422);
  for(const rateVersion of [undefined,'2026-09-09','2026-09-09-v2']){const rejected=await send({...payload,metadata:{...payload.metadata,rateVersion}});assert.equal(rejected.status,422);assert.match((await rejected.json()).error,/刷新页面/);}
  assert.equal(listSubmissions(submissionsDb,{kind:'feedback'}).length,0);
- assert.equal((await send(payload)).status,201);
- const row=listSubmissions(submissionsDb,{kind:'feedback'})[0];assert.match(row.details,/¥549/);assert.ok(row.details.includes('价目版本：'+SPONSOR_RATE_VERSION));assert.match(row.details,/目标页面：\/\?family=chatgpt/);
+ const accepted=await send(payload);assert.equal(accepted.status,201);const receipt=await accepted.json();assert.deepEqual(Object.keys(receipt).sort(),['id','ok']);
+ const row=listSubmissions(submissionsDb,{kind:'feedback'})[0];assert.match(row.details,/合作费用：待沟通，尚未报价/);assert.doesNotMatch(row.details,/¥|参考费用|价目版本/);assert.match(row.details,/目标页面：\/\?family=chatgpt/);
  assert.equal(analytics.outbound.listCampaigns().length,0);assert.doesNotMatch(await(await get('/advertise')).text(),/private-fixture/);
 }));
