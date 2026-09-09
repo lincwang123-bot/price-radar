@@ -20,7 +20,7 @@ async function fixture(t) {
   const socketPath = path.join(dir,'worker.sock');
   let release, calls = 0;
   const gate = new Promise(resolve => { release = resolve; });
-  const ctx = { dataDir, merchantBridgeDir:bridgeDir, merchantFetchFactory:() => async () => {
+  const ctx = { dataDir, sleep:async()=>{}, merchantBridgeDir:bridgeDir, merchantFetchFactory:() => async () => {
     calls++; await gate;
     return new Response(JSON.stringify({status_code:200,data:[{id:1,title:'ChatGPT Plus 月卡代充',skus:[{id:1,price_amount:100,auto_stock_available:8}]}],pagination:{total:1,total_page:1,page:1}}),{headers:{'content-type':'application/json'}});
   }};
@@ -52,7 +52,7 @@ test('manual click starts only its audited request now, coalesces repeats and ne
   const scheduled=processMerchantPreflights(f.ctx);
   assert.equal(f.calls(),2);
   await f.finish(second.id); await scheduled;
-  assert.equal(f.calls(),2); assert.equal(isPreflightRunning(f.resultsDir,request.id),false);
+  assert.equal(f.calls(),4); assert.equal(isPreflightRunning(f.resultsDir,request.id),false);
   assert.equal(f.state(second.id).status,'ready');
   assert.equal(getMerchantApplication(f.db,second.id).status,'pending');
   assert.equal(existsSync(path.join(f.ctx.dataDir,'radar.sqlite')),false);
@@ -66,7 +66,7 @@ test('manual test bypasses a busy scheduled batch while per-request locks still 
   assert.equal(f.calls(),1);
   assert.equal((await f.run(target.id)).state,'running'); assert.equal(f.calls(),2);
   await f.finish(second.id); await scheduled;
-  assert.equal(f.calls(),2);
+  assert.equal(f.calls(),4);
 });
 
 test('private socket enforces request ID only, bounded concurrency and explicit unavailable result', async t => {

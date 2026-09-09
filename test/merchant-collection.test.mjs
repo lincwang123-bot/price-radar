@@ -54,12 +54,12 @@ test('自动识别新Dujiao/Kami；缓存按批准version隔离',async t=>{
   const ctx={...f,merchantFetchFactory:()=>async url=>{calls++;return url.includes('/api/v1/')?json({},404):json(kami());}};
   const row=merchant();f.save([row]);
   let result=await collectApprovedMerchants(ctx,{manifest:readApprovedManifest(f.merchantBridgeDir),capturedAt:at()});
-  assert.equal(result.health[0].status,'active');assert.equal(result.offers.length,1);assert.equal(calls,2);
+  assert.equal(result.health[0].status,'active');assert.equal(result.offers.length,1);assert.equal(calls,3);
   assert.equal(result.offers[0].extra.merchantIdentity,row.identity);
-  result=await collectApprovedMerchants(ctx,{manifest:readApprovedManifest(f.merchantBridgeDir),capturedAt:at()});assert.equal(calls,2);
+  result=await collectApprovedMerchants(ctx,{manifest:readApprovedManifest(f.merchantBridgeDir),capturedAt:at()});assert.equal(calls,3);
   f.save([{...row,version:2}]);ctx.merchantFetchFactory=()=>async()=>{calls++;return json(dujiao());};
   result=await collectApprovedMerchants(ctx,{manifest:readApprovedManifest(f.merchantBridgeDir),capturedAt:at()});
-  assert.equal(result.offers.length,1);assert.equal(calls,3);
+  assert.equal(result.offers.length,1);assert.equal(calls,5);
 });
 
 test('未知系统补查公开页面，WAF立即停止，无登录或挑战绕过',async t=>{
@@ -100,10 +100,10 @@ test('加入不受静态源30min节流；复用固定报价不重复，暂停下
   const row=merchant();f.save([row,merchant('https://aisou.pro/')]);
   ctx.merchantFetchFactory=()=>async()=>{dynamicCalls++;return json(dujiao());};
   let result=await pull(ctx);
-  assert.equal(staticCalls,1);assert.equal(dynamicCalls,1);assert.equal(result.snapshot.products.flatMap(p=>p.offers).length,2);
+  assert.equal(staticCalls,1);assert.equal(dynamicCalls,2);assert.equal(result.snapshot.products.flatMap(p=>p.offers).length,2);
   assert.equal(JSON.parse(metaGet(db,'health:merchant-onboarding')).targets.length,2);
   f.save([]);result=await pull(ctx);
-  assert.equal(result.snapshot.products.flatMap(p=>p.offers).length,1);assert.equal(staticCalls,1);assert.equal(dynamicCalls,1);
+  assert.equal(result.snapshot.products.flatMap(p=>p.offers).length,1);assert.equal(staticCalls,1);assert.equal(dynamicCalls,2);
   assert.deepEqual(JSON.parse(metaGet(db,'health:merchant-onboarding')).targets,[]);
   assert.equal((await pull(ctx)).skipped,true);
 });

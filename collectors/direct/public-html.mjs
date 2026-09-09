@@ -28,7 +28,7 @@ function matchesRule(path, pattern) {
   return true;
 }
 
-function robotsPolicy(text) {
+export function robotsPolicy(text) {
   if (Buffer.byteLength(text) > 512 * 1024) throw htmlFailure('公开目录响应超过限制', 'COLLECTOR_LIMIT');
   const groups = []; let group = null;
   const sitemaps = [];
@@ -70,7 +70,7 @@ export async function collectPublicHtml(target, options = {}) {
   const origin = target.origin, deadline = Math.min(options.deadline || Infinity, Date.now() + 30000);
   const fetchOptions = { fetchImpl: options.fetchImpl, allowedOrigins: [origin], timeoutMs: 8000, maxBytes: 1024 * 1024, maxRedirects: 0,
     headers: { 'user-agent': BOT + '/1.0 (+https://airadar.vip)', accept: 'text/html,application/ld+json,text/plain,application/xml' } };
-  let requests = 0, lastStart = 0, policy;
+  let requests = 0, lastStart = 0, policy = options.robotsPolicy;
   const read = async (url, json = false) => {
     if (policy && !policy.allows(url)) throw htmlFailure('公开页面读取被 robots 禁止', 'ROBOTS_DISALLOWED');
     if (++requests > PUBLIC_HTML_MAX_REQUESTS - 2) throw htmlFailure('公开目录请求达到上限', 'COLLECTOR_LIMIT');
@@ -79,8 +79,10 @@ export async function collectPublicHtml(target, options = {}) {
     await (options.sleep || delay)(wait); lastStart = Date.now();
     return (json ? safeFetchJson : safeFetchText)(url, { ...fetchOptions, timeoutMs: Math.max(1, Math.min(8000, deadline - Date.now())) });
   };
-  try { policy = robotsPolicy(await read(origin + '/robots.txt')); }
-  catch (error) { if (error.status !== 404) throw error; policy = robotsPolicy(''); }
+  if (!policy) {
+    try { policy = robotsPolicy(await read(origin + '/robots.txt')); }
+    catch (error) { if (error.status !== 404) throw error; policy = robotsPolicy(''); }
+  }
   const pages = [origin + '/'], visited = new Set(), entries = new Map(), scripts = new Set();
   while (pages.length) {
     const url = pages.shift(); if (visited.has(url)) continue;

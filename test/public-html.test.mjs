@@ -76,7 +76,7 @@ test('crossed-out prices stay excluded inside a price wrapper while current-pric
 test('a 15 or 16 product catalog fits the existing 20-request budget including API discovery',async()=>{
   const merchant={id:'merchant-html',shopName:'公开店铺',shopUrl:origin+'/',identity:'domain:public-shop.com',platform:'independent'};
   for(const count of [15,16]){
-    const ids=Array.from({length:count},(_,i)=>String(i)),f=fixture({'/':home(ids),...Object.fromEntries(ids.map(id=>['/products/'+id,detail({id})]))});
+    const ids=Array.from({length:count},(_,i)=>String(i)),f=fixture({'/':home(ids),...Object.fromEntries(ids.map(id=>['/products/'+id,detail({id})]))}, 'User-agent: *\nAllow: /');
     const result=await probeMerchantCatalog(merchant,{merchantFetchFactory:()=>f.fetchImpl,sleep:f.sleep},new Date().toISOString(),Date.now()+30000);
     assert.equal(result.offers.length,count);assert.equal(f.calls.length,count+4);assert.ok(f.calls.length<=20);
   }
