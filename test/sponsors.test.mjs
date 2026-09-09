@@ -33,3 +33,13 @@ test('viewability requires signed active campaign and deduplicates daily visitor
  a.outbound.setCampaignStatus(c.id,'paused',{version:1,now:date});assert.equal(a.outbound.recordVisible(req,c.id,token,date),false);
  }finally{a.close()}
 });
+
+test('approved creative fields are bounded, stored and safely rendered',async()=>{
+ const {sponsorBlock}=await import('../lib/sponsor-ui.mjs'),a=openAnalytics(':memory:','test-sponsor-creatives-secret-long-enough');try{
+  assert.throws(()=>a.outbound.saveCampaign(campaign('bad',{theme:'url(evil)'})),/配色/);
+  assert.throws(()=>a.outbound.saveCampaign(campaign('long',{headline:'字'.repeat(33)})),/主标题/);
+  a.outbound.saveCampaign(campaign('creative',{theme:'blue',headline:'<script>alert(1)</script>',tagline:'已确认的服务说明'}),{approve:true,now:date});
+  const c=a.outbound.listCampaigns()[0],html=sponsorBlock([{campaign:c,offer:{price:99,currency:'CNY',title:'商品',store_name:'商家',url:'https://creative.test'},href:'/go'}]);
+  assert.match(html,/data-sponsor-theme="blue"/);assert.match(html,/&lt;script&gt;/);assert.doesNotMatch(html,/<script>/);
+ }finally{a.close()}
+});

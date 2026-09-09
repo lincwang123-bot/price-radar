@@ -44,7 +44,7 @@ test('admin draft/approve/pause flow is authenticated, CSRF protected, scoped an
  assert.equal((await post('/admin/sponsors',{action:'pause',id:row.id,version:'2',csrf},cookie)).status,303);
  assert.equal((await(await get(route)).text()).match(/<article class="sponsor-card"/g).length,3);
  assert.equal(analytics.outbound.actions(row.id).length,3);
- const csv=await get('/admin/sponsors.csv',{cookie});assert.equal(csv.status,200);assert.match(csv.headers.get('content-type'),/text\/csv/);
+ const csv=await get('/admin/sponsors.csv',{cookie});assert.equal(csv.status,200);assert.match(csv.headers.get('content-type'),/text\/csv/);assert.match(await csv.text(),/测试赞助商 0/);
 }));
 
 test('home/category/product show their own sponsors only, current availability enforced and view endpoint signed',()=>fixture(async({db,analytics,fields,get,base})=>{
