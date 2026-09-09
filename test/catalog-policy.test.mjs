@@ -77,3 +77,59 @@ test('retired historical market groups are not restored to watch choices or week
     assert.equal(privateDb.prepare('SELECT COUNT(*) n FROM retention_market_daily').get().n,2);
   } finally {privateDb.close();db.close();}
 });
+
+test('API and relay retirement catches mixed subscription titles and source-only legacy records', () => {
+  for(const title of ['API Cursor Pro 2600积分','Claude-Kiro API KEY 100M Token','100刀Codex API中转额度(纯Pro号池)','AI平台直充100美元额度-Claude Max / 官API','Claude Pro 网页镜像','GPT Pro 中转余额','api Gplus月订阅','Claude 10刀余额充值']){
+    assert.equal(retiredCatalogItem({title}),true,title);
+    assert.equal(classifyDirectOffer({title}),null,title);
+    assert.equal(publicOfferAllowed('priceai',{title},{product_id:'claude-pro'}),false,title);
+  }
+  for(const title of ['Claude Pro CDK 代充 月卡','ChatGPT Plus 官方月订阅代充 需先余额充值后付款','Cursor Pro 1个月账号 全保（不含API额度）','Cursor Pro 月卡 附API配置教程','Gmail 老号带辅助邮箱','Claude Max 5x 月卡 Max 5x额度'])assert.equal(retiredCatalogItem({title}),false,title);
+  assert.equal(publicOfferAllowed('goaihop-relay',{title:'普通套餐'},{product_id:'unexpected-name'}),false);
+  assert.equal(filterCatalogSnapshot({source:'goaihop-relay',products:[{productId:'unknown',name:'套餐'}]}).products.length,0);
+});
+
+test('retired relay catalog is absent from legacy routes, SEO, sponsors and retention while subscriptions survive', async () => {
+ const db=openDb(':memory:');let app;
+ try{
+  const offer=(id,title,price)=>({offerId:id,title,price,currency:'CNY',status:'in_stock',stockCount:1,storeName:'测试店',url:'https://merchant.example.org/'+id});
+  for(const source of ['priceai','direct-shops','ldxp-goods'])storeSnapshot(db,{source,snapshotId:'legacy-api',products:[
+   {productId:'api-cdk-credits',name:'API / CDK / 额度',offers:[offer('retired','100刀余额',1)]},
+   {productId:'claude-pro',name:'Claude Pro',currency:'CNY',offers:[offer('api','Claude Pro API 100刀额度',1),offer('kept','Claude Pro 代充 1个月',100)]}
+  ]});
+  storeSnapshot(db,{source:'goaihop-relay',snapshotId:'legacy-api',products:[{productId:'unknown-id',name:'普通套餐',offers:[offer('unknown','入门套餐',0)]}]});
+  const before=db.prepare('SELECT COUNT(*) n FROM offers').get().n;
+  app=createApp({db});await new Promise(r=>app.listen(0,'127.0.0.1',r));const base='http://127.0.0.1:'+app.address().port;
+  for(const path of ['/','/?family=claude','/?family=claude&product=claude-pro','/?shop_q='+encodeURIComponent('API'),'/sources','/sitemap.xml','/api/retention/market','/advertise','/submit','/submit-shop']){
+   const res=await fetch(base+path);const body=await res.text();assert.ok([200,302].includes(res.status),path);
+   assert.doesNotMatch(body.replace(/<style[\s\S]*?<\/style>|<script[\s\S]*?<\/script>/g,''),/data-category="relay"|data-family-filter="relay"|api-cdk-credits|value="api_relay"|Claude Pro API 100刀额度|goaihop-relay/,path);
+  }
+  for(const path of ['/?family=relay','/?family=api','/?product=api-cdk-credits','/?source=goaihop-relay']){const res=await fetch(base+path);assert.equal(res.status,410,path);assert.match(res.headers.get('x-robots-tag'),/noindex/);}
+  for(const source of ['priceai','direct-shops','ldxp-goods','goaihop-relay']){
+   const id=source==='goaihop-relay'?'unknown-id':'api-cdk-credits';
+   assert.equal((await fetch(base+'/product?'+new URLSearchParams({source,id}))).status,404);
+   const res=await fetch(base+'/go?'+new URLSearchParams({source,snapshot:'legacy-api',product:id,offer:source==='goaihop-relay'?'unknown':'retired',ack:'1'}),{redirect:'manual'});assert.equal(res.status,404);assert.equal(res.headers.get('location'),null);
+  }
+  const kept=await fetch(base+'/go?source=priceai&snapshot=legacy-api&product=claude-pro&offer=kept&ack=1',{redirect:'manual'});assert.equal(kept.status,302);
+  const hidden=await fetch(base+'/go?source=priceai&snapshot=legacy-api&product=claude-pro&offer=api&ack=1',{redirect:'manual'});assert.equal(hidden.status,404);
+  assert.equal(db.prepare('SELECT COUNT(*) n FROM offers').get().n,before);
+ }finally{if(app){await new Promise(r=>app.close(r));await app.merchantWorkflowDone?.();await app.retentionWorkflowDone?.();}db.close();}
+});
+
+test('retired source cannot be pulled even if legacy configuration enables it', async () => {
+ const {runPull}=await import('../lib/pull.mjs');const {registry,listSources}=await import('../sources/registry.mjs');const {loadConfig}=await import('../lib/config.mjs');
+ assert.equal(registry['goaihop-relay'],undefined);assert.equal(listSources().some(s=>s.id==='goaihop-relay'),false);assert.equal(loadConfig().sources['goaihop-relay'].enabled,false);
+ let called=false;registry['goaihop-relay']={pull:()=>{called=true;throw Error('must not call')}};
+ const db=openDb(':memory:');try{const results=await runPull({db,config:{sources:{'goaihop-relay':{enabled:true}}},dataDir:'/dev/null',log:()=>{}},['goaihop-relay']);assert.equal(called,false);assert.deepEqual(results,[]);}finally{delete registry['goaihop-relay'];db.close();}
+});
+
+test('bottom sponsor invitation names suitable businesses and all quote cells lead to owner Telegram', async () => {
+ const {sponsorInvite,sponsorAdvertiseContent}=await import('../lib/sponsor-ui.mjs');
+ for(const placement of ['home','category','product']){
+  const invite=sponsorInvite(placement);assert.match(invite,/云服务器、IP 服务、网络检测、域名与开发者工具/);assert.match(invite,/href="https:\/\/t.me\/lincwang"/);
+  const html=sponsorAdvertiseContent(new URL('https://airadar.vip/advertise?placement='+placement));
+  const rates=html.match(/<section class="sponsor-rates">[\s\S]*?<\/section>/)[0];
+  assert.equal((rates.match(/href="https:\/\/t.me\/lincwang" target="_blank" rel="noopener noreferrer"/g)||[]).length,9);
+  assert.doesNotMatch(rates,/¥|￥/);assert.match(html,/class="sponsor-starter sponsor-fit"/);
+ }
+});

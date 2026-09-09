@@ -12,5 +12,6 @@ test('one product preserves all delivery groups and filters before ranking and s
 });
 test('non subscription service categories are not forced into account versus recharge',()=>{
  const directory=buildProductDirectory([{source:'goaihop-relay',products:[{product_id:'relay-example',name:'API 服务',currency:'CNY',offers:[quote('API 额度',10,'api')]}]},{source:'priceai',products:[{product_id:'gmail-account',name:'Gmail 邮箱',currency:'CNY',offers:[quote('Gmail 邮箱账号',5,'mail')]}]}]);
- for(const key of ['relay','mail'])for(const product of directory.find(c=>c.key===key).products)assert.equal(product.deliveryEnabled,false);
+ assert.equal(directory.some(c=>c.key==='relay'),false);
+ for(const key of ['mail'])for(const product of directory.find(c=>c.key===key).products)assert.equal(product.deliveryEnabled,false);
 });

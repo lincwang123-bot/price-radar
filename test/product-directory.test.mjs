@@ -65,9 +65,9 @@ test('16688 deduplication does not collapse meaningful query variants, other hos
   for (const product of directories) assert.equal(directoryQuotes(product).total, 1);
 });
 
-test('seven primary categories plus more retain known extra products', () => {
+test('six primary categories plus more retain known extra products', () => {
   const directory = buildProductDirectory([list('direct-shops', 'suno-pro-1m', [quote('Suno Pro 1个月')])]);
-  assert.deepEqual(directory.filter(row => row.primary).map(row => row.label), ['ChatGPT', 'Claude', 'Gemini', 'Grok', 'X', 'API / 中转', '邮箱']);
+  assert.deepEqual(directory.filter(row => row.primary).map(row => row.label), ['ChatGPT', 'Claude', 'Gemini', 'Grok', 'X', '邮箱']);
   assert.equal(directory.find(row => row.key === 'suno').products[0].name, 'Suno Pro');
   assert.equal(directory.find(row => row.key === 'other').products.length, 0);
 });
@@ -124,11 +124,11 @@ test('mixed LDXP search bucket cannot leak another product through legacy spec d
   }
 });
 
-test('official/API references permit explicit zero, retain identities and distinguish reference quotes', () => {
+test('official references retain zero prices while relay references are retired', () => {
   const lists = [list('cardnav-official', 'copilot-pro', [quote('Pro', { price: 0, status: 'official' })]), list('goaihop-relay', 'relay-code-proxy', [quote('入门套餐', { price: 0, status: 'active' })], '中转 CodeProxy')];
   assert.equal(category(lists, 'microsoft').products[0].variants[0].reference, true);
-  assert.equal(category(lists, 'relay').products[0].variants[0].offer.price, 0);
-  assert.equal(category([list('goaihop-relay', 'relay-code-proxy', [quote('套餐', { price: null })])], 'relay').products[0].variants.length, 0);
+  assert.equal(category(lists, 'relay'), undefined);
+  assert.equal(category([list('goaihop-relay', 'relay-code-proxy', [quote('套餐', { price: null })])], 'relay'), undefined);
 });
 
 test('ordinary accounts keep their own identity and unknown specs retain safe product references', () => {

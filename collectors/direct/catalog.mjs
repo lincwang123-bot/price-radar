@@ -36,7 +36,6 @@ const PRODUCTS = {
     [`cursor-${id}`, product(`cursor-${id}`, `Cursor ${name} · 期限未注明`, "Cursor", "订阅/账号", "订阅期限未注明；质保天数不代表订阅周期")],
     [`cursor-${id}-1m`, product(`cursor-${id}-1m`, `Cursor ${name} · 1 个月`, "Cursor", "订阅/账号", "1 个月；以原店交付说明为准")],
   ])),
-  "api-cdk-credits": product("api-cdk-credits", "API / CDK / 额度", "API/CDK", "额度/开发服务"),
   "email-accounts": product("email-accounts", "邮箱账号", "邮箱", "账号"),
 };
 
@@ -120,7 +119,7 @@ export function classifyDirectOffer({ title, category = "", sourceId = "", extra
   // 镜像站通行卡和中转余额是第三方服务；CDK本身仅说明交付方式，
   // 不能据此把真实原厂订阅代充一并移出订阅分类。
   if (((has(titleText, /\bapi\b|中转|镜像站|网页镜像/i) || balanceProduct || monetaryCredits) && has(titleText, aiService)) || has(titleText, /api\s*中转|中转\s*api|api中转站|中转站/i)) {
-    return PRODUCTS["api-cdk-credits"];
+    return null;
   }
 
   if (has(titleText, /perplexity/)) {
@@ -138,7 +137,7 @@ export function classifyDirectOffer({ title, category = "", sourceId = "", extra
   }
   if (has(titleText, /cursor/)) {
     if (has(titleText, /邀请链接/) && has(titleText, /半价|折扣|优惠/)) return null;
-    if (/^api\s+cursor\b/.test(titleText) && has(titleText, /积分|额度/)) return PRODUCTS["api-cdk-credits"];
+    if (/^api\s+cursor\b/.test(titleText) && has(titleText, /积分|额度/)) return null;
     if (has(titleText, /\bfree\b|普号|白号|试用/)) return null;
     const tier = has(titleText, /ultra|ulrta/) ? "ultra"
       : has(titleText, /pro\s*(?:\+|plus|➕)/) ? "pro-plus"
@@ -229,7 +228,7 @@ export function classifyDirectOffer({ title, category = "", sourceId = "", extra
   // 不再因 Twitter 账号的 token 登录、Graph API 等通用词误分类。
   const apiService = /api|中转|额度|点数|token|余额|兑换码|\bcdk\b/i;
   if (has(titleText, /api\s*中转|中转\s*api|api中转站|中转站/i) || (has(titleText, aiService) && has(titleText, apiService))) {
-    return PRODUCTS["api-cdk-credits"];
+    return null;
   }
   if (has(text, /gmail|outlook|hotmail|微软邮箱|谷歌邮箱|邮箱账号|邮箱老号|域名邮箱/) ||
       (categoryText === "google 邮箱" && has(titleText, /谷歌账号/))) {

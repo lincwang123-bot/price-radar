@@ -47,7 +47,7 @@ test('公开表单安全退化、方法说明及SSR组合筛选', async()=>{
   const methods=await(await fetch(base+'/sources')).text();assert.match(methods,/价格与库存/);assert.doesNotMatch(methods,/快照|产品记录|报价记录|PriceAI/);
   const filtered=await(await fetch(base+'/?family=claude&channel=16688&q=Claude&purpose=recharge')).text();assert.match(filtered,/Claude Pro/);assert.doesNotMatch(filtered,/data-directory-product="chatgpt-go"/);assert.match(filtered,/href="\/\?[^\"]*family=chatgpt/);
   assert.doesNotMatch(filtered,/<form[^>]*channel-form/);assert.equal((filtered.match(/<article[^>]*data-directory-product="claude-pro"/g)||[]).length,1);
-  const all=await(await fetch(base+'/')).text();assert.doesNotMatch(all,/<form[^>]*channel-form/);assert.equal((all.match(/data-category="(?:chatgpt|claude|gemini|grok|x|relay|mail)"/g)||[]).length,7);
+  const all=await(await fetch(base+'/')).text();assert.doesNotMatch(all,/<form[^>]*channel-form/);assert.equal((all.match(/data-category="(?:chatgpt|claude|gemini|grok|x|mail)"/g)||[]).length,6);
  }finally{if(app.listening)await new Promise(r=>app.close(r));db.close();}
 });
 test('提醒新到旧分页，保留当时价格',async()=>{
@@ -88,20 +88,21 @@ test('首页直接列产品，一步展示全部规格店铺，旧详情仍可�
   const more=await(await fetch(base+'/?family=cursor')).text();assert.match(more,/<details class="category-more active">/);assert.doesNotMatch(more,/<details class="category-more[^\"]*"[^>]*\bopen\b/);assert.match(more,/data-family-filter="cursor" aria-current="page"/);
  }finally{if(app.listening)await new Promise(r=>app.close(r));db.close();}
 });
-test('官方和API参考零价可从目录进入详情，不携带商店合成规格，缺价不造免费价',async()=>{
+test('官方参考零价可从目录进入详情，不携带商店合成规格，缺价不造免费价',async()=>{
  const db=openDb(':memory:'),app=createApp({db});
  try{
   for(const [source,id,name,platform] of [['cardnav-official','claude-pro','Claude Pro','Claude'],['goaihop-relay','relay-demo','示例 API 套餐','API']]){
    storeSnapshot(db,{source,snapshotId:'references',products:[{productId:id,name,platform,currency:'CNY',lowestPrice:0,offers:[{offerId:'free',title:name,storeName:name,price:0,status:'online',stockCount:1,url:'https://example.com/plans'}]},{productId:source==='goaihop-relay'?'relay-missing':'claude-max-5x',name:'缺价套餐',platform,currency:'CNY',lowestPrice:null,offers:[{offerId:'missing',price:null,status:'online',url:'https://example.com/missing'}]}]});
   }
   await new Promise(r=>app.listen(0,'127.0.0.1',r));const base='http://127.0.0.1:'+app.address().port;
-  for(const [family,product,source,id,label] of [['claude','claude-pro','cardnav-official','claude-pro','官方参考'],['relay','relay-demo','goaihop-relay','relay-demo','API 服务商']]){
+  for(const [family,product,source,id,label] of [['claude','claude-pro','cardnav-official','claude-pro','官方参考']]){
    const page=await(await fetch(base+'/?family='+family+'&product='+product)).text();assert.match(page,/>¥0</);assert.ok(page.includes(label));assert.match(page,/<p>1 条参考报价<\/p>/);assert.doesNotMatch(page,/0 家店|0 条店铺报价|每页 20 条|暂无可用报价，请调整/);
    const category=await(await fetch(base+'/?family='+family)).text();const row=category.match(new RegExp('<article[^>]*data-directory-product="'+product+'"[\\s\\S]*?<\\/article>'))[0];assert.match(row,/1 条参考报价/);assert.match(row,/查看参考/);assert.doesNotMatch(row,/0 家店|0 条报价|查看店铺/);
    if(source==='cardnav-official'){const reference=page.match(/<section class="directory-references">[\s\S]*?<\/section>/)[0];assert.match(reference,/仅作价格参考/);assert.doesNotMatch(reference,/href="\/go|data-store-risk/);}
    const link=[...page.matchAll(/href="(\/product\?[^\"]+)"/g)].map(m=>m[1].replaceAll('&amp;','&')).find(h=>new URL(h,base).searchParams.get('source')===source);assert.ok(link);assert.equal(new URL(link,base).searchParams.get('spec'),null);
    const detail=await(await fetch(base+link)).text();assert.match(detail,/price-display">¥0</);assert.match(detail,/共 1 条公开报价/);assert.match(detail,/data-store-risk/);
   }
-  const missing=await(await fetch(base+'/?family=relay&product=relay-missing')).text();assert.doesNotMatch(missing,/>¥0</);assert.match(missing,/暂无有效报价/);assert.match(missing,/暂无可用报价/);assert.match(missing,/查看 缺价套餐 的报价记录/);
+  assert.equal((await fetch(base+'/?family=relay&product=relay-demo')).status,410);
+  const missing=await(await fetch(base+'/?family=claude&product=claude-max-5x')).text();assert.doesNotMatch(missing,/>¥0</);assert.match(missing,/暂无有效报价/);assert.match(missing,/暂无可用报价/);assert.match(missing,/查看 缺价套餐 的报价记录/);
  }finally{if(app.listening)await new Promise(r=>app.close(r));db.close();}
 });

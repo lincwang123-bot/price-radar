@@ -123,7 +123,7 @@ test("首页为已采集的新品牌生成独立分类，详情可返回对应�
     await once(server, "listening");
     const base = `http://127.0.0.1:${server.address().port}`;
     const html = await fetch(base + "/?family=cursor").then((res) => res.text());
-    for (const key of ["cursor", "perplexity", "notion", "manus", "relay"]) {
+    for (const key of ["cursor", "perplexity", "notion", "manus"]) {
       assert.match(html, new RegExp(`data-family-filter="${key}"`));
       if(key==='cursor')assert.match(html, /data-directory-family="cursor"/);else assert.doesNotMatch(html,new RegExp(`data-directory-family="${key}"`));
     }

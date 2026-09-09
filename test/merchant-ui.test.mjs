@@ -35,7 +35,8 @@ test('submission is a POST form with progressive enhancement and escaped prefill
   assert.match(html,/name="consent" value="true" required/);
   assert.match(html,/name="website" tabindex="-1"/);
   assert.match(html,/审核通过且采集成功后展示有效报价/);
-  for(const area of ['grok_x','api_relay','mail_verify'])assert.ok(html.includes(`name="productAreas" value="${area}"`));
+  assert.ok(!html.includes('value="api_relay"'));
+  for(const area of ['grok_x','mail_verify'])assert.ok(html.includes(`name="productAreas" value="${area}"`));
   assert.match(html,/maxlength="500"/);
   assert.match(html,/<select name="platform"><option value="auto" selected>自动识别<\/option>/);
 });

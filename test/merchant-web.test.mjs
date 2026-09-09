@@ -41,7 +41,7 @@ test('public merchant intake stays private; approval prioritizes comprehensive r
     assert.doesNotMatch(privacy,/身份核验标识|店主已核验/);
     const csrf=html.match(/name="csrf-token" content="([^"]+)"/)[1];
     const headers={origin:base,'content-type':'application/json',cookie:readerCookie+'; airadar_csrf='+csrf,'x-csrf-token':csrf};
-    const payload={shopName:'合成测试商店1',shopUrl:'https://merchant-1.com/',platform:'auto',productAreas:['chatgpt','grok_x','api_relay','mail_verify'],email:'owner@example.org', contact:'private-contact@merchant-1.com',details:'仅限后台的合成审核说明',consent:true};
+    const payload={shopName:'合成测试商店1',shopUrl:'https://merchant-1.com/',platform:'auto',productAreas:['chatgpt','grok_x','mail_verify'],email:'owner@example.org', contact:'private-contact@merchant-1.com',details:'仅限后台的合成审核说明',consent:true};
     const send=(body,extra={})=>fetch(base+'/api/merchant-applications',{method:'POST',headers:{...headers,...extra},body:JSON.stringify(body)});
     assert.equal((await fetch(base+'/api/merchant-applications')).status,405);
     assert.equal((await send(payload,{'x-csrf-token':'bad'})).status,403);

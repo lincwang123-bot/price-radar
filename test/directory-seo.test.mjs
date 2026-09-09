@@ -12,7 +12,7 @@ test('brand directory keeps its canonical identity while stripping secondary fil
  assert.equal(canonical(html),'https://airadar.vip/?family=claude');
  assert.match(html,/<title>Claude产品目录与公开报价/);
  assert.ok(!schema(html).some(item=>item['@type']==='ItemList'));
- for(const family of ['grok','x','mail','relay','cursor','other'])assert.equal(canonical(render('?family='+family,`data-directory-family="${family}"`)),'https://airadar.vip/?family='+family);
+ for(const family of ['grok','x','mail','cursor','other'])assert.equal(canonical(render('?family='+family,`data-directory-family="${family}"`)),'https://airadar.vip/?family='+family);
 });
 
 test('only a renderer-confirmed selected product gets a product directory canonical',()=>{

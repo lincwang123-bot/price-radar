@@ -11,7 +11,7 @@ const UA =
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36";
 
 export const sourceId = "priceai";
-export const sourceLabel = "PriceAI（AI 订阅/中转 API 比价雷达）";
+export const sourceLabel = "PriceAI（AI 订阅比价雷达）";
 
 /** 把 priceai 原始快照对象转成规范入库快照（供 pull 与历史回填共用） */
 export function rawToSnapshot(raw, fetchedAt = new Date().toISOString()) {

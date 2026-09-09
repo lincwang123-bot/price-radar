@@ -10,8 +10,8 @@ test('verified dotted GPT spelling preserves subscription, credit, account and t
     ['GP.T plus 1年会员官方正规充值', 'chatgpt-plus-recharge-12m'],
     ['GP.T plus 月卡 成品号', 'chatgpt-plus'],
     ['GP.T plus 日抛体验号', 'chatgpt-plus'],
-    ['GP.T Plus 日卡50刀额度', 'api-cdk-credits'],
-    ['GP.T Pro 5x API 中转余额充值', 'api-cdk-credits'],
+    ['GP.T Plus 日卡50刀额度', undefined],
+    ['GP.T Pro 5x API 中转余额充值', undefined],
   ];
   for (const [title, id] of cases) assert.equal(classifyDirectOffer({ title })?.id, id, title);
   for (const title of ['GP.T Free 普号', 'XGP.T Pro 5X', 'G Pro X20', 'CDK Gro Super 1个月充值', 'GP.T Pro 1.5x']) {
