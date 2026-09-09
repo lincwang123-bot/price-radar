@@ -10,7 +10,7 @@ import {createRetention} from '../lib/retention.mjs';
 import {createRetentionStore} from '../lib/retention-store.mjs';
 import {observeMarket,weeklyMarket} from '../lib/retention-market.mjs';
 
-const services = ['OpenAI 哥伦比亚手机号短效接码 SMS', 'Gmail 接马（两次码）', 'gopay GOJEK長效接碼 印尼', 'Codex 短效接🐎 包接到', 'ChatGPT Plus 单次手机验证', 'Receive SMS online', 'OTP phone verification', '短信验证码代收服务'];
+const services = ['OpenAI 哥伦比亚手机号短效接码 SMS', 'Gmail 接马（两次码）', 'gopay GOJEK長效接碼 印尼', 'Codex 短效接🐎 包接到', 'ChatGPT Plus 单次手机验证', 'Receive SMS online', 'OTP phone verification', '短信验证码代收服务', '推广返利10%可提现｜Codex接马｜GPlus接马｜Plus成品号接马｜0.5元起'];
 test('retired service titles cannot hide behind subscription or email categories', () => {
   for (const title of services) {
     assert.equal(retiredCatalogItem({title}), true, title);
@@ -41,6 +41,7 @@ test('legacy snapshots cannot expose retired products through pages, search, sit
     for(const source of ['direct-shops','priceai','ldxp-goods']) storeSnapshot(db,{source,snapshotId:'legacy',products:[
       {productId:'openai-phone-verification',name:'OpenAI 接码',offers:[offer('old','号码','退役店',1)]},
       {productId:'verification-service',name:'接码 / 验证服务',offers:[offer('old2','验证码','退役店',1)]},
+      {productId:'old-custom-id',name:'短信验证码代收',offers:[offer('custom','美国号码','退役店',1)]},
       {productId:'chatgpt-plus',name:'ChatGPT Plus',currency:'CNY',offers:[offer('hidden','ChatGPT Plus 单次接码','退役店',2),offer('kept','ChatGPT Plus 成品号 1个月','保留店',50)]},
       {productId:'email-accounts',name:'邮箱账号',currency:'CNY',offers:[offer('gmail','Gmail 老号带辅助邮箱','保留店',10),offer('gmail-code','Gmail 接码服务','退役店',1)]}
     ]});
@@ -55,7 +56,7 @@ test('legacy snapshots cannot expose retired products through pages, search, sit
     for(const path of ['/?product=verification-service','/?family=otp']) {
       const res=await fetch(base+path);assert.equal(res.status,410);assert.match(res.headers.get('x-robots-tag'),/noindex/);
     }
-    for(const source of ['direct-shops','priceai','ldxp-goods']) for(const [product,offerId] of [['openai-phone-verification','old'],['verification-service','old2'],['chatgpt-plus','hidden'],['email-accounts','gmail-code']]) {
+    for(const source of ['direct-shops','priceai','ldxp-goods']) for(const [product,offerId] of [['old-custom-id','custom'],['openai-phone-verification','old'],['verification-service','old2'],['chatgpt-plus','hidden'],['email-accounts','gmail-code']]) {
       const out=await fetch(base+'/go?'+new URLSearchParams({source,snapshot:'legacy',product,offer:offerId}),{redirect:'manual'});assert.equal(out.status,404,source+product);assert.equal(out.headers.get('location'),null);
       if(product.includes('verification'))assert.equal((await fetch(base+'/product?'+new URLSearchParams({source,id:product}))).status,404);
     }
