@@ -6,7 +6,9 @@ import { discoverCatalog, parsePublicProduct, publicPageUrl, htmlFailure, htmlTe
 import { recognizesPublicStoreScript, parsePublicStoreList, parsePublicStoreDetail, PUBLIC_STORE_ENDPOINT } from '../../lib/public-store-api.mjs';
 
 export const PUBLIC_HTML_MAX_REQUESTS = 20;
-const MAX_PRODUCTS = 14, MAX_DISCOVERY_PAGES = 3;
+// Reserve two API probes, robots.txt and the catalog page within the same
+// 20-request network budget. Extra discovery pages still consume that budget.
+const MAX_PRODUCTS = PUBLIC_HTML_MAX_REQUESTS - 4, MAX_DISCOVERY_PAGES = 3;
 const BOT = 'AiradarBot';
 
 const robotsPath = value => encodeURI(value).replaceAll('%25', '%').replace(/%[a-f0-9]{2}/gi, encoded => {

@@ -63,6 +63,27 @@ test('conflicting prices, names, currency and missing detail reject entire colle
   await assert.rejects(collectPublicHtml(target(), fixture({ '/': home(['one', 'two']), '/products/two': 'missing' })), { code: 'INVALID_CATALOG' });
 });
 
+test('crossed-out prices stay excluded inside a price wrapper while current-price disagreements still fail', async () => {
+  for(const old of ['<span class="glass-price-strike">¥149.00</span>','<span class="old-price"><strong>¥149.00</strong></span>','<s>¥149.00</s>','<span style="text-decoration: line-through">¥149.00</span>']) {
+    const html=detail().replace('<div class="price"><strong>¥125.00</strong></div>',`<div class="glass-price-block">${old}<strong>¥125.00</strong></div>`);
+    const rows=await collectPublicHtml(target(),fixture({'/products/one':html}));assert.equal(rows[0].price,125);
+    await assert.rejects(collectPublicHtml(target(),fixture({'/products/one':html.replace('<strong>¥125.00</strong>','<strong>¥120.00</strong>')})),{code:'INVALID_CATALOG'});
+  }
+  const ambiguous=detail().replace('<div class="price"><strong>¥125.00</strong></div>','<div class="price"><span>¥149.00</span><strong>¥125.00</strong></div>');
+  await assert.rejects(collectPublicHtml(target(),fixture({'/products/one':ambiguous})),{code:'INVALID_CATALOG'});
+});
+
+test('a 15 or 16 product catalog fits the existing 20-request budget including API discovery',async()=>{
+  const merchant={id:'merchant-html',shopName:'公开店铺',shopUrl:origin+'/',identity:'domain:public-shop.com',platform:'independent'};
+  for(const count of [15,16]){
+    const ids=Array.from({length:count},(_,i)=>String(i)),f=fixture({'/':home(ids),...Object.fromEntries(ids.map(id=>['/products/'+id,detail({id})]))});
+    const result=await probeMerchantCatalog(merchant,{merchantFetchFactory:()=>f.fetchImpl,sleep:f.sleep},new Date().toISOString(),Date.now()+30000);
+    assert.equal(result.offers.length,count);assert.equal(f.calls.length,count+4);assert.ok(f.calls.length<=20);
+  }
+  const tooMany=fixture({'/':home(Array.from({length:17},(_,i)=>String(i)))});
+  await assert.rejects(collectPublicHtml(target(),tooMany),{code:'COLLECTOR_LIMIT'});assert.equal(tooMany.calls.length,2);
+});
+
 test('robots supports wildcard rules and longest allow; forbidden pages and WAF stop immediately', async () => {
   for (const policy of ['User-agent: *\nDisallow: /', 'User-agent: *\nDisallow: /products/*', 'User-agent: AiradarBot\nDisallow: /\nUser-agent: *\nAllow: /']) {
     const f = fixture({}, policy);
