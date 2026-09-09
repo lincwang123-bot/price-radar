@@ -24,7 +24,7 @@
 ## 权限及数据
 
 - 私有 `submissions.sqlite` 的 `merchant_preflight_requests` 保存追加式请求审计。
-- Web 仅写 `merchant-bridge/preflight-requests.json` 的脱敏请求，不写报价库、不直接联网抓店铺。
+- Web 对商品检测仅写 `merchant-bridge/preflight-requests.json` 的脱敏请求，不写报价库、不直接抓商品目录。提交 16688 别名时，允许单次请求固定的公开店铺信息接口换取正式编号；边界见 `merchant-shop-alias.md`。
 - Collector 仅在原有权限下读桥接清单，执行有界 HTTPS 目录探测，写 `data/merchant-preflights/MT-….json`。
 - 即时服务使用相同的目录读取与过滤规则，仅接受已审计的 MT 请求编号，不能传入网址或命令。最多同时处理 2 个手动测试；忙碌时明确提示而非伪装成已开始。按请求加锁，避免与自动采集重复检测同一个请求；请求撤销或版本变化时丢弃进行中的结果。
 - `/admin/merchants/:id/preflight` 仅供已登录后台只读刷新，不派发任务、不批准、不发信。手动 POST 保留登录、Origin、CSRF 和版本校验。脚本使用固定 CSP hash，网络仅限同源。

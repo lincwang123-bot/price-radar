@@ -8,9 +8,10 @@ import { getMerchantApplication } from '../lib/merchant-onboarding.mjs';
 
 test('conversion routes protect authorization, preserve editable failures and only create pending applications', async () => {
   const db=openDb(':memory:'),submissionsDb=openSubmissionsDb(':memory:'),origin='https://airadar.test',password='conversion-admin-fixture-password';
-  for(const [n,topic]of [[1,'supply'],[2,'demand'],[3,'supply']])submissionsDb.prepare(`INSERT INTO cooperation_submissions(public_id,created_at,topic,subject,product_area,scale,assurance,settlement,source_url,details,contact,consent_at,content_hash)
+  for(const [n,topic]of [[1,'supply'],[2,'demand'],[3,'supply'],[4,'supply']])submissionsDb.prepare(`INSERT INTO cooperation_submissions(public_id,created_at,topic,subject,product_area,scale,assurance,settlement,source_url,details,contact,consent_at,content_hash)
     VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(`CO-20260907-00000000000${n}`,new Date().toISOString(),topic,'供应广告标题不是店名','chatgpt','small','conditional','cny','https://conversion-shop.com/','原投稿说明','private-source@example.org',new Date().toISOString(),String(n));
-  const admin=createAdmin({db,submissionsDb,origin,username:'owner',passwordHash:await hashAdminPassword(password)});
+  let aliasCalls=0;
+  const admin=createAdmin({db,submissionsDb,origin,username:'owner',passwordHash:await hashAdminPassword(password),merchantUrlResolver:async url=>{aliasCalls++;assert.equal(url,'https://www.16688.com.cn/shop/XIAOQING2');return 'https://www.16688.com.cn/shop/S332568';}});
   const server=createServer(async(req,res)=>{try{if(!await admin(req,res,new URL(req.url,origin))){res.statusCode=404;res.end();}}catch{res.statusCode=500;res.end('unexpected failure');}});
   await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
   const base=`http://127.0.0.1:${server.address().port}`,route='/admin/submission/CO-20260907-000000000001/merchant';
@@ -52,5 +53,11 @@ test('conversion routes protect authorization, preserve editable failures and on
     assert.equal(submissionsDb.prepare('SELECT COUNT(*) n FROM merchant_applications').get().n,1);
     assert.equal(submissionsDb.prepare('SELECT COUNT(*) n FROM merchant_submission_links').get().n,1);
     assert.equal(submissionsDb.prepare('SELECT COUNT(*) n FROM merchant_preflight_requests').get().n,0);
+    const aliasRoute='/admin/submission/CO-20260907-000000000004/merchant',aliasFields={...fields,shopUrl:'https://www.16688.com.cn/shop/XIAOQING2'};
+    assert.equal((await post(aliasRoute,{...aliasFields,ownershipConfirmed:'false'},cookie)).status,422);assert.equal(aliasCalls,0);
+    const aliasResult=await post(aliasRoute,aliasFields,cookie);assert.equal(aliasResult.status,303);assert.equal(aliasCalls,1);
+    const aliasApplication=getMerchantApplication(submissionsDb,aliasResult.headers.get('location').split('/').at(-1));
+    assert.equal(aliasApplication.shopUrl,'https://www.16688.com.cn/shop/S332568');assert.equal(aliasApplication.status,'pending');
+    assert.equal((await post(aliasRoute,aliasFields,cookie)).headers.get('location'),aliasResult.headers.get('location'));assert.equal(aliasCalls,1);
   } finally {server.closeAllConnections();await new Promise(resolve=>server.close(resolve));db.close();submissionsDb.close();}
 });
