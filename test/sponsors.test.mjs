@@ -3,7 +3,7 @@ import {openAnalytics} from '../lib/analytics.mjs';
 import {sponsorQuote,SPONSOR_RATE_VERSION} from '../lib/sponsor-plans.mjs';
 const date=new Date('2026-09-09T10:00:00Z');
 const campaign=(id,extra={})=>({id,merchant_id:'domain:'+id+'.test',source:'direct-shops',product_id:'chatgpt-plus-recharge',offer_id:id,label:id,placement:'sponsored_product',page_key:'chatgpt-plus',start_at:'2026-09-09T00:00:00Z',end_at:'2026-09-16T00:00:00Z',...extra});
-test('published sponsor rates are computed by server, by placement and duration',()=>{for(const [placement,prices] of Object.entries({product:[299,549,999],category:[499,899,1699],home:[699,1299,2399]}))for(const [i,duration] of ['7d','14d','28d'].entries())assert.deepEqual(sponsorQuote(placement,duration),{amount:prices[i],currency:'CNY',days:parseInt(duration),duration,placement,version:'2026-09-09-v2'});assert.equal(SPONSOR_RATE_VERSION,'2026-09-09-v2');assert.equal(sponsorQuote('site','7d'),null)});
+test('published sponsor rates are computed by server, by placement and duration',()=>{for(const [placement,prices] of Object.entries({product:[159,299,549],category:[299,549,999],home:[449,849,1499]}))for(const [i,duration] of ['7d','14d','28d'].entries())assert.deepEqual(sponsorQuote(placement,duration),{amount:prices[i],currency:'CNY',days:parseInt(duration),duration,placement,version:'2026-09-09-v3'});assert.equal(SPONSOR_RATE_VERSION,'2026-09-09-v3');assert.equal(sponsorQuote('site','7d'),null)});
 test('four simultaneous sponsors per page, duplicate merchants and stale edits rejected',()=>{
  const a=openAnalytics(':memory:','test-sponsor-capacity-secret-long-enough');try{
  for(let i=0;i<4;i++)a.outbound.saveCampaign(campaign('s'+i),{approve:true,now:date});
