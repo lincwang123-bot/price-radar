@@ -6,6 +6,7 @@ for(const dir of ["lib","sources","collectors","scripts"]){
 }
 execFileSync(process.execPath,["--check","assets/retention.js"],{stdio:"inherit"});
 execFileSync(process.execPath,["--check","assets/account.js"],{stdio:"inherit"});
+execFileSync(process.execPath,["--check","assets/sponsors.js"],{stdio:"inherit"});
 execFileSync(process.execPath,["--check","assets/merchant-x.js"],{stdio:"inherit"});
 execFileSync(process.execPath,["--check","radar.mjs"],{stdio:"inherit"});
 execFileSync(process.execPath,["--test"],{stdio:"inherit"});

@@ -29,7 +29,7 @@ test('every notification has branded HTML, useful next steps and a full text alt
 test('public partnership content and metadata use AIradar without changing the domain',()=>{
   const html=decorateSeo('<html><head><title>商家合作</title></head><body>'+advertiseContent()+'</body></html>',new URL('https://airadar.vip/advertise'),null);
   assert.match(html,/AIradar · 商家合作/);
-  assert.match(html,/了解 AIradar 商品/);
+  assert.match(html,/查看 AIradar 首页、分类页和产品页/);
   assert.match(html,/https:\/\/airadar\.vip\/advertise/);
   assert.doesNotMatch(html,/AirRadar|AIRRADAR|Airadar\b|AIRADAR/);
 });

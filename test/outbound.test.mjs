@@ -124,7 +124,7 @@ test('shared-platform shops redirect with separate quote keys but cannot sponsor
   const c={id:'shared',merchant_id:'domain:16688.com.cn',source:'fixture',product_id:'p',offer_id:'o',label:'fixture',placement:'sponsored_product',start_at:'2026-09-01T00:00:00Z',end_at:'2026-10-01T00:00:00Z'};
   assert.throws(()=>ctx.analytics.outbound.saveCampaign(c,{approve:true,now:date}),/requires verified/);
   assert.throws(()=>ctx.analytics.outbound.saveCampaign({...c,merchant_id:rows[0].merchant_id},{approve:true,now:date}),/requires verified/);
-  ctx.analytics.db.prepare('INSERT INTO campaigns VALUES(?,?,?,?,?,?,?,?,?,?,?)').run(c.id,c.merchant_id,c.source,c.product_id,c.offer_id,c.label,c.placement,c.start_at,c.end_at,'approved',date.toISOString());
+  ctx.analytics.db.prepare('INSERT INTO campaigns(id,merchant_id,source,product_id,offer_id,label,placement,start_at,end_at,status,reviewed_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)').run(c.id,c.merchant_id,c.source,c.product_id,c.offer_id,c.label,c.placement,c.start_at,c.end_at,'approved',date.toISOString());
   assert.equal(ctx.analytics.outbound.campaignsFor({source:'fixture',productId:'p'},date).length,0);
   assert.equal(follow(ctx,outboundHref(offer,{}, {placement:'sponsored_product',campaignId:'shared'})).statusCode,404);
   for(const url of ['https://data.priceai.cc/item','https://goaihop.com/item','https://cardnav.xyz/item']){ctx.db.prepare('UPDATE offers SET url=? WHERE offer_id=?').run(url,'o');assert.equal(follow(ctx).statusCode,404);}

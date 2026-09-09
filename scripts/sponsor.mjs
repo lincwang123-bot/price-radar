@@ -1,3 +1,4 @@
+import {resolveSponsorChoice,sponsorScope} from '../lib/sponsor-service.mjs';
 // Manual operator tool. No payments, merchant accounts or automatic campaign approval.
 import {DatabaseSync} from 'node:sqlite';
 import {readFileSync,existsSync} from 'node:fs';
@@ -16,6 +17,6 @@ try{
   const snapshot=market.prepare('SELECT snapshot_id FROM snapshots WHERE source=? ORDER BY fetched_at DESC,rowid DESC LIMIT 1').get(input.source);
   const offer=snapshot&&resolveOutboundOffer(market,{source:input.source,snapshot:snapshot.snapshot_id,product:input.product_id,offer:input.offer_id});
   if(!offer||offer.merchant_id!==input.merchant_id)throw new Error('Campaign must match a currently valid merchant offer');
-  console.log(JSON.stringify(initMerchantAnalytics(db,'unused-cli-identity').saveCampaign(input,{approve:flag==='--approve'})));
+  const key=Buffer.from(JSON.stringify([input.source,input.product_id,input.offer_id])).toString('base64url');const {entry}=resolveSponsorChoice(market,key);Object.assign(input,sponsorScope(entry,input.placement));console.log(JSON.stringify(initMerchantAnalytics(db,'unused-cli-identity').saveCampaign(input,{approve:flag==='--approve'})));
  }
 }catch(error){console.error(error.message);process.exitCode=1;}finally{market?.close();db?.close();}
