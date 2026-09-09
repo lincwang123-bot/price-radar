@@ -4,10 +4,11 @@ import {openDb,storeSnapshot} from '../lib/db.mjs';
 import {createApp} from '../lib/web.mjs';
 import {buildProductDirectory,directoryQuotes} from '../lib/product-directory.mjs';
 
-const paths=['/help/compare-prices','/help/price-alerts','/help/data-and-ranking','/guides/chatgpt-plus-delivery','/guides/why-prices-differ','/guides/renewal-checklist','/guides/claude-pro-buying','/guides/gemini-membership-options'];
+const paths=['/help/compare-prices','/help/price-alerts','/help/data-and-ranking','/guides/chatgpt-plus-delivery','/guides/why-prices-differ','/guides/renewal-checklist','/guides/claude-pro-buying','/guides/gemini-membership-options','/guides/chatgpt-plus-trial-day-pass','/guides/cursor-discount-links'];
 test('public articles are readable without JavaScript, linked, canonical and discoverable',async()=>{
  const db=openDb(':memory:');
  storeSnapshot(db,{source:'direct-shops',snapshotId:'guides-fixture',products:[{productId:'chatgpt-plus-recharge',name:'ChatGPT Plus',currency:'CNY',offers:[{offerId:'guide-offer',title:'ChatGPT Plus 1个月代充',price:100,currency:'CNY',status:'in_stock',stockCount:1,url:'https://example.com/plus'}]}]});
+ storeSnapshot(db,{source:'cardnav-official',snapshotId:'cursor-guides-fixture',products:[['cursor-pro','Cursor Pro'],['cursor-pro-plus','Cursor Pro+'],['cursor-ultra','Cursor Ultra'],['cursor-account','Cursor 账号']].map(([productId,name])=>({productId,name,currency:'USD',offers:[{offerId:productId+'-fixture',title:name,price:20,currency:'USD',status:'official',url:'https://example.com/'+productId}]}))});
  const app=createApp({db});await new Promise(r=>app.listen(0,'127.0.0.1',r));const origin=`http://127.0.0.1:${app.address().port}`;
  try{
   const map=await(await fetch(origin+'/sitemap.xml')).text();
@@ -30,6 +31,11 @@ test('public articles are readable without JavaScript, linked, canonical and dis
    }
   }
   const quote=await(await fetch(origin+'/?family=chatgpt&product=chatgpt-plus')).text();assert.match(quote,/href="\/guides\/chatgpt-plus-delivery"/);assert.match(quote,/href="\/help\/compare-prices"/);
+  assert.match(quote,/href="\/guides\/chatgpt-plus-trial-day-pass"/);
+  for(const product of ['cursor-pro','cursor-pro-plus','cursor-ultra','cursor-account']){
+   const response=await fetch(origin+'/?family=cursor&product='+product);assert.equal(response.status,200);
+   assert.ok((await response.text()).includes('href="/guides/cursor-discount-links"'),product+' must link its buying guide');
+  }
   const follows=await(await fetch(origin+'/following')).text();assert.match(follows,/href="\/help\/price-alerts"/);
  }finally{await new Promise(r=>app.close(r));db.close();}
 });
