@@ -4,6 +4,7 @@ import {openDb,storeSnapshot} from '../lib/db.mjs';
 import {openSubmissionsDb,listSubmissions} from '../lib/submissions.mjs';
 import {openAnalytics} from '../lib/analytics.mjs';
 import {createApp} from '../lib/web.mjs';
+import {SPONSOR_RATE_VERSION} from '../lib/sponsor-plans.mjs';
 import {hashAdminPassword} from '../lib/admin.mjs';
 import {sponsorDirectory,sponsorEntries,sponsorOfferKey,saveAdminSponsor} from '../lib/sponsor-service.mjs';
 
@@ -26,14 +27,15 @@ async function fixture(run){
 
 test('admin draft/approve/pause flow is authenticated, CSRF protected, scoped and capacity limited',()=>fixture(async({get,post,login,fields,analytics})=>{
  assert.equal((await get('/admin/sponsors')).status,303);assert.equal((await get('/admin/sponsors.csv')).status,303);
- const {cookie,csrf}=await login();const draft={...fields(0),csrf,action:'save'};
+ const {cookie,csrf}=await login();assert.match(await(await get('/admin/sponsors',{cookie})).text(),/name="amount_cny"[^>]+value="299"/);const draft={...fields(0),csrf,action:'save'};
  assert.equal((await post('/admin/sponsors',fields(0),cookie)).status,403);
  assert.equal((await post('/admin/sponsors',draft,cookie,{origin:'https://evil.test'})).status,403);
  assert.equal((await post('/admin/sponsors',{...fields(0),csrf,reviewed:'false'},cookie)).status,422);
  assert.equal((await post('/admin/sponsors',draft,cookie)).status,303);
- let row=analytics.outbound.listCampaigns()[0];assert.equal(row.status,'draft');
+ let row=analytics.outbound.listCampaigns()[0];assert.equal(row.status,'draft');assert.equal(row.amount_cny,99);assert.match(await(await get('/admin/sponsors?id='+row.id,{cookie})).text(),/name="amount_cny"[^>]+value="99"/);
  const route='/?family=chatgpt&product=chatgpt-plus';assert.doesNotMatch(await(await get(route)).text(),/<article class="sponsor-card"/);
  assert.equal((await post('/admin/sponsors',{...fields(0),id:row.id,version:'1',csrf},cookie)).status,303);
+ assert.equal(analytics.outbound.listCampaigns().find(c=>c.id===row.id).amount_cny,99);
  for(let i=1;i<4;i++)assert.equal((await post('/admin/sponsors',{...fields(i),csrf},cookie)).status,303);
  assert.equal((await post('/admin/sponsors',{...fields(4),csrf},cookie)).status,409);
  const html=await(await get(route)).text();assert.equal((html.match(/<article class="sponsor-card"/g)||[]).length,4);
@@ -67,11 +69,13 @@ test('12 public demos stay fictional, application calculates price on server and
  for(const placement of ['product','category','home'])for(const count of [1,2,3,4]){
   const html=await(await get(`/advertise?placement=${placement}&count=${count}`)).text();assert.equal(html.match(/<article class="sponsor-card"/g).length,count);assert.match(html,/虚构示例/);assert.doesNotMatch(html,/data-sponsor-token=/);
  }
- const page=await(await get('/submit?topic=sponsor_apply&placement=category&duration=14d')).text(),csrf=page.match(/name="csrf-token" content="([^"]+)"/)[1];assert.match(page,/¥359/);
- const payload={kind:'feedback',topic:'sponsor_apply',subject:'测试店铺申请',contextUrl:'https://merchant.test',contact:'private-fixture@example.test',details:'测试提交，验证人工处理的赞助申请与费用。',consent:true,metadata:{placement:'category',duration:'14d',targetPage:'/?family=chatgpt',amount:1}};
+ const page=await(await get('/submit?topic=sponsor_apply&placement=category&duration=14d')).text(),csrf=page.match(/name="csrf-token" content="([^"]+)"/)[1];assert.match(page,/¥899/);
+ const payload={kind:'feedback',topic:'sponsor_apply',subject:'测试店铺申请',contextUrl:'https://merchant.test',contact:'private-fixture@example.test',details:'测试提交，验证人工处理的赞助申请与费用。',consent:true,metadata:{rateVersion:SPONSOR_RATE_VERSION,placement:'category',duration:'14d',targetPage:'/?family=chatgpt',amount:1}};
  const send=body=>fetch(base+'/api/submissions',{method:'POST',headers:{origin:base,'content-type':'application/json',cookie:'airadar_csrf='+csrf,'x-csrf-token':csrf},body:JSON.stringify(body)});
  assert.equal((await send({...payload,metadata:{...payload.metadata,targetPage:'https://evil.test'}})).status,422);
+ for(const rateVersion of [undefined,'2026-09-09']){const rejected=await send({...payload,metadata:{...payload.metadata,rateVersion}});assert.equal(rejected.status,422);assert.match((await rejected.json()).error,/刷新页面/);}
+ assert.equal(listSubmissions(submissionsDb,{kind:'feedback'}).length,0);
  assert.equal((await send(payload)).status,201);
- const row=listSubmissions(submissionsDb,{kind:'feedback'})[0];assert.match(row.details,/¥359/);assert.match(row.details,/目标页面：\/\?family=chatgpt/);
+ const row=listSubmissions(submissionsDb,{kind:'feedback'})[0];assert.match(row.details,/¥899/);assert.ok(row.details.includes('价目版本：'+SPONSOR_RATE_VERSION));assert.match(row.details,/目标页面：\/\?family=chatgpt/);
  assert.equal(analytics.outbound.listCampaigns().length,0);assert.doesNotMatch(await(await get('/advertise')).text(),/private-fixture/);
 }));
