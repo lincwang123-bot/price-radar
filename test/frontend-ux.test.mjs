@@ -100,7 +100,7 @@ test('官方参考零价可从目录进入详情，不携带商店合成规格�
    const category=await(await fetch(base+'/?family='+family)).text();const row=category.match(new RegExp('<article[^>]*data-directory-product="'+product+'"[\\s\\S]*?<\\/article>'))[0];assert.match(row,/1 条参考报价/);assert.match(row,/查看参考/);assert.doesNotMatch(row,/0 家店|0 条报价|查看店铺/);
    if(source==='cardnav-official'){const reference=page.match(/<section class="directory-references">[\s\S]*?<\/section>/)[0];assert.match(reference,/仅作价格参考/);assert.doesNotMatch(reference,/href="\/go|data-store-risk/);}
    const link=[...page.matchAll(/href="(\/product\?[^\"]+)"/g)].map(m=>m[1].replaceAll('&amp;','&')).find(h=>new URL(h,base).searchParams.get('source')===source);assert.ok(link);assert.equal(new URL(link,base).searchParams.get('spec'),null);
-   const detail=await(await fetch(base+link)).text();assert.match(detail,/price-display">¥0</);assert.match(detail,/共 1 条公开报价/);assert.match(detail,/data-store-risk/);
+   const detail=await(await fetch(base+link)).text();assert.match(detail,/data-label="人民币参考">¥0\.00</);assert.match(detail,/筛选后 1 条 \/ 共 1 条/);assert.match(detail,/data-official-page="1"/);assert.doesNotMatch(detail,/<a[^>]+data-store-risk/);
   }
   assert.equal((await fetch(base+'/?family=relay&product=relay-demo')).status,410);
   const missing=await(await fetch(base+'/?family=claude&product=claude-max-5x')).text();assert.doesNotMatch(missing,/>¥0</);assert.match(missing,/暂无有效报价/);assert.match(missing,/暂无可用报价/);assert.match(missing,/查看 缺价套餐 的报价记录/);
