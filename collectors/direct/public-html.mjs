@@ -4,6 +4,7 @@ import { isAuthorizedMerchantTarget } from '../../lib/merchant-target-capability
 import { publicHttpsUrl } from '../../lib/public-network-fetch.mjs';
 import { discoverCatalog, parsePublicProduct, publicPageUrl, htmlFailure, htmlText } from '../../lib/public-catalog-html.mjs';
 import { recognizesPublicStoreScript, parsePublicStoreList, parsePublicStoreDetail, PUBLIC_STORE_ENDPOINT } from '../../lib/public-store-api.mjs';
+import {publicCentsContract,confirmsCentsFormatter,parsePublicCentsCatalog,PUBLIC_CENTS_ENDPOINT} from '../../lib/public-cents-catalog.mjs';
 
 export const PUBLIC_HTML_MAX_REQUESTS = 20;
 // Reserve two API probes, robots.txt and the catalog page within the same
@@ -83,13 +84,14 @@ export async function collectPublicHtml(target, options = {}) {
     try { policy = robotsPolicy(await read(origin + '/robots.txt')); }
     catch (error) { if (error.status !== 404) throw error; policy = robotsPolicy(''); }
   }
-  const pages = [origin + '/'], visited = new Set(), entries = new Map(), scripts = new Set();
+  const pages = [origin + '/'], visited = new Set(), entries = new Map(), scripts = new Set(), modules = new Set();
   while (pages.length) {
     const url = pages.shift(); if (visited.has(url)) continue;
     if (visited.size >= MAX_DISCOVERY_PAGES) throw htmlFailure('公开目录请求达到上限', 'COLLECTOR_LIMIT');
     visited.add(url);
     const result = discoverCatalog(await read(url), origin);
     result.scriptUrls.forEach(url => scripts.add(url));
+    result.moduleUrls.forEach(url=>modules.add(url));
     for (const row of result.entries) {
       const prior = entries.get(row.url);
       if (prior && JSON.stringify(prior) !== JSON.stringify(row)) throw htmlFailure();
@@ -112,6 +114,11 @@ export async function collectPublicHtml(target, options = {}) {
     }
   }
   if (!entries.size) {
+    for(const moduleUrl of [...modules].filter(url=>/\/(?:storefront|product-detail)-[\w-]+\.js$/.test(new URL(url).pathname)).slice(0,1)){
+      const contract=publicCentsContract(await read(moduleUrl),moduleUrl,[...modules]);
+      if(!contract||!confirmsCentsFormatter(await read(contract.formatterUrl),contract))continue;
+      return parsePublicCentsCatalog(await read(origin+PUBLIC_CENTS_ENDPOINT,true),target,options.capturedAt||new Date().toISOString());
+    }
     for (const scriptUrl of [...scripts].slice(0, 2)) {
       if (!recognizesPublicStoreScript(await read(scriptUrl))) continue;
       const listed = parsePublicStoreList(await read(origin + PUBLIC_STORE_ENDPOINT, true)), offers = [];
