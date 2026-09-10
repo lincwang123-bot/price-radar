@@ -8,6 +8,7 @@ import { PLATFORM16688_SHOPS, collect16688 } from './platform16688.mjs';
 import { collectAichong } from './aichong.mjs';
 import { collectBBShare } from './bbshare.mjs';
 import { collectNobrisk } from './nobrisk.mjs';
+import {collectTerry} from './terry.mjs';
 import {collectDujiaokaHtml} from './dujiaoka-html.mjs';
 import {merchantUrlBlocked} from '../../lib/merchant-blocklist.mjs';
 import { collectPublicHtml, PUBLIC_HTML_MAX_REQUESTS } from './public-html.mjs';
@@ -18,6 +19,7 @@ import { classifyPreflightError } from '../../lib/merchant-preflight-guidance.mj
 // 这里只登记我们逐个核验过的原站公开入口。URL 不接受运行时任意传入，
 // 避免把采集器变成通用代理或 SSRF 入口。
 const TARGETS = [
+  {id:'terry',name:'Terry会员代充',kind:'terry',origin:'https://aiterry.shop',intervalMinutes:30},
   {id:'fufaka',name:'桑丘自动发货资源店',kind:'dujiaokaHtml',origin:'https://fufaka.shop',intervalMinutes:60},
   {id:'nobrisk',name:'BriskAI',kind:'nobrisk',origin:'https://shop.nobrisk.com',endpoint:'/user/api/index/commodity',intervalMinutes:30,maxPages:5,pageSize:100},
   {id:'bbshare',name:'BBShare',kind:'bbshare',origin:'https://www.bbshare.site',intervalMinutes:60},
@@ -148,6 +150,7 @@ const TARGETS = [
 ];
 
 const COLLECTORS = {
+  terry:collectTerry,
   dujiaokaHtml:collectDujiaokaHtml,
   nobrisk: collectNobrisk,
   kami: collectKami,
@@ -165,7 +168,7 @@ const COLLECTORS = {
 // Listing here does not enable requests from the production server.
 export const SHOP_API_TARGET_IDS = Object.freeze(TARGETS.filter(target => target.kind === 'shopApi').map(target => target.id));
 // An adapter registration is not approval and does not add a default collector.
-export const MERCHANT_ONLY_TARGET_IDS=Object.freeze(['bbshare','fufaka']);
+export const MERCHANT_ONLY_TARGET_IDS=Object.freeze(['bbshare','fufaka','terry']);
 
 function shop(id, name, token) {
   return {
@@ -205,7 +208,7 @@ export function collectorFor(target) {
   if(merchantUrlBlocked(target.origin))throw new Error('该店铺已被站方暂停采集');
   const collector = COLLECTORS[target.kind];
   if (!collector) throw new Error(`来源 ${target.id} 没有对应采集器: ${target.kind}`);
-  if (target.shopNo || target.token || ['bbshare','aikashop','aichong','dujiaokaHtml'].includes(target.kind)) return collector;
+  if (target.shopNo || target.token || ['bbshare','aikashop','aichong','dujiaokaHtml','terry'].includes(target.kind)) return collector;
   return async (source, options = {}) => {
     try { return await collector(source, options); }
     catch (error) {

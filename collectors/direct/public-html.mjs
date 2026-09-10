@@ -5,6 +5,8 @@ import { publicHttpsUrl } from '../../lib/public-network-fetch.mjs';
 import { discoverCatalog, parsePublicProduct, publicPageUrl, htmlFailure, htmlText } from '../../lib/public-catalog-html.mjs';
 import { recognizesPublicStoreScript, parsePublicStoreList, parsePublicStoreDetail, PUBLIC_STORE_ENDPOINT } from '../../lib/public-store-api.mjs';
 import {publicCentsContract,confirmsCentsFormatter,parsePublicCentsCatalog,PUBLIC_CENTS_ENDPOINT} from '../../lib/public-cents-catalog.mjs';
+import {linkedDujiaoProductModule,confirmsDujiaoProductModule} from '../../lib/public-dujiao-script.mjs';
+import {collectDujiao} from './dujiao.mjs';
 
 export const PUBLIC_HTML_MAX_REQUESTS = 20;
 // Reserve two API probes, robots.txt and the catalog page within the same
@@ -84,14 +86,26 @@ export async function collectPublicHtml(target, options = {}) {
     try { policy = robotsPolicy(await read(origin + '/robots.txt')); }
     catch (error) { if (error.status !== 404) throw error; policy = robotsPolicy(''); }
   }
+  const scriptCache=new Map();
+  const readScript=async url=>{if(!scriptCache.has(url))scriptCache.set(url,await read(url));return scriptCache.get(url);};
   const pages = [origin + '/'], visited = new Set(), entries = new Map(), scripts = new Set(), modules = new Set();
   while (pages.length) {
     const url = pages.shift(); if (visited.has(url)) continue;
     if (visited.size >= MAX_DISCOVERY_PAGES) throw htmlFailure('公开目录请求达到上限', 'COLLECTOR_LIMIT');
     visited.add(url);
-    const result = discoverCatalog(await read(url), origin);
+    const html=await read(url),result = discoverCatalog(html, origin);
     result.scriptUrls.forEach(url => scripts.add(url));
     result.moduleUrls.forEach(url=>modules.add(url));
+    // A Vue shell may advertise product URLs in its sitemap while every detail
+    // returns the same empty app. Resolve its real linked catalog before trying
+    // those pages, and report the actual robots restriction when it is blocked.
+    if(visited.size===1&&!result.entries.length&&/<div\b[^>]*\bid=["']app["'][^>]*>\s*<\/div>/i.test(html)){
+      for(const scriptUrl of result.scriptUrls.slice(0,2)){
+        const productModule=linkedDujiaoProductModule(await readScript(scriptUrl),scriptUrl);
+        if(!productModule||!confirmsDujiaoProductModule(await readScript(productModule)))continue;
+        return collectDujiao(target,{capturedAt:options.capturedAt,fetchImpl:async value=>new Response(JSON.stringify(await read(value,true)),{headers:{'content-type':'application/json'}})});
+      }
+    }
     for (const row of result.entries) {
       const prior = entries.get(row.url);
       if (prior && JSON.stringify(prior) !== JSON.stringify(row)) throw htmlFailure();
@@ -120,7 +134,7 @@ export async function collectPublicHtml(target, options = {}) {
       return parsePublicCentsCatalog(await read(origin+PUBLIC_CENTS_ENDPOINT,true),target,options.capturedAt||new Date().toISOString());
     }
     for (const scriptUrl of [...scripts].slice(0, 2)) {
-      if (!recognizesPublicStoreScript(await read(scriptUrl))) continue;
+      if (!recognizesPublicStoreScript(await readScript(scriptUrl))) continue;
       const listed = parsePublicStoreList(await read(origin + PUBLIC_STORE_ENDPOINT, true)), offers = [];
       for (const row of listed) {
         const detail = await read(`${origin}${PUBLIC_STORE_ENDPOINT}/${encodeURIComponent(row.slug)}`, true);

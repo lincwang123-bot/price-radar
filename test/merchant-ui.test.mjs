@@ -78,4 +78,6 @@ test('approval is separate from collection and verified badge requires approval 
   assert.doesNotMatch(render('approved',{status:'active',offerCount:0}),/class="badge">已接入/);
   assert.doesNotMatch(render('approved',{status:'active',offerCount:9,validCount:0}),/class="badge">已接入/);
   assert.match(render('approved',{status:'no_valid_offers',offerCount:9}),/class="badge">目录可读取 \/ 暂无有效报价/);
+  assert.match(render('approved',{status:'unavailable',reasonCode:'robots_disallowed'}),/class="badge">自动读取未放行/);
+  assert.match(render('approved',{status:'unavailable',reasonCode:'timeout'}),/class="badge">读取超时，等待重试/);
 });
