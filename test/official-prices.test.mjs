@@ -57,7 +57,7 @@ test('official pages render references, filter and paginate independently, retai
    const canonical=html.match(/rel="canonical" href="([^"]+)"/)[1].replaceAll('&amp;','&');assert.equal(canonical,'https://airadar.vip'+detail+(page>1?'&page='+page:''));
    assert.match(html,/<title>ChatGPT Plus 官方地区价格/);assert.match(html,/汇率日期未提供/);assert.match(html,/未经本站逐条结账核验/);
    const content=html.split('<section class="official-page"')[1].split('</main>')[0];assert.doesNotMatch(content,/店主认领|name="channel"|历史价格走势|data-store-risk/);
-   const dataset=schemas(html).find(x=>x['@type']==='Dataset');assert.equal(dataset.isBasedOn,'https://cardnav.xyz/official-price/chatgpt-plus');assert.equal(dataset.offers,undefined);assert.equal(dataset.dateModified,undefined);
+   const dataset=schemas(html).find(x=>x['@type']==='Dataset');assert.equal(dataset.isBasedOn,'https://cardnav.xyz/official-price/chatgpt-plus');assert.equal(dataset.offers,undefined);assert.equal(dataset.dateModified,undefined);assert.deepEqual(dataset.creator,{'@type':'Organization',name:'CardNav',url:'https://cardnav.xyz/'});assert.equal(dataset.isAccessibleForFree,true);assert.equal(dataset.license,undefined);assert.equal(schemas(html).find(x=>x['@id']===dataset.publisher['@id']).name,'AIradar · AI订阅价格雷达');assert.match(html,/数据汇总方是 CardNav；AIradar 负责本页的整理与发布/);
   }
   const filtered=await(await get(detail+'&period=month&page=2')).text();assert.equal((filtered.match(/<th scope="row">/g)||[]).length,2);assert.match(filtered,/period=month/);
   const none=await(await get(detail+'&period=year')).text();assert.match(none,/没有符合条件的地区记录/);assert.doesNotMatch(none,/<th scope="row">/);
