@@ -8,6 +8,7 @@ import { PLATFORM16688_SHOPS, collect16688 } from './platform16688.mjs';
 import { collectAichong } from './aichong.mjs';
 import { collectBBShare } from './bbshare.mjs';
 import { collectNobrisk } from './nobrisk.mjs';
+import { collectZhanghao66 } from './zhanghao66.mjs';
 import {collectTerry} from './terry.mjs';
 import {collectDujiaokaHtml} from './dujiaoka-html.mjs';
 import {merchantUrlBlocked} from '../../lib/merchant-blocklist.mjs';
@@ -90,6 +91,7 @@ const TARGETS = [
     id: "zhanghao66",
     name: "账号66",
     kind: "kami",
+    collector: "zhanghao66",
     origin: "https://zhanghao66.com",
     endpoint: "/user/api/index/commodity",
     intervalMinutes: 30,
@@ -150,6 +152,7 @@ const TARGETS = [
 ];
 
 const COLLECTORS = {
+  zhanghao66:collectZhanghao66,
   terry:collectTerry,
   dujiaokaHtml:collectDujiaokaHtml,
   nobrisk: collectNobrisk,
@@ -206,9 +209,9 @@ export function directTargets(ids = DEFAULT_DIRECT_TARGET_IDS) {
 
 export function collectorFor(target) {
   if(merchantUrlBlocked(target.origin))throw new Error('该店铺已被站方暂停采集');
-  const collector = COLLECTORS[target.kind];
+  const collector = COLLECTORS[target.collector ?? target.kind];
   if (!collector) throw new Error(`来源 ${target.id} 没有对应采集器: ${target.kind}`);
-  if (target.shopNo || target.token || ['bbshare','aikashop','aichong','dujiaokaHtml','terry'].includes(target.kind)) return collector;
+  if (target.collector || target.shopNo || target.token || ['bbshare','aikashop','aichong','dujiaokaHtml','terry'].includes(target.kind)) return collector;
   return async (source, options = {}) => {
     try { return await collector(source, options); }
     catch (error) {
