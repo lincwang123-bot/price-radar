@@ -17,7 +17,7 @@ export function enrichNobriskOffer(offer, html) {
   // Keep every other paragraph, including warranty and renewal conditions.
   const deliveryDescription = description.replace(/<p\b[^>]*>[^<]*常见封号原因[\s\S]*?<\/p>/gi, '');
   return { ...offer, price: offer.listedPrice,
-    extra: { ...offer.extra, publicUserPrice: offer.price, priceEvidence: '公开目录 price 挂牌价；不使用会员 user_price 作为起价',
+    extra: { ...offer.extra, publicUserPrice: offer.extra?.publicUserPrice ?? null, priceEvidence: '公开目录 price 挂牌价；不使用会员 user_price 作为起价',
       publicDescription: deliveryEvidence({ description }).description,
       deliveryEvidence: deliveryEvidence({ productTitle: title, category: offer.category,
         description: deliveryDescription, descriptionScope: 'product' }) } };
