@@ -1,0 +1,27 @@
+# price-radar Web 与公开投稿服务（绑 127.0.0.1，公网由 cloudflared tunnel 暴露）
+[Unit]
+Description=Price Radar web page and submission endpoint
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=deploy
+Group=deploy
+WorkingDirectory=/opt/linc/apps/price-radar
+EnvironmentFile=-/opt/linc/apps/price-radar/.env
+EnvironmentFile=-/etc/price-radar/web.env
+ExecStart=/usr/bin/node --disable-warning=ExperimentalWarning radar.mjs serve --host 127.0.0.1 --port 18090
+Restart=on-failure
+RestartSec=5s
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/linc/apps/price-radar/submissions
+ReadWritePaths=/opt/linc/apps/price-radar/analytics
+ReadWritePaths=/opt/linc/apps/price-radar/merchant-bridge
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

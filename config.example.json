@@ -1,0 +1,72 @@
+{
+  "_说明": "可选模板：默认即可运行。如需覆盖默认配置，复制本文件为 config.json 后按需修改（写 null/缺省即用内置默认）。",
+  "sources": {
+    "ldxp-goods": {
+      "enabled": true,
+      "label": "RelayWatch·链动小铺(LDXP) 卡网商品价",
+      "_说明": "keywords 为 null 时继承已核验的默认关键词名单，随内置名单更新。",
+      "keywords": null,
+      "min_interval_minutes": 30,
+      "page_size": 100,
+      "max_pages_per_keyword": 2,
+      "max_requests": 24,
+      "request_delay_ms": 1000
+    },
+    "direct-shops": {
+      "discovery": {
+        "platform16688": true
+      },
+      "enabled": true,
+      "label": "原始店铺直采",
+      "min_interval_minutes": 30,
+      "request_delay_ms": 500,
+      "_说明": "targets 为 null 时继承已核验的默认原店名单，随内置名单更新。",
+      "targets": null
+    }
+  },
+  "watch": {
+    "rules": [
+      {
+        "id": "chatgpt-plus-recharge-below-105",
+        "kind": "min_below",
+        "source": "direct-shops",
+        "product": "chatgpt-plus-recharge",
+        "threshold": 105,
+        "term": "1m",
+        "currency": "CNY"
+      },
+      {
+        "id": "ldxp-gpt-pro-below-80",
+        "kind": "min_below",
+        "source": "ldxp-goods",
+        "product": "gpt-pro",
+        "threshold": 80
+      },
+      {
+        "id": "chatgpt-any-drop-8pct",
+        "kind": "drop_pct",
+        "source": "direct-shops",
+        "product": "*",
+        "window": 24,
+        "pct": 8
+      },
+      {
+        "id": "plus-cheapest-moved",
+        "kind": "cheapest_changed",
+        "source": "direct-shops",
+        "product": "chatgpt-plus-recharge"
+      },
+      {
+        "id": "plus-cheapest-gone",
+        "kind": "offer_gone",
+        "source": "direct-shops",
+        "product": "chatgpt-plus-recharge"
+      }
+    ]
+  },
+  "notify": {
+    "console": true,
+    "logFile": true,
+    "webhooks": []
+  }
+}

@@ -1,0 +1,22 @@
+# price-radar 临时公网入口（Cloudflare Quick Tunnel → 127.0.0.1:18090）
+# 注意：Quick Tunnel 重启后 URL 会变化；仅供身边人使用，正式长期入口应换 Named Tunnel。
+[Unit]
+Description=Price Radar temporary Cloudflare preview tunnel
+After=network-online.target price-radar-web.service
+Wants=network-online.target
+Requires=price-radar-web.service
+
+[Service]
+Type=simple
+User=deploy
+Group=deploy
+WorkingDirectory=/opt/linc/apps/price-radar
+ExecStart=/usr/local/bin/cloudflared tunnel --no-autoupdate --url http://127.0.0.1:18090
+Restart=on-failure
+RestartSec=5s
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+
+[Install]
+WantedBy=multi-user.target

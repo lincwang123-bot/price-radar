@@ -1,0 +1,29 @@
+[Unit]
+Description=Price Radar immediate merchant catalogue tests (private IPC)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=deploy
+Group=deploy
+WorkingDirectory=/opt/linc/apps/price-radar
+Environment=MERCHANT_BRIDGE_DIR=/opt/linc/apps/price-radar/merchant-bridge
+ExecStart=/usr/bin/node --disable-warning=ExperimentalWarning scripts/merchant-preflight-service.mjs
+RuntimeDirectory=price-radar-preflight
+RuntimeDirectoryMode=0700
+UMask=0077
+Restart=on-failure
+RestartSec=3s
+TimeoutStopSec=40s
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/linc/apps/price-radar/data/merchant-preflights
+ReadWritePaths=/run/price-radar-preflight
+ReadOnlyPaths=/opt/linc/apps/price-radar/merchant-bridge
+InaccessiblePaths=/opt/linc/apps/price-radar/submissions /opt/linc/apps/price-radar/analytics /opt/linc/backups/price-radar /etc/price-radar/web.env
+
+[Install]
+WantedBy=multi-user.target

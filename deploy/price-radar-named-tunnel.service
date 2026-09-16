@@ -1,0 +1,28 @@
+# Local-management Named Tunnel runtime. The matching configuration and
+# tunnel-scoped JSON credential live outside Git at /etc/price-radar/cloudflared.
+# systemd exposes the root-only credential only to this service at runtime.
+[Unit]
+Description=Price Radar Cloudflare Named Tunnel
+After=network-online.target price-radar-web.service
+Wants=network-online.target
+Requires=price-radar-web.service
+ConditionPathExists=/etc/price-radar/cloudflared/config.yml
+ConditionPathExists=/etc/price-radar/cloudflared/credentials.json
+
+[Service]
+Type=simple
+User=deploy
+Group=deploy
+WorkingDirectory=/opt/linc/apps/price-radar
+LoadCredential=tunnel-creds:/etc/price-radar/cloudflared/credentials.json
+ExecStart=/usr/local/bin/cloudflared tunnel --config /etc/price-radar/cloudflared/config.yml --no-autoupdate run
+Restart=on-failure
+RestartSec=5s
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=full
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target
