@@ -208,18 +208,46 @@ test("Dujiao collector 在网络请求前拒绝未登记来源", async () => {
   assert.equal(called, false);
 });
 
-test("Dujiao collector 遇到超过五页的目录时中止而不是发布截断快照", async () => {
+test("Dujiao collector 遇到超过十页的目录时中止而不是发布截断快照", async () => {
   let calls = 0;
   await assert.rejects(
     collectDujiao(burstTarget, {
       fetchImpl: async () => {
         calls += 1;
-        return new Response(JSON.stringify(responsePage([product(1, "PLUS", 130, 2)], 1, 6)), {
+        return new Response(JSON.stringify(responsePage([product(1, "PLUS", 130, 2)], 1, 11, 1100)), {
           headers: { "content-type": "application/json" },
         });
       },
     }),
-    /分页超过上限 5/,
+    (error) => error.code === "COLLECTOR_LIMIT" && /商品总数超过上限 1000/.test(error.message),
+  );
+  assert.equal(calls, 1);
+});
+
+test("Dujiao 约 874 个商品按分页读完，超过 1000 个则是采集端限制", async () => {
+  let calls = 0;
+  const offers = await collectDujiao(burstTarget, {
+    capturedAt,
+    fetchImpl: async () => {
+      calls += 1;
+      return new Response(JSON.stringify(responsePage([product(calls, "PLUS", 130, 2)], calls, 9, 874)), {
+        headers: { "content-type": "application/json" },
+      });
+    },
+  });
+  assert.equal(calls, 9);
+  assert.equal(offers.length, 9);
+  calls = 0;
+  await assert.rejects(
+    collectDujiao(burstTarget, {
+      fetchImpl: async () => {
+        calls += 1;
+        return new Response(JSON.stringify(responsePage([product(1, "PLUS", 130, 2)], 1, 9, 1001)), {
+          headers: { "content-type": "application/json" },
+        });
+      },
+    }),
+    (error) => error.code === "COLLECTOR_LIMIT" && /商品总数超过上限 1000/.test(error.message),
   );
   assert.equal(calls, 1);
 });
@@ -241,12 +269,12 @@ test("Dujiao parser 对单商品 SKU 数量设置硬上限", () => {
   );
 });
 
-function responsePage(data, page, totalPage) {
+function responsePage(data, page, totalPage, total = totalPage) {
   return {
     status_code: 200,
     msg: "success",
     data,
-    pagination: { page, page_size: 100, total: totalPage, total_page: totalPage },
+    pagination: { page, page_size: 100, total, total_page: totalPage },
   };
 }
 

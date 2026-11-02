@@ -96,3 +96,15 @@ test('ShopApi 四条实际分类错误精确归类，不匹配相似商家文本
     assert.deepEqual(classifyPreflightError(new Error(message)), { reasonCode: 'unknown' }, message);
   }
 });
+
+test('独角数卡超过本站分页或商品上限是采集端限制，单页格式错误仍是目录无效', () => {
+  for (const message of ['Dujiao 商品总数超过上限 1000', 'Dujiao 分页超过上限 10', 'Dujiao 商品数量超过上限 1000', 'Dujiao 报价数量超过上限 2000']) {
+    assert.equal(classifyPreflightError(new Error(message)).reasonCode, 'collector_limit', message);
+    assert.equal(classifyPreflightError(Object.assign(new Error(message), { code: 'COLLECTOR_LIMIT' })).reasonCode, 'collector_limit', message);
+    const guidance = preflightGuidance({ status: 'unavailable', result: { status: 'unavailable', reasonCode: 'collector_limit' } }, application);
+    assert.equal(guidance.title, '达到本轮安全读取限制');
+    assert.equal(guidance.requiresOperator, true);
+  }
+  assert.equal(classifyPreflightError(new Error('Dujiao 单页商品数量超过上限 100')).reasonCode, 'invalid_catalog');
+  assert.equal(classifyPreflightError(new Error('Dujiao pagination 格式无效')).reasonCode, 'invalid_catalog');
+});

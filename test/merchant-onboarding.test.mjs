@@ -5,7 +5,9 @@ import os from 'node:os';
 import path from 'node:path';
 import { openSubmissionsDb } from '../lib/submissions.mjs';
 import { canonicalShopIdentity, createMerchantApplication, listMerchantApplications, getMerchantApplication,
-  reviewMerchantApplication, approvedMerchantBadges, syncApprovedMerchantManifest, merchantBridgeDir, updateMerchantEmail } from '../lib/merchant-onboarding.mjs';
+  reviewMerchantApplication, approvedMerchantBadges, syncApprovedMerchantManifest, merchantBridgeDir, updateMerchantEmail,
+  migratePendingWzypMirrorIdentities } from '../lib/merchant-onboarding.mjs';
+import { reconcileAutomaticPreflights } from '../lib/merchant-preflight-store.mjs';
 
 const payload = (over = {}) => ({ shopName: '测试商店', shopUrl: 'https://merchant-shop.com/', platform: 'auto', productAreas: ['chatgpt'], email:'owner@example.org', contact: 'owner@example.org', details: '公开商品目录', consent: true, ...over });
 const options = { now: new Date('2026-09-07T04:00:00Z'), clientAddress: '198.51.100.3', secret: 'x'.repeat(32) };
@@ -36,11 +38,15 @@ test('shop identity keeps shared merchants separate and independent www hosts ex
   assert.equal(canonicalShopIdentity('https://16688.com.cn/shop/S124/'), 'shop:16688:S124');
   assert.equal(canonicalShopIdentity('https://wzyp.cn/shop/AbC123'), 'shop:wzyp:AbC123');
   assert.equal(canonicalShopIdentity('https://wzyp.cn/AbC123'), 'shop:wzyp:AbC123');
+  assert.equal(canonicalShopIdentity('https://catfk.com/shop/Token_1'), 'shop:wzyp:Token_1');
+  assert.equal(canonicalShopIdentity('https://www.catfk.com/Token_1/'), 'shop:wzyp:Token_1');
+  assert.equal(canonicalShopIdentity('https://catfk.com/shop/Token_1'), canonicalShopIdentity('https://wzyp.cn/shop/Token_1'));
   assert.equal(canonicalShopIdentity('https://www.merchant-shop.com/item/2'), 'domain:www.merchant-shop.com');
   assert.notEqual(canonicalShopIdentity('https://merchant-shop.com/'), canonicalShopIdentity('https://www.merchant-shop.com/'));
   for (const url of ['http://merchant-shop.com/', 'https://user:pass@merchant-shop.com/', 'https://127.0.0.1/', 'https://[::1]/', 'https://2130706433/',
     'https://metadata.google.internal/', 'https://localhost/', 'https://com/', 'https://shop.local/', 'https://shop.com:8443/', 'https://shop.com/?token=abc',
-    'https://16688.com.cn/', 'https://16688.com.cn/goods/G123', 'https://wzyp.cn/item/123', 'https://wzyp.cn/goods', 'https://relaywatch.online/']) {
+    'https://16688.com.cn/', 'https://16688.com.cn/goods/G123', 'https://wzyp.cn/item/123', 'https://wzyp.cn/goods', 'https://relaywatch.online/',
+    'https://catfk.com/', 'https://catfk.com/item/1', 'https://www.catfk.com/goods']) {
     assert.throws(() => canonicalShopIdentity(url), { status: 422 }, url);
   }
   assert.throws(() => canonicalShopIdentity('https://merchant-shop.com/' + '中'.repeat(450)), { status: 422 });
@@ -184,4 +190,39 @@ test('approval cannot overflow the collector manifest limit and invalidate exist
   assert.equal(getMerchantApplication(db, id).status, 'pending');
   assert.equal(getMerchantApplication(db, id).actions.length, 0);
   assert.equal(syncApprovedMerchantManifest(db, null).merchants.length, 100);
+});
+
+test('stale pending catfk domain identity is repaired to wzyp without approval, mail, or URL changes', t => {
+  const { db, dir } = fixture(t);
+  const { id } = createMerchantApplication(db, payload({ shopUrl: 'https://catfk.com/shop/Token_1', email: 'mirror@example.org', contact: 'mirror@example.org' }), options);
+  assert.equal(db.prepare('SELECT identity,platform FROM merchant_applications WHERE public_id=?').get(id).identity, 'shop:wzyp:Token_1');
+  db.prepare("UPDATE merchant_applications SET identity='domain:catfk.com', platform='independent' WHERE public_id=?").run(id);
+  const before = db.prepare('SELECT * FROM merchant_mail_outbox').all();
+  assert.deepEqual(migratePendingWzypMirrorIdentities(db, { now: options.now }), [id]);
+  const row = db.prepare('SELECT identity,platform,status,version,shop_url,identity_verified_at FROM merchant_applications WHERE public_id=?').get(id);
+  assert.equal(row.identity, 'shop:wzyp:Token_1');
+  assert.equal(row.platform, 'ldxp');
+  assert.equal(row.status, 'pending');
+  assert.equal(row.version, 1);
+  assert.equal(row.shop_url, 'https://catfk.com/shop/Token_1');
+  assert.equal(row.identity_verified_at, null);
+  assert.deepEqual(db.prepare('SELECT * FROM merchant_mail_outbox').all(), before);
+  assert.match(db.prepare('SELECT note FROM merchant_application_actions').get().note, /未批准、未发送邮件/);
+  assert.deepEqual(migratePendingWzypMirrorIdentities(db, { now: options.now }), []);
+  db.prepare("UPDATE merchant_applications SET identity='domain:catfk.com', platform='independent', status='approved' WHERE public_id=?").run(id);
+  assert.deepEqual(migratePendingWzypMirrorIdentities(db, { now: options.now }), []);
+  assert.equal(db.prepare('SELECT identity FROM merchant_applications WHERE public_id=?').get(id).identity, 'domain:catfk.com');
+  db.prepare("UPDATE merchant_applications SET status='pending' WHERE public_id=?").run(id);
+  const { id: taken } = createMerchantApplication(db, payload({ shopUrl: 'https://wzyp.cn/shop/Token_1', email: 'taken@example.org', contact: 'taken@example.org' }), { ...options, clientAddress: '198.51.100.9' });
+  assert.equal(db.prepare('SELECT identity FROM merchant_applications WHERE public_id=?').get(taken).identity, 'shop:wzyp:Token_1');
+  assert.deepEqual(migratePendingWzypMirrorIdentities(db, { now: options.now }), []);
+  assert.equal(db.prepare('SELECT identity FROM merchant_applications WHERE public_id=?').get(id).identity, 'domain:catfk.com');
+  db.prepare('DELETE FROM merchant_applications WHERE public_id=?').run(taken);
+  reconcileAutomaticPreflights(db, { bridgeDir: dir, resultsDir: path.join(dir, 'results'), now: options.now });
+  assert.equal(db.prepare('SELECT identity,platform,status FROM merchant_applications WHERE public_id=?').get(id).identity, 'shop:wzyp:Token_1');
+  const request = db.prepare('SELECT identity,platform FROM merchant_preflight_requests WHERE application_id=?').get(id);
+  assert.equal(request.identity, 'shop:wzyp:Token_1');
+  assert.equal(request.platform, 'ldxp');
+  assert.equal(db.prepare("SELECT COUNT(*) n FROM merchant_mail_outbox WHERE stage='need_info'").get().n, 0);
+  assert.equal(db.prepare('SELECT status FROM merchant_applications WHERE public_id=?').get(id).status, 'pending');
 });

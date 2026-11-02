@@ -4,7 +4,8 @@ import {createHash} from 'node:crypto';
 import {mkdtempSync,writeFileSync,mkdirSync,rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
-import {readApprovedManifest,collectApprovedMerchants} from '../lib/merchant-collection.mjs';
+import {readApprovedManifest,collectApprovedMerchants,probeMerchantCatalog,SHOP_API_MAX_REQUESTS,SHOP_API_TOTAL_TIMEOUT_MS} from '../lib/merchant-collection.mjs';
+import {PUBLIC_HTML_MAX_REQUESTS} from '../collectors/direct/public-html.mjs';
 import {merchantIdentityForUrl,merchantIdentityForOffer} from '../lib/merchant-identity.mjs';
 import {openDb,metaGet} from '../lib/db.mjs';
 import {pull} from '../sources/direct-shops.mjs';
@@ -47,6 +48,35 @@ test('精确商家身份匹配防止共享域名与第三方extra串标',()=>{
   assert.equal(merchantIdentityForOffer({...offer,source:'ldxp-goods'}),null);
   assert.equal(merchantIdentityForOffer({...offer,extra:{...offer.extra,shopNo:'S2'}}),null);
   assert.equal(merchantIdentityForOffer({...offer,url:'https://wzyp.cn/item/1'}),null);
+  assert.equal(merchantIdentityForUrl('https://catfk.com/shop/Token_1'),'shop:wzyp:Token_1');
+  assert.equal(merchantIdentityForUrl('https://www.catfk.com/shop/Token_1'),'shop:wzyp:Token_1');
+  assert.equal(merchantIdentityForUrl('https://catfk.com/'),null);
+  assert.equal(merchantIdentityForUrl('https://catfk.com/item/1'),null);
+  assert.equal(merchantIdentityForOffer({source:'direct-shops',url:'https://wzyp.cn/item/1',extra:{shopUrl:'https://catfk.com/shop/Token_1'}}),'shop:wzyp:Token_1');
+  assert.equal(merchantIdentityForOffer({source:'direct-shops',url:'https://catfk.com/item/1',extra:{shopUrl:'https://wzyp.cn/shop/Token_1'}}),'shop:wzyp:Token_1');
+  assert.equal(merchantIdentityForOffer({source:'direct-shops',url:'https://pay.ldxp.cn/item/1',extra:{shopUrl:'https://catfk.com/shop/Token_1'}}),null);
+});
+
+test('catfk 镜像走 wzyp ShopApi，预算高于公开 HTML',async()=>{
+  const budgets=[];
+  const result=await probeMerchantCatalog({id:'merchant-catfk',identity:'shop:wzyp:Token_1',shopName:'镜像店',shopUrl:'https://catfk.com/shop/Token_1'},
+    {merchantFetchFactory:(origin,options)=>{budgets.push({origin,maxRequests:options.maxRequests,totalTimeoutMs:options.totalTimeoutMs});
+      return async(url,init)=>{assert.equal(origin,'https://wzyp.cn');assert.equal(JSON.parse(init.body).token,'Token_1');
+        return json(String(url).includes('categoryList')?{code:1,data:[{id:0,name:'全部'}]}:{code:1,data:{list:[{goods_key:'g1',name:'ChatGPT Plus 月卡代充',price:100,stock:3}],total:1}});};}},
+    at(),Date.now()+60000);
+  assert.equal(result.offers.length,1);
+  assert.equal(result.offers[0].extra.shopUrl,'https://catfk.com/shop/Token_1');
+  assert.equal(budgets[0].maxRequests,SHOP_API_MAX_REQUESTS);
+  assert.equal(budgets[0].totalTimeoutMs,SHOP_API_TOTAL_TIMEOUT_MS);
+  assert.ok(SHOP_API_MAX_REQUESTS>PUBLIC_HTML_MAX_REQUESTS);
+  assert.ok(SHOP_API_TOTAL_TIMEOUT_MS>30000);
+  budgets.length=0;
+  await probeMerchantCatalog({id:'merchant-html',identity:'domain:budget-shop.com',shopName:'独立店',shopUrl:'https://budget-shop.com/'},
+    {merchantFetchFactory:(origin,options)=>{budgets.push({origin,maxRequests:options.maxRequests,totalTimeoutMs:options.totalTimeoutMs});return async()=>new Response('missing',{status:404});}},
+    at(),Date.now()+60000).catch(error=>{ if(!budgets.length) throw error; });
+  assert.equal(budgets[0].origin,'https://budget-shop.com');
+  assert.equal(budgets[0].maxRequests,PUBLIC_HTML_MAX_REQUESTS);
+  assert.ok(budgets[0].totalTimeoutMs<=30000);
 });
 
 test('自动识别新Dujiao/Kami；缓存按批准version隔离',async t=>{
