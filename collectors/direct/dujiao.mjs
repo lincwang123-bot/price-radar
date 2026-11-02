@@ -15,8 +15,10 @@ const ALLOWED_ORIGINS = new Set([
 
 // Dujiao's public endpoint is paginated. These limits are deliberately fixed:
 // callers may inject fetch for tests, but cannot turn this into an unbounded crawler.
+// 10 pages covers observed large storefronts (about 874 products is 9 pages at 100).
+// Crossing the cap is our collector limit, not a broken merchant catalogue.
 const PAGE_SIZE = 100;
-const MAX_PAGES = 5;
+const MAX_PAGES = 10;
 const MAX_PRODUCTS = PAGE_SIZE * MAX_PAGES;
 const MAX_SKUS_PER_PRODUCT = 100;
 const MAX_OFFERS = 2_000;
@@ -75,12 +77,14 @@ export function parseDujiaoProducts(payload, target, capturedAt = new Date().toI
       if (!offer || seen.has(offer.offerId)) continue;
       seen.add(offer.offerId);
       offers.push(offer);
-      if (offers.length > MAX_OFFERS) {
-        throw new Error(`Dujiao 报价数量超过上限 ${MAX_OFFERS}`);
-      }
+      if (offers.length > MAX_OFFERS) collectorLimit(`Dujiao 报价数量超过上限 ${MAX_OFFERS}`);
     }
   }
   return offers;
+}
+
+function collectorLimit(message) {
+  throw Object.assign(new Error(message), { code: 'COLLECTOR_LIMIT' });
 }
 
 /** Collect the bounded, public Dujiao catalogue for one verified storefront. */
@@ -123,25 +127,17 @@ export async function collectDujiao(target, options = {}) {
       const productId = identifier(product?.id ?? product?.slug);
       if (productId) seenProducts.add(productId);
     }
-    if (seenProducts.size > MAX_PRODUCTS) {
-      throw new Error(`Dujiao 商品数量超过上限 ${MAX_PRODUCTS}`);
-    }
+    if (seenProducts.size > MAX_PRODUCTS) collectorLimit(`Dujiao 商品数量超过上限 ${MAX_PRODUCTS}`);
     for (const offer of pageOffers) {
       if (seenOffers.has(offer.offerId)) continue;
       seenOffers.add(offer.offerId);
       offers.push(offer);
-      if (offers.length > MAX_OFFERS) {
-        throw new Error(`Dujiao 报价数量超过上限 ${MAX_OFFERS}`);
-      }
+      if (offers.length > MAX_OFFERS) collectorLimit(`Dujiao 报价数量超过上限 ${MAX_OFFERS}`);
     }
 
     const pagination = paginationState(payload.pagination, page);
-    if (pagination.total !== null && pagination.total > MAX_PRODUCTS) {
-      throw new Error(`Dujiao 商品总数超过上限 ${MAX_PRODUCTS}`);
-    }
-    if (pagination.totalPage !== null && pagination.totalPage > MAX_PAGES) {
-      throw new Error(`Dujiao 分页超过上限 ${MAX_PAGES}`);
-    }
+    if (pagination.total !== null && pagination.total > MAX_PRODUCTS) collectorLimit(`Dujiao 商品总数超过上限 ${MAX_PRODUCTS}`);
+    if (pagination.totalPage !== null && pagination.totalPage > MAX_PAGES) collectorLimit(`Dujiao 分页超过上限 ${MAX_PAGES}`);
 
     needsAnotherPage = pagination.totalPage !== null
       ? page < pagination.totalPage
@@ -149,7 +145,7 @@ export async function collectDujiao(target, options = {}) {
     if (!needsAnotherPage) break;
   }
 
-  if (needsAnotherPage) throw new Error(`Dujiao 分页超过上限 ${MAX_PAGES}`);
+  if (needsAnotherPage) collectorLimit(`Dujiao 分页超过上限 ${MAX_PAGES}`);
   return offers;
 }
 

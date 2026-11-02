@@ -8,7 +8,7 @@ import {tmpdir} from 'node:os';
 import {projectProduct} from '../lib/quote-policy.mjs';
 const at='2026-09-06T00:00:00Z';
 test('共享平台根域不能作为商家，未归属报价键稳定且按报价隔离',()=>{
- for(const host of ['16688.com.cn','www.16688.com.cn','wzyp.cn','www.wzyp.cn','16688.com.cn.','www.16688.com.cn.','wzyp.cn.','relaywatch.online.','www.relaywatch.online.'])assert.equal(merchantIdForUrl(`https://${host}/item/1`),null);
+ for(const host of ['16688.com.cn','www.16688.com.cn','wzyp.cn','www.wzyp.cn','catfk.com','www.catfk.com','16688.com.cn.','www.16688.com.cn.','wzyp.cn.','relaywatch.online.','www.relaywatch.online.'])assert.equal(merchantIdForUrl(`https://${host}/item/1`),null);
  assert.equal(merchantIdForUrl('https://store.wzyp.cn/'),'domain:store.wzyp.cn');
  const row={source:'ldxp-goods',product_id:'p',offer_id:'a',url:'https://16688.com.cn/item/1',merchant_id:'domain:16688.com.cn'};
  const key=merchantKeyForOffer(row);assert.match(key,/^unresolved-quote:[a-f0-9]{64}$/);

@@ -122,6 +122,18 @@ test('actionable mail offers simple steps and a forwardable AI brief, never asks
  }
 });
 
+test('纯采集端上限不向店主要资料，robots、无效目录和无有效报价仍然要',()=>{
+ const at=now.toISOString();
+ const notice=(reasonCode,status=reasonCode==='no_valid_quotes'?'no_valid_offers':'unavailable')=>preflightFailureNotice(merchant,{status,result:{status,reasonCode,checkedAt:at}});
+ assert.equal(notice('collector_limit').stage,'test_delayed');
+ assert.doesNotMatch(notice('collector_limit').publicReply,/请回复以下资料/);
+ assert.match(notice('collector_limit').publicReply,/达到本轮安全读取限制/);
+ for(const reasonCode of ['robots_disallowed','invalid_catalog','no_valid_quotes']){
+  assert.equal(notice(reasonCode).stage,'need_info',reasonCode);
+  assert.match(notice(reasonCode).publicReply,/请回复以下资料/);
+ }
+});
+
 test('missing recipient and invalid result do not enqueue mail; stale automatic ready is retired even when reason was mailed already',t=>{
  const a=fixture(t),options=a.result();
  a.db.prepare('UPDATE merchant_applications SET email=NULL WHERE public_id=?').run(a.id);

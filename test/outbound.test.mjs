@@ -118,7 +118,7 @@ test('shared-platform shops redirect with separate quote keys but cannot sponsor
   ctx.db.prepare("INSERT INTO offers(source,snapshot_id,product_id,offer_id,price,currency,status,url,merchant_id) VALUES('direct-shops','s1','p','o2',12,'CNY','in_stock','https://16688.com.cn/shop/b','domain:16688.com.cn')").run();
   assert.equal(follow(ctx).statusCode,302);assert.equal(follow(ctx,outboundHref({...offer,offer_id:'o2'})).statusCode,302);
   const rows=ctx.analytics.outbound.report(30,date);assert.equal(rows.length,2);assert.notEqual(rows[0].merchant_id,rows[1].merchant_id);assert.ok(rows.every(r=>r.merchant_id.startsWith('unresolved-quote:')));
-  assert.match(merchantSummary(ctx.analytics),/未归属店铺（按报价隔离）/);
+  assert.match(merchantSummary(ctx.analytics, date),/未归属店铺（按报价隔离）/);
   for(const url of ['https://wzyp.cn/shop/a','https://www.16688.com.cn/shop/a','https://16688.com.cn./shop/a']){ctx.db.prepare('UPDATE offers SET url=? WHERE offer_id=?').run(url,'o');assert.equal(follow(ctx).statusCode,302);assert.match(resolveOutboundOffer(ctx.db,{source:'direct-shops',snapshot:'s1',product:'p',offer:'o'},date.getTime()).merchant_id,/^unresolved-quote:/);}
   assert.ok(ctx.analytics.outbound.report(30,date).every(r=>r.merchant_id.startsWith('unresolved-quote:')));
   const c={id:'shared',merchant_id:'domain:16688.com.cn',source:'direct-shops',product_id:'p',offer_id:'o',label:'fixture',placement:'sponsored_product',start_at:'2026-09-01T00:00:00Z',end_at:'2026-10-01T00:00:00Z'};
@@ -151,7 +151,7 @@ test('Sponsor requires explicit review, relevance, dates and server-derived iden
   assert.equal(ctx.analytics.outbound.report(30,date).length,0);
   ctx.analytics.outbound.recordImpression(request(),c,date);ctx.analytics.outbound.recordImpression(request(),c,date);assert.equal(follow(ctx,href).statusCode,302);
   const row=ctx.analytics.outbound.report(30,date)[0];assert.equal(row.clicks,1);assert.equal(row.impressions,1);assert.equal(row.ctr,1);
-  assert.ok(!merchantSummary(ctx.analytics).includes('<script>fixture</script>'));assert.ok(merchantSummary(ctx.analytics).includes('&lt;script&gt;'));
+  assert.ok(!merchantSummary(ctx.analytics, date).includes('<script>fixture</script>'));assert.ok(merchantSummary(ctx.analytics, date).includes('&lt;script&gt;'));
   ctx.analytics.outbound.saveCampaign({...c,end_at:'2026-09-05T00:00:00Z'},{approve:true,now:date});assert.equal(follow(ctx,href).statusCode,404);
   ctx.analytics.outbound.saveCampaign({...c,merchant_id:'domain:other.example'},{approve:true,now:date});assert.equal(follow(ctx,href).statusCode,404);
   ctx.analytics.outbound.recordClick=()=>{throw new Error('fixture metrics failure');};assert.equal(follow(ctx).statusCode,302);
