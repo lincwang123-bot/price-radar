@@ -1,0 +1,131 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {DatabaseSync} from 'node:sqlite';
+import {openDb,storeSnapshot} from '../lib/db.mjs';
+import {openSubmissionsDb} from '../lib/submissions.mjs';
+import {createRetentionStore} from '../lib/retention-store.mjs';
+import {readRetentionMarket,observeMarket} from '../lib/retention-market.mjs';
+import {openAnalytics} from '../lib/analytics.mjs';
+import {createApp} from '../lib/web.mjs';
+import {hashAdminPassword} from '../lib/admin.mjs';
+import {addWeeklySponsor,buildWeeklyReport,isoWeek,isoWeekBounds,saveWeeklyNote,weeklySponsorStats,xPostUrl} from '../lib/weekly-report.mjs';
+
+const secret='weekly-report-secret-0123456789abcdef';
+const week1=new Date('2026-10-26T04:00:00Z');
+const week2=new Date('2026-11-02T04:00:00Z');
+const offer=(id,title,price,host,store)=>({offerId:id,title,price,currency:'CNY',status:'in_stock',stockCount:2,url:`https://${host}/${id}`,storeName:store});
+
+test('ISO 周使用北京时间日期，拒绝不存在的周',()=>{
+ assert.equal(isoWeek('2026-01-01'),'2026-W01');
+ assert.equal(isoWeek('2025-12-29'),'2026-W01');
+ assert.equal(isoWeek('2026-11-02'),'2026-W45');
+ assert.equal(isoWeek('2026-11-08'),'2026-W45');
+ assert.deepEqual(isoWeekBounds('2026-W45'),{week:'2026-W45',start:'2026-11-02',end:'2026-11-08'});
+ assert.equal(isoWeekBounds('2026-W53').end,'2027-01-03');
+ assert.equal(isoWeekBounds('2026-W54'),null);
+ assert.equal(isoWeek('2026-02-30'),null);
+ assert.equal(xPostUrl('https://x.com/superwang/status/123'),'https://x.com/superwang/status/123');
+ assert.equal(xPostUrl('https://evil.example/x.com/status/123'),null);
+ assert.equal(xPostUrl('javascript:alert(1)'),null);
+});
+
+test('周报使用已采集挂牌，快照保留本周最低价，并标明没有上周快照时不能比较的项目',()=>{
+ const quotes=openDb(':memory:'),privateDb=new DatabaseSync(':memory:');
+ const store=createRetentionStore(privateDb,{secret,now:()=>week2});
+ const publish=(when,offers,id)=>{
+  storeSnapshot(quotes,{source:'direct-shops',snapshotId:id,fetchedAt:when.toISOString(),products:[{productId:'chatgpt-plus-recharge',name:'ChatGPT Plus',currency:'CNY',offers}]});
+  observeMarket(privateDb,readRetentionMarket(quotes,{now:when}),when);
+ };
+ try{
+  publish(week1,[offer('a','ChatGPT Plus 代充1个月',100,'shop-a.example','甲店'),offer('b','ChatGPT Plus 代充1个月',140,'shop-b.example','乙店'),offer('account','ChatGPT Plus 成品账号1个月',10,'shop-a.example','甲店')],'w1');
+  publish(week2,[offer('a','ChatGPT Plus 代充1个月',80,'shop-a.example','甲店'),offer('b','ChatGPT Plus 代充1个月',140,'shop-b.example','乙店'),offer('c','ChatGPT Plus 代充1个月',200,'shop-c.example','丙店'),offer('account','ChatGPT Plus 成品账号1个月',10,'shop-a.example','甲店')],'w2');
+  publish(new Date(+week2+3600000),[offer('a','ChatGPT Plus 代充1个月',70,'shop-a.example','甲店'),offer('b','ChatGPT Plus 代充1个月',140,'shop-b.example','乙店'),offer('c','ChatGPT Plus 代充1个月',200,'shop-c.example','丙店')],'w2b');
+  publish(new Date(+week2+7200000),[offer('a','ChatGPT Plus 代充1个月',90,'shop-a.example','甲店'),offer('b','ChatGPT Plus 代充1个月',140,'shop-b.example','乙店'),offer('c','ChatGPT Plus 代充1个月',200,'shop-c.example','丙店')],'w2c');
+  const saved=privateDb.prepare("SELECT low,latest_low,median,offer_count,shop_count FROM retention_market_weeks WHERE week='2026-W45' AND product_key='chatgpt-plus' ORDER BY low").all();
+  const recharge=saved.find(row=>row.offer_count===3);
+  assert.equal(recharge.low,70);assert.equal(recharge.latest_low,90);assert.equal(recharge.median,140);assert.equal(recharge.shop_count,3);
+  const market=readRetentionMarket(quotes,{now:new Date(+week2+7200000)});
+  const report=buildWeeklyReport({quotesDb:quotes,privateDb,market,now:new Date(+week2+7200000),week:'2026-W45'});
+  const row=report.rows.find(item=>item.productKey==='chatgpt-plus'&&item.spec.includes('代充')&&!item.spec.includes('成品'));
+  const account=report.rows.find(item=>item.spec.includes('成品'));
+  assert.equal(row.low,70);assert.equal(row.latestLow,90);assert.equal(row.median,140);assert.equal(row.offerCount,3);assert.equal(row.shopCount,3);
+  assert.equal(row.lowChange,-30);assert.equal(row.previousLow,100);
+  assert.equal(account.low,10);assert.notEqual(account.id,row.id);
+  assert.ok(report.newShops.some(shop=>shop.host==='shop-c.example'&&shop.name==='丙店'));
+  assert.ok(!report.newShops.some(shop=>shop.host==='shop-a.example'));
+  assert.equal(report.passphrase,null);
+  saveWeeklyNote(privateDb,{week:'2026-W44',passphrase:'旧口令',postUrl:'https://x.com/superwang/status/1',now:new Date(+week2+7200000)});
+  assert.equal(buildWeeklyReport({quotesDb:quotes,privateDb,market,now:new Date(+week2+7200000),week:'2026-W44'}).passphrase,null);
+  privateDb.prepare("DELETE FROM retention_market_weeks WHERE week='2026-W44'").run();
+  const partial=buildWeeklyReport({quotesDb:quotes,privateDb,market,now:new Date(+week2+7200000),week:'2026-W45'});
+  assert.equal(partial.newShops,null);
+  assert.equal(partial.rows.find(item=>item.id===row.id).lowChange,-30);
+  assert.match(partial.limitations.join('\n'),/上一周还没有周快照/);
+  assert.equal(buildWeeklyReport({quotesDb:quotes,privateDb,market,now:week2,week:'2026-W46'}),null);
+  assert.equal(buildWeeklyReport({quotesDb:quotes,privateDb,market,now:week2,week:'2020-W01'}),null);
+  assert.equal(store.db.prepare("SELECT COUNT(*) n FROM retention_market_weeks WHERE product_key='verification-service'").get().n,0);
+ }finally{quotes.close();privateDb.close();}
+});
+
+test('口令只出现在当前周，赞助位走现有出站统计，缺失统计不写成 0',async()=>{
+ const quotes=openDb(':memory:'),submissions=openSubmissionsDb(':memory:'),analytics=openAnalytics(':memory:',secret,{now:week2});
+ const now=()=>week2;
+ storeSnapshot(quotes,{source:'direct-shops',snapshotId:'live',fetchedAt:week2.toISOString(),products:[{productId:'chatgpt-plus-recharge',name:'ChatGPT Plus',currency:'CNY',offers:[offer('a','ChatGPT Plus 代充1个月',88,'shop-a.example','甲店')]}]});
+ const stamp='2026-11-01T00:00:00Z';
+ const insert=(id,name,host,status)=>submissions.prepare(`INSERT INTO merchant_applications(public_id,created_at,updated_at,shop_name,shop_url,identity,platform,product_areas,contact,details,consent_at,status,identity_verified_at,approved_at) VALUES(?,?,?,?,?,?,?,'[]',?,?,?,?,?,?)`).run(id,stamp,stamp,name,`https://${host}/`,'domain:'+host,'direct','联系','',stamp,status,stamp,stamp);
+ insert('MA-WEEKLY-A','甲店','shop-a.example','approved');
+ insert('MA-WEEKLY-B','暂停店','paused.example','paused');
+ insert('MA-WEEKLY-C','无报价店','quiet.example','approved');
+ saveWeeklyNote(submissions,{week:'2026-W45',passphrase:'A&B',postUrl:'https://x.com/superwang/status/99',actor:'owner',now:week2});
+ saveWeeklyNote(submissions,{week:'2026-W44',passphrase:'旧口令',postUrl:'https://x.com/superwang/status/1',now:week2});
+ assert.throws(()=>saveWeeklyNote(submissions,{week:'2026-W45',passphrase:'<script>',now:week2}));
+ assert.throws(()=>addWeeklySponsor(submissions,{week:'2026-W45',merchantPublicId:'MA-WEEKLY-B',blurb:'不应出现',now:week2}));
+ addWeeklySponsor(submissions,{week:'2026-W45',merchantPublicId:'MA-WEEKLY-A',blurb:'本周代充挂牌',now:week2});
+ addWeeklySponsor(submissions,{week:'2026-W45',merchantPublicId:'MA-WEEKLY-C',blurb:'没有可核验入口',now:week2});
+ const market=readRetentionMarket(quotes,{now:week2});
+ const report=buildWeeklyReport({quotesDb:quotes,privateDb:submissions,market,now:week2,week:'2026-W45'});
+ assert.equal(report.passphrase.passphrase,'A&B');
+ assert.equal(report.passphrase.postUrl,'https://x.com/superwang/status/99');
+ assert.equal(buildWeeklyReport({quotesDb:quotes,privateDb:submissions,market,now:week2,week:'2026-W44'}),null);
+ const linked=report.sponsors.find(shop=>shop.name==='甲店'),quiet=report.sponsors.find(shop=>shop.name==='无报价店');
+ assert.match(linked.href,/placement=weekly_report/);assert.equal(quiet.href,'');
+ assert.ok(!report.sponsors.some(shop=>shop.name==='暂停店'));
+ const request={method:'GET',url:'/go',headers:{'user-agent':'Mozilla/5.0 Chrome/120','cf-connecting-ip':'8.8.8.8'},socket:{remoteAddress:'127.0.0.1'}};
+ analytics.outbound.recordClick(request,{source:'direct-shops',merchant_id:'domain:shop-a.example',product_id:'chatgpt-plus-recharge',offer_id:'a'},{placement:'weekly_report'},week2);
+ analytics.outbound.recordClick(request,{source:'direct-shops',merchant_id:'domain:shop-a.example',product_id:'chatgpt-plus-recharge',offer_id:'a'},{placement:'product'},week2);
+ analytics.record({...request,url:'/weekly/2026-W45',headers:{...request.headers}},200,week2);
+ analytics.record({...request,url:'/weekly/2026-W99',headers:{...request.headers}},200,week2);
+ const stats=weeklySponsorStats(submissions,analytics,{from:'2026-11-02',to:'2026-11-02'});
+ assert.equal(stats.views,1);assert.equal(stats.sponsors.find(shop=>shop.merchantId==='domain:shop-a.example').clicks,1);
+ assert.equal(weeklySponsorStats(submissions,null,{from:'2026-11-02',to:'2026-11-02'}).viewsKnown,false);
+ const password=await hashAdminPassword('weekly-admin-password-1234');
+ const app=createApp({db:quotes,submissionsDb:submissions,analytics,retentionOptions:{now,secret},adminOptions:{username:'owner',passwordHash:password,origin:'https://airadar.test',now:()=>week2.getTime()}});
+ await new Promise(resolve=>app.listen(0,'127.0.0.1',resolve));
+ const base='http://127.0.0.1:'+app.address().port;
+ const get=(path,headers)=>fetch(base+path,{redirect:'manual',headers});
+ try{
+  const home=await get('/weekly');assert.equal(home.status,301);assert.equal(home.headers.get('location'),'/weekly/2026-W45');
+  const page=await get('/weekly/2026-W45',{'user-agent':'Mozilla/5.0 Chrome/120','cf-connecting-ip':'8.8.8.8'});
+  assert.equal(page.status,200);const html=await page.text();
+  assert.match(html,/订阅行情周报/);assert.match(html,/挂牌价不是成交价/);assert.match(html,/收录不等于推荐/);
+  assert.match(html,/本周福利口令：A&amp;B/);assert.match(html,/href="https:\/\/x\.com\/superwang\/status\/99"/);
+  assert.match(html,/赞助位，不代表推荐或担保/);assert.match(html,/placement=weekly_report/);assert.match(html,/没有可核验入口/);
+  assert.match(html,/rel="canonical" href="https:\/\/airadar\.vip\/weekly\/2026-W45"/);
+  assert.match(html,/property="og:title" content="订阅行情周报 · 2026年第45周 · AIradar"/);
+  assert.match(html,/property="og:site_name" content="AIradar"/);assert.match(html,/name="twitter:card" content="summary"/);
+  assert.match(html,/href="\/weekly">行情周报<\/a>/);assert.doesNotMatch(html,/暂停店/);assert.doesNotMatch(html,/<script>alert/);
+  assert.equal((await get('/weekly/2026-W46')).status,404);
+  assert.match(await (await get('/sitemap.xml')).text(),/\/weekly\/2026-W45</);
+  assert.equal((await get('/weekly?date=2026-02-30')).status,404);
+  const login=await get('/admin/weekly');assert.equal(login.status,303);
+  const formPage=await get('/admin/login'),formHtml=await formPage.text(),csrf=/name="csrf" value="([^"]+)"/.exec(formHtml)[1],cookie=formPage.headers.getSetCookie()[0].split(';')[0];
+  const signed=await fetch(base+'/admin/login',{method:'POST',redirect:'manual',headers:{origin:'https://airadar.test','content-type':'application/x-www-form-urlencoded',cookie},body:new URLSearchParams({username:'owner',password:'weekly-admin-password-1234',csrf})});
+  const session=signed.headers.getSetCookie()[0].split(';')[0];
+  const admin=await get('/admin/weekly',{cookie:session}),adminHtml=await admin.text();
+  assert.match(adminHtml,/周报浏览量：2/);assert.match(adminHtml,/本周代充挂牌/);assert.match(adminHtml,/aria-current="page"/);
+  const adminCsrf=/name="csrf" value="([^"]+)"/.exec(adminHtml)[1];
+  const removed=await fetch(base+'/admin/weekly',{method:'POST',redirect:'manual',headers:{origin:'https://airadar.test','content-type':'application/x-www-form-urlencoded',cookie:session},body:new URLSearchParams({csrf:adminCsrf,action:'save_note',week:'2026-W45',passphrase:'',post_url:'https://evil.example/status/1'})});
+  assert.equal(removed.status,422);assert.match(await removed.text(),/活动帖/);
+  assert.equal((await get('/weekly/2026-W45')).status,200);
+ }finally{await new Promise(resolve=>app.close(resolve));await app.merchantWorkflowDone?.();await app.retentionWorkflowDone?.();quotes.close();submissions.close();analytics.close();}
+});
