@@ -1,0 +1,91 @@
+{
+  "schema_version": 1,
+  "dataset_id": "airadar-chatgpt-go-comparison",
+  "version": "2026-09-30-v1",
+  "title": "ChatGPT Go 同条件报价观察（2026-09-30期）",
+  "observed_at": "2026-09-30T15:06:07.939Z",
+  "display_timezone": "Asia/Shanghai",
+  "citation_url": "https://airadar.vip/guides/chatgpt-go-vs-plus#go-observation-20260930-v1",
+  "sample_scope": "从本站本次公开收录记录中人工选择的3条教学案例，非随机抽样，非全部Go报价，非市场统计。",
+  "method": "先按币种、订阅期限、交付方式、地区及新开/续费条件核对；资料不完整的记录保留为空并排除同规格价格比较。质保期单独记录。",
+  "derived": {
+    "sample_count": 3,
+    "comparable_count": 2,
+    "excluded_count": 1,
+    "currency": "CNY",
+    "comparable_min_amount": 41.2,
+    "comparable_max_amount": 44,
+    "absolute_gap": 2.8
+  },
+  "field_notes": {
+    "amount": "观测时公开挂牌金额，非已核实结算实付",
+    "period_months": "商家声明的订阅月数；未知为null，CSV为空",
+    "warranty_days": "商家声明的售后保障天数，不替代订阅期限",
+    "collected_at": "来源记录的采集时间，ISO 8601 UTC",
+    "comparison_group": "用于本期教学比较的条件组；不在组内为null",
+    "purchase_condition": "renewal表示记录标注为续费，不是作者验证的账号购买资格",
+    "listing_url": "当时记录的公开商品原址，后续可能失效"
+  },
+  "limitations": [
+    "没有验证交易实付、当前库存、账号资格、履约可靠性或官方授权。",
+    "两个店铺不等于两个独立货源。",
+    "样本不代表市场最低价或当前价格。",
+    "原始商品链接本轮未成功打开，字段依据本站已公开的采集记录，不能当成商家当日二次确认。"
+  ],
+  "citation": "AIradar. ChatGPT Go 同条件报价观察（2026-09-30-v1），观测于2026-09-30 23:06（北京时间）。https://airadar.vip/guides/chatgpt-go-vs-plus#go-observation-20260930-v1",
+  "reuse_note": "引用时请保留版本、观测时间、比较条件、样本范围和来源。商品名称及第三方页面不因收录而获得本站授权。",
+  "version_policy": "本版本保持固定；发现需更正的信息时另发新版本并说明差异，不用实时价格覆盖本期记录。",
+  "records": [
+    {
+      "record_id": "go-01",
+      "product": "ChatGPT Go",
+      "merchant": "王不语的小店",
+      "listing_title": "【菲区卡充】GTP GO 官充 月卡【质保订阅30天】",
+      "listing_url": "https://www.16688.com.cn/goods/G98381375",
+      "amount": 41.2,
+      "currency": "CNY",
+      "period_months": 1,
+      "delivery": "recharge",
+      "region": "PH",
+      "purchase_condition": "renewal",
+      "warranty_days": 30,
+      "collected_at": "2026-09-30T15:06:07.939Z",
+      "comparison_group": "CNY-1month-recharge-PH-renewal",
+      "excluded_reason": null
+    },
+    {
+      "record_id": "go-02",
+      "product": "ChatGPT Go",
+      "merchant": "woncoo.bot 我是老白",
+      "listing_title": "【菲区卡充】GTP GO 官充 月卡【质保订阅30天】",
+      "listing_url": "https://www.16688.com.cn/goods/G21448821",
+      "amount": 44.0,
+      "currency": "CNY",
+      "period_months": 1,
+      "delivery": "recharge",
+      "region": "PH",
+      "purchase_condition": "renewal",
+      "warranty_days": 30,
+      "collected_at": "2026-09-30T15:06:07.939Z",
+      "comparison_group": "CNY-1month-recharge-PH-renewal",
+      "excluded_reason": null
+    },
+    {
+      "record_id": "go-03",
+      "product": "ChatGPT Go",
+      "merchant": "王不语的小店",
+      "listing_title": "Gtp Go 菲律宾卡付代充 （同步官方售后）24小时自动充值",
+      "listing_url": "https://www.16688.com.cn/goods/G92895816",
+      "amount": 32.96,
+      "currency": "CNY",
+      "period_months": null,
+      "delivery": "recharge",
+      "region": "PH",
+      "purchase_condition": null,
+      "warranty_days": null,
+      "collected_at": "2026-09-30T15:06:07.939Z",
+      "comparison_group": null,
+      "excluded_reason": "订阅期限及新开/续费条件未注明，不能作为同规格月卡比较"
+    }
+  ]
+}

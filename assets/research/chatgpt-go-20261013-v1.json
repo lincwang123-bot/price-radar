@@ -1,0 +1,178 @@
+{
+  "schema_version": 2,
+  "dataset_id": "airadar-chatgpt-go-condition-review",
+  "version": "2026-10-13-v1",
+  "title": "ChatGPT Go 购买条件核对样本（2026-10-13期）",
+  "observed_from": "2026-10-13T09:32:41.441804+00:00",
+  "observed_to": "2026-10-13T09:36:19.886531+00:00",
+  "display_timezone": "Asia/Shanghai",
+  "citation_url": "https://airadar.vip/guides/chatgpt-go-vs-plus#go-observation-20261013-v1",
+  "sample_scope": "人工选择4条公开商品作条件核对案例，非随机抽样，非全量报价或市场统计。",
+  "method": "逐条读取公开商品页或该店公开商品详情，记录原文声明；分开订阅期限与质保期限、当前免费账号与首次订阅资格。未知与冲突保留，不计算这些记录的最低价或价差。",
+  "derived": {
+    "sample_count": 4,
+    "comparable_count": 0,
+    "excluded_count": 4
+  },
+  "field_notes": {
+    "amount": "来源当时展示的金额数值，不是成交价；必须与currency一起读。currency为null时不得与人民币报价比较。",
+    "period_months": "仅用明确月卡或1个月文字；质保三十天不能推为1个月。",
+    "region": "EG为原文埃及声明；地区冲突为null，原文地区放region_mentions。标签不代表买家资格。",
+    "purchase_condition": "本期均为null；账号当前free或无订阅不等于从未付费新用户，也不直接证明续费资格。",
+    "account_requirement": "商家对当前账号状态的原文条件摘要，非平台资格认证。",
+    "warranty_days": "商家声明的保障天数，与订阅期限分开。",
+    "source_checked_at": "本轮公开来源请求时间，ISO 8601；不同于本站例行采集时间或商品更新时间。",
+    "source_request": "仅含公开商品详情接口的商品ID。",
+    "comparison_group": "本期条件仍不够完整，全部为null，未计算组内价格区间。",
+    "platform_verified": "false；核对了公开文字，不代表验证成交、账号资格、履约或官方授权。"
+  },
+  "limitations": [
+    "未登录、下单或验证实付、库存、本人账号资格及官方授权。",
+    "商家标题中的官方、官充等字样是其自称，不是本站认证。",
+    "这些是固定历史观察值，当前价格和条款可能变化；不用于市场最低价或涨跌判断。",
+    "只有一条样本的公开目录明确返回CNY；其他金额保留源数值但币种为空。",
+    "不以这4条人工案例估算全站条件缺失比例。"
+  ],
+  "citation": "AIradar，《ChatGPT Go 购买条件核对样本》，2026-10-13-v1；来源核对于2026-10-13 17:32–17:36（北京时间）。https://airadar.vip/guides/chatgpt-go-vs-plus#go-observation-20261013-v1",
+  "reuse_note": "引用时保留版本、日期、样本范围、缺失条件和来源；第三方商品文案权利仍属于原权利人。",
+  "correction_url": "https://airadar.vip/submit?type=feedback",
+  "version_policy": "本文件固定，不用实时价格覆盖。发现错误时另发更正版本，并保留旧版链接和差异说明。",
+  "records": [
+    {
+      "record_id": "EG-CATALOG",
+      "product": "ChatGPT Go",
+      "source_label": "凌越穹顶",
+      "listing_title": "ChatGPT Go 月卡 | 埃及官方 | 1min到账 | 正规充值【质保30天】",
+      "listing_url": "https://faka.dawnform.top/products/gpt-go-official-recharge",
+      "amount": 29.99,
+      "currency": "CNY",
+      "currency_basis": "public-products.json 顶层 currency=CNY；商品 price_cny=29.99",
+      "period_months": 1,
+      "delivery": "recharge",
+      "region": "EG",
+      "region_mentions": [
+        "EG"
+      ],
+      "purchase_condition": null,
+      "account_requirement": null,
+      "warranty_days": 30,
+      "source_checked_at": "2026-10-13T09:36:18.665008+00:00",
+      "source_url": "https://faka.dawnform.top/public-products.json",
+      "source_method": "GET",
+      "source_request": null,
+      "evidence_sha256": "5c9f17960655ecf9aa7239a04d2815cc31bf836fa10dbce9ff4021f1af2d7b59",
+      "source_excerpts": [
+        "月卡",
+        "埃及官方",
+        "正规充值",
+        "质保30天"
+      ],
+      "comparison_group": null,
+      "excluded_reason": "新开或续费条件未说明；本人账号和地区资格未核验",
+      "platform_verified": false
+    },
+    {
+      "record_id": "EG-HTML",
+      "product": "ChatGPT Go",
+      "source_label": "星城AI",
+      "listing_title": "ChatGPT Go 卡充埃及区全自动",
+      "listing_url": "https://ai.vvae.cn/item/8",
+      "amount": 30,
+      "currency": null,
+      "currency_basis": "商品HTML的 _var_item.price / user_price=30；该嵌入对象没有独立 currency 字段，不把币种当本轮新核验",
+      "period_months": null,
+      "delivery": "recharge",
+      "region": "EG",
+      "region_mentions": [
+        "EG"
+      ],
+      "purchase_condition": null,
+      "account_requirement": "当前免费账号、无有效订阅；不能覆盖现有订阅",
+      "warranty_days": 30,
+      "source_checked_at": "2026-10-13T09:32:41.441804+00:00",
+      "source_url": "https://ai.vvae.cn/item/8",
+      "source_method": "GET",
+      "source_request": null,
+      "evidence_sha256": "5e8ed41409f4f18a2c32560ba1a2bbbed38792d592ce3bb6d702179a017e6bec",
+      "source_excerpts": [
+        "不可进行覆盖",
+        "账号不能有订阅",
+        "只有免费版账户才能进行埃及信用卡充值",
+        "质保三十天订阅"
+      ],
+      "comparison_group": null,
+      "excluded_reason": "未独立说明订阅期限；当前免费状态不等于从未订阅",
+      "platform_verified": false
+    },
+    {
+      "record_id": "EG-MONTH",
+      "product": "ChatGPT Go",
+      "source_label": "16688 商品 G46006870",
+      "listing_title": "【埃及区官充】Codex GO 月卡代充｜质保30天｜自动发货｜可开票",
+      "listing_url": "https://www.16688.com.cn/goods/G46006870",
+      "amount": 30,
+      "currency": null,
+      "currency_basis": "16688公开goods/detail price=30，接口未返回currency；本站既有16688来源契约固定CNY，本轮未核结算币种",
+      "period_months": 1,
+      "delivery": "recharge",
+      "region": "EG",
+      "region_mentions": [
+        "EG"
+      ],
+      "purchase_condition": null,
+      "account_requirement": "商家写当前账号为 free 状态可以充值；未明确排除其他账号状态",
+      "warranty_days": 30,
+      "source_checked_at": "2026-10-13T09:36:18.976059+00:00",
+      "source_url": "https://www.16688.com.cn/shopApi/goods/detail",
+      "source_method": "POST (public read-only detail)",
+      "source_request": {
+        "goods_no": "G46006870"
+      },
+      "evidence_sha256": "93663737ac8e34a29bafd8520b494377eee8e19e10d5c3b05120abf806736cfd",
+      "source_excerpts": [
+        "月卡代充",
+        "埃及区",
+        "质保30天",
+        "当前帐号是free状态可以充值"
+      ],
+      "comparison_group": null,
+      "excluded_reason": "当前免费状态不等于从未订阅；本轮未独立核验结算币种",
+      "platform_verified": false
+    },
+    {
+      "record_id": "REGION-CONFLICT",
+      "product": "ChatGPT Go",
+      "source_label": "16688 商品 G95797459",
+      "listing_title": "【官方充值】印区Gtp go cdk24小时（质保30天）正规充值",
+      "listing_url": "https://www.16688.com.cn/goods/G95797459",
+      "amount": 33,
+      "currency": null,
+      "currency_basis": "16688公开goods/detail price=33，接口未返回currency；未核实结算币种",
+      "period_months": 1,
+      "delivery": "recharge",
+      "region": null,
+      "region_mentions": [
+        "IN",
+        "PH"
+      ],
+      "purchase_condition": null,
+      "account_requirement": "没有当前 Go、Plus 或 Pro 订阅",
+      "warranty_days": 30,
+      "source_checked_at": "2026-10-13T09:36:19.886531+00:00",
+      "source_url": "https://www.16688.com.cn/shopApi/goods/detail",
+      "source_method": "POST (public read-only detail)",
+      "source_request": {
+        "goods_no": "G95797459"
+      },
+      "evidence_sha256": "8de6b032d2f29100a0c9bab1a67fd57bbe09aff1ba3379d7b562a7dd25e345bc",
+      "source_excerpts": [
+        "【印度官方代充】GTP go 1个月【质保30天】",
+        "菲律宾区官方代充",
+        "适用于没有任何订阅的普通ch/at.gtp账号"
+      ],
+      "comparison_group": null,
+      "excluded_reason": "原商品地区存在印度与菲律宾冲突；本轮未独立核验结算币种",
+      "platform_verified": false
+    }
+  ]
+}
