@@ -3,13 +3,13 @@ import assert from 'node:assert/strict';
 import {openDb,storeSnapshot} from '../lib/db.mjs';
 import {createApp} from '../lib/web.mjs';
 
-test('home and category overviews show one static risk note before the product list',async()=>{
+test('category overview keeps the transaction note; home uses one concise buying explanation',async()=>{
  const db=openDb(':memory:'),app=createApp({db});
  try{
   storeSnapshot(db,{source:'direct-shops',snapshotId:'risk-note',fetchedAt:new Date().toISOString(),products:[{productId:'chatgpt-plus-recharge',name:'ChatGPT Plus',platform:'ChatGPT',currency:'CNY',offers:[{offerId:'risk-quote',title:'ChatGPT Plus 代充 1个月',storeName:'测试店铺',price:100,currency:'CNY',status:'in_stock',stockCount:1,url:'https://example.com/product/1'}]}]});
   await new Promise(r=>app.listen(0,'127.0.0.1',r));
   const base='http://127.0.0.1:'+app.address().port;
-  for(const route of ['/','/index.html','/?family=chatgpt']){
+  for(const route of ['/?family=chatgpt']){
    const response=await fetch(base+route),html=await response.text();
    assert.equal(response.status,200);
    const notes=[...html.matchAll(/<aside class="directory-risk-note"[^>]*>[\s\S]*?<\/aside>/g)];
@@ -26,6 +26,7 @@ test('home and category overviews show one static risk note before the product l
    assert.match(html,/data-directory-product="chatgpt-plus"/);
    assert.match(html,/data-delivery-link="recharge"/);
   }
+  const home=await(await fetch(base+'/')).text();assert.match(home,/看懂报价，再决定去哪买/);assert.match(home,/回原店核对期限、账号条件与售后/);assert.doesNotMatch(home,/class="directory-risk-note"/);
   const quoteHtml=await(await fetch(base+'/?family=chatgpt&product=chatgpt-plus')).text();
   assert.doesNotMatch(quoteHtml,/<aside class="directory-risk-note"/,'quote detail retains its existing transaction prompt without another banner');
   assert.match(quoteHtml,/id="store-risk-modal" hidden/);
@@ -35,12 +36,12 @@ test('home and category overviews show one static risk note before the product l
  }
 });
 
-test('risk note is present even while the home directory has no offers',async()=>{
+test('empty home keeps buying guidance and useful navigation',async()=>{
  const db=openDb(':memory:'),app=createApp({db});
  try{
   await new Promise(r=>app.listen(0,'127.0.0.1',r));
   const html=await(await fetch('http://127.0.0.1:'+app.address().port+'/')).text();
-  assert.equal((html.match(/<aside class="directory-risk-note"/g)||[]).length,1);
+  assert.match(html,/回原店核对期限、账号条件与售后/);assert.match(html,/href="\/catalog"/);assert.match(html,/暂无可用店铺报价/);
  }finally{
   if(app.listening){app.closeAllConnections();await new Promise(r=>app.close(r));}
   db.close();

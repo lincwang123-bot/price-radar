@@ -47,9 +47,9 @@ test('直采仅实际目标之间延迟，首个请求与缓存命中不额外�
   try {
     const cacheDir = path.join(dir, 'direct-shops-cache');
     mkdirSync(cacheDir);
-    writeFileSync(path.join(cacheDir, 'redeemgpt.json'), JSON.stringify({ fetchedAt: new Date().toISOString(), offers: [] }));
+    writeFileSync(path.join(cacheDir, 'shopcardai.json'), JSON.stringify({ fetchedAt: new Date().toISOString(), offers: [] }));
     const events = [];
-    const result = await pull({ db, dataDir: dir, config: { sources: { 'direct-shops': { targets: ['aisou', 'redeemgpt', 'ai666'], request_delay_ms: 17 } } },
+    const result = await pull({ db, dataDir: dir, config: { sources: { 'direct-shops': { targets: ['aisou', 'shopcardai', 'web3chirou'], request_delay_ms: 17 } } },
       sleep: async ms => events.push(`sleep:${ms}`),
       fetchImpl: async url => {
         const host = new URL(url).host; events.push(host);
@@ -57,10 +57,10 @@ test('直采仅实际目标之间延迟，首个请求与缓存命中不额外�
         return new Response(JSON.stringify({ code: 200, total: 0, data: [] }), { headers: { 'Content-Type': 'application/json' } });
       },
     });
-    assert.deepEqual(events, ['aisou.pro', 'sleep:17', 'ai666.id']);
+    assert.deepEqual(events, ['aisou.pro', 'sleep:17', 'web3chirou.com']);
     assert.equal(result.snapshot.stale, true);
     const health = JSON.parse(metaGet(db, 'health:direct-targets')).targets;
-    assert.deepEqual(health.map(row => [row.target, row.status]), [['aisou', 'unavailable'], ['redeemgpt', 'cached'], ['ai666', 'ok']]);
+    assert.deepEqual(health.map(row => [row.target, row.status]), [['aisou', 'unavailable'], ['shopcardai', 'cached'], ['web3chirou', 'ok']]);
   } finally { db.close(); rmSync(dir, { recursive: true, force: true }); }
 });
 

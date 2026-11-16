@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {EventEmitter} from 'node:events';
 import {PassThrough} from 'node:stream';
+import {gzipSync,brotliCompressSync,deflateSync} from 'node:zlib';
 import {createPublicNetworkFetch,isPublicAddress,publicHttpsUrl} from '../lib/public-network-fetch.mjs';
 
 test('SSRF拒绝IPv4/IPv6私网、保留、混合与特殊地址',()=>{
@@ -20,6 +21,17 @@ function harness({addresses=[{address:'8.8.8.8',family:4}],status=200,body='{}',
   };
   return {captured,request,lookup:async()=>addresses};
 }
+test('compressed public responses keep separate wire and decoded byte limits',async()=>{
+  for(const [encoding,compress] of [['gzip',gzipSync],['br',brotliCompressSync],['deflate',deflateSync]]) {
+    const body=compress(Buffer.from('{"price":123}'));
+    const h=harness({body,headers:{'content-encoding':encoding,'content-type':'application/json','content-length':String(body.length)}});
+    const response=await createPublicNetworkFetch('https://public-shop.com',h)('https://public-shop.com/api');
+    assert.deepEqual(await response.json(),{price:123});assert.equal(response.headers.get('content-encoding'),null);assert.equal(response.headers.get('content-length'),null);
+    await assert.rejects(createPublicNetworkFetch('https://public-shop.com',{...harness({body:compress(Buffer.alloc(5000)),headers:{'content-encoding':encoding}}),maxBytes:100})('https://public-shop.com/api'),/解压|限制/);
+  }
+  for(const [encoding,body] of [['gzip',Buffer.from('invalid')],['compress',Buffer.from('{}')]])
+    await assert.rejects(createPublicNetworkFetch('https://public-shop.com',harness({body,headers:{'content-encoding':encoding}}))('https://public-shop.com/api'),/解压|压缩|编码/);
+});
 test('校验所有DNS答案，任一非公开地址则零连接',async()=>{
   for(const addresses of [[{address:'8.8.8.8',family:4},{address:'10.0.0.1',family:4}],[{address:'2606:4700::1111',family:6},{address:'::1',family:6}]]) {
     const h=harness({addresses});await assert.rejects(createPublicNetworkFetch('https://public-shop.com',h)('https://public-shop.com/api'),/DNS/);assert.equal(h.captured.length,0);

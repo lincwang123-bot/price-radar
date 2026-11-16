@@ -19,7 +19,7 @@ export const sourceId = "ldxp-goods";
 export const sourceLabel = "RelayWatch·链动小铺(LDXP) 卡网商品价";
 export const recommendedKeywords = Object.freeze([
   "gpt plus", "gpt pro", "claude pro", "claude max", "gemini pro", "gemini ultra",
-  "邮箱", "cursor", "perplexity", "codex", "grok",
+  "邮箱", "cursor", "perplexity", "codex", "grok", "muse",
 ]);
 
 function limit(value, fallback, min, max, name) {

@@ -29,6 +29,8 @@ test('保留真实Max5x20x及Plus原订阅和CDK交付', () => {
     ['Claude Max 5x 代充月卡 Max 5x额度', 'claude-max-5x'],
     ['Claude Max 20x 代充月卡', 'claude-max-20x'],
     ['Claude Max x5 代充月卡', 'claude-max-5x'],
+    ['Claude Ultra 代充月卡', 'claude-max-20x'],
+    ['Claude Max 代充月卡', 'claude-max-5x'],
     ['ChatGPT Pro 20x 月卡', 'chatgpt-pro-20x'],
     ['ChatGPT Plus 官方代充 月卡', 'chatgpt-plus-recharge'],
     ['G PLUS CDK 自助直充 月卡', 'chatgpt-plus-recharge'],

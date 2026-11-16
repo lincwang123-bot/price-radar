@@ -36,11 +36,11 @@ test('实时目录把期限、交付和币种分开；明确售罄与采集失�
  const quotes=openDb(':memory:');
  try{
   storeSnapshot(quotes,{source:'ldxp-goods',snapshotId:'s',fetchedAt:now.toISOString(),products:[{productId:'chatgpt-plus',name:'ChatGPT Plus',currency:'CNY',offers:[
-   {offerId:'a',title:'ChatGPT Plus 代充1个月',price:100,status:'in_stock',url:'https://shop.example/a',currency:'CNY'},
-   {offerId:'b',title:'ChatGPT Plus 代充12个月',price:900,status:'in_stock',url:'https://shop.example/b',currency:'CNY'},
+   {offerId:'a',title:'ChatGPT Plus 代充1个月 新开续费均可',price:100,status:'in_stock',url:'https://shop.example/a',currency:'CNY'},
+   {offerId:'b',title:'ChatGPT Plus 代充12个月 新开续费均可',price:900,status:'in_stock',url:'https://shop.example/b',currency:'CNY'},
    {offerId:'c',title:'ChatGPT Plus 成品账号1个月',price:20,status:'in_stock',url:'https://shop.example/c',currency:'CNY'},
-   {offerId:'d',title:'ChatGPT Plus 代充1个月',price:20,status:'out_of_stock',url:'https://shop.example/d',currency:'USD'},
-   {offerId:'e',title:'ChatGPT Plus 代充 期限未注明',price:1,status:'in_stock',url:'https://shop.example/e',currency:'CNY'},
+   {offerId:'d',title:'ChatGPT Plus 代充1个月 新开续费均可',price:20,status:'out_of_stock',url:'https://shop.example/d',currency:'USD'},
+   {offerId:'e',title:'ChatGPT Plus 代充 期限未注明 新开续费均可',price:1,status:'in_stock',url:'https://shop.example/e',currency:'CNY'},
   ]}]});
   const m=readRetentionMarket(quotes,{now});assert.equal(m.groups.length,4);
   assert.equal(m.groups.find(g=>g.currency==='USD').state,'unavailable');
@@ -62,7 +62,7 @@ test('只有官方参考的产品可收藏，API 套餐下架，参考报价不�
 test('关注或周报的明确规格链接自动选择对应交付方式，不被默认代充隐藏',async()=>{
  const quotes=openDb(':memory:');
  storeSnapshot(quotes,{source:'ldxp-goods',snapshotId:'delivery-links',products:[{productId:'chatgpt-plus-recharge',name:'ChatGPT Plus',currency:'CNY',offers:[
-  {offerId:'recharge',title:'ChatGPT Plus 代充1个月',price:100,currency:'CNY',status:'in_stock',url:'https://shop.example/recharge'},
+  {offerId:'recharge',title:'ChatGPT Plus 代充1个月 新开续费均可',price:100,currency:'CNY',status:'in_stock',url:'https://shop.example/recharge'},
   {offerId:'account',title:'ChatGPT Plus 成品账号1个月',price:20,currency:'CNY',status:'in_stock',url:'https://shop.example/account'}]}]});
  const m=readRetentionMarket(quotes),g=m.groups.find(g=>g.price===20);assert.ok(g);
  const server=createApp({db:quotes});await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
@@ -181,5 +181,27 @@ test('停机后恢复发送以实际发件时间限频，不会把积压邮件�
   await drainRetentionMail(store,lower,{transport,from:'notify@example.com',now:time});assert.equal(sent,1);
   time=new Date(+time+86400001);store.observe(lower);
   await drainRetentionMail(store,lower,{transport,from:'notify@example.com',now:time});assert.equal(sent,2);
+ }finally{db.close();}
+});
+
+test('comparison-policy upgrade preserves old history and does not fabricate a price drop',()=>{
+ const {db}=setup();try{
+  db.prepare('INSERT INTO retention_market_daily VALUES(?,?,?,?,?,?,?,?)').run('2026-09-07',group.id,100,110,100,'2026-09-07T00:00:00Z','2026-09-07T00:00:00Z',1);
+  observeMarket(db,{...market,groups:[{...group,price:80,comparisonPolicyVersion:2}]},now);
+  assert.equal(db.prepare('SELECT COUNT(*) n FROM retention_market_daily').get().n,1);
+  assert.equal(marketHistory(db,group.id,30,now).days,1);
+  assert.equal(evaluateWatch({group_id:group.id,mode:'changes',drop_pct:5},group,{...group,price:80,comparisonPolicyVersion:2}),null);
+  const legacy=weeklyMarket(db,market,{now,date:'2026-09-07'});assert.equal(legacy.legacy,true);assert.equal(legacy.daysRecorded,1);
+ }finally{db.close();}
+});
+
+test('policy migration resets the comparison baseline once and later genuine drops still notify',()=>{
+ const {db,store}=setup();try{
+  const a=login(store,db),w=store.saveWatch(a.account.id,{productKey:'chatgpt-plus',groupId:group.id,mode:'changes',dropPct:5,renewalDate:'2026-10-01'},market);
+  store.observe({...market,groups:[{...group,price:80,comparisonPolicyVersion:2}]});
+  assert.equal(db.prepare("SELECT COUNT(*) n FROM retention_notices WHERE kind='drop'").get().n,0);
+  const persisted=db.prepare('SELECT * FROM retention_watches WHERE id=?').get(w.id);assert.equal(JSON.parse(persisted.baseline).comparisonPolicyVersion,2);assert.equal(persisted.renewal_date,'2026-10-01');
+  store.observe({...market,groups:[{...group,price:70,comparisonPolicyVersion:2}]});
+  assert.equal(db.prepare("SELECT COUNT(*) n FROM retention_notices WHERE kind='drop'").get().n,1);
  }finally{db.close();}
 });

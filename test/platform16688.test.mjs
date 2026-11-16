@@ -44,16 +44,20 @@ test('16688 接入既有售罄和无质保过滤', () => {
 });
 
 test('16688 只请求已登记公开列表，不使用凭据、分页猜测或重试', async () => {
-  let count = 0;
+  const calls = [];
   const rows = await collect16688(target, { capturedAt, fetchImpl: async (url, init) => {
-    count++;
-    assert.equal(url, 'https://www.16688.com.cn/shopApi/goods/list');
+    calls.push(url);
     assert.equal(init.method, 'POST');
     assert.equal(init.headers.Cookie, undefined);
-    assert.deepEqual(JSON.parse(init.body), { shop_no: 'S311799', goods_category_no: '', keywords: '', sort: 'default' });
-    return Response.json(payload([item]));
+    if (url.endsWith('/goods/list')) {
+      assert.deepEqual(JSON.parse(init.body), { shop_no: 'S311799', goods_category_no: '', keywords: '', sort: 'default' });
+      return Response.json(payload([item]));
+    }
+    assert.equal(url, 'https://www.16688.com.cn/shopApi/payment/list');
+    assert.deepEqual(JSON.parse(init.body), { shop_no: 'S311799' });
+    return Response.json({ code: 1, data: { list: [] } });
   } });
-  assert.equal(count, 1);
+  assert.deepEqual(calls, ['https://www.16688.com.cn/shopApi/goods/list', 'https://www.16688.com.cn/shopApi/payment/list']);
   assert.equal(rows.length, 1);
   await assert.rejects(collect16688({ ...target, shopNo: 'S999999' }), /未登记/);
   await assert.rejects(collect16688({ ...target, origin: 'https://evil.test' }), /未登记/);

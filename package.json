@@ -17,6 +17,9 @@
     "alerts": "node radar.mjs alerts"
   },
   "dependencies": {
-    "nodemailer": "10.0.0"
+    "@alicloud/dypnsapi20170525": "2.0.0",
+    "google-auth-library": "11.0.2",
+    "nodemailer": "10.0.13",
+    "sharp": "0.35.4"
   }
 }

@@ -1,23 +1,59 @@
 # 本地运行数据与通知/访问配置：不得发布到 GitHub。
-data/
-backups/
-analytics/
-*.log
-*.sqlite
-*.sqlite-shm
-*.sqlite-wal
-*.sqlite-*
+# Hardened 2026-11-02 for server-local git snapshots (previous version backed up to
+# /srv/price-radar-backups/gitignore-before-git-20261102.bak).
+
+# --- Secrets / credentials ---
 .env
 .env.*
 !.env.example
 config.json
 config.local.json
-.DS_Store
+*.pem
+*.key
+*.p12
+*.pfx
+*.crt
+id_rsa*
+id_ed25519*
+*.secret
+secrets/
+credentials*.json
+service-account*.json
+
+# --- Runtime data (server-only, never versioned) ---
+data/
+submissions/
+analytics/
+merchant-bridge/
+backups/
+seo-state/
+.task-work/
+/radar.sqlite
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+*.sqlite-*
+*.db
+*.db-*
+*.jsonl
+
+# --- Logs / caches / build output ---
+logs/
+*.log
 node_modules/
 coverage/
 dist/
 build/
 .cache/
+tmp/
+.tmp/
+*.tmp
+*.swp
+*.bak
+*.bak-*
+*.bak.*
+*.orig
+.DS_Store
 
 # 仅为抓取调试保留的原始网页和前端 chunk；运行时不依赖，避免公开镜像第三方内容。
 docs/_scrape/

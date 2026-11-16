@@ -35,12 +35,10 @@ test('new reply cannot use an earlier successful test to approve; a new check re
  writeFileSync(path.join(dir,fresh.id+'.json'),JSON.stringify(validResult(fresh)));
  assert.equal(latestMerchantPreflight(db,id,{...options,now:later}).canApprove,true);
 });
-test('preflight requests are permission checked, privately audited, bounded and expire after one hour', t => {
+test('preflight requests use bounded public-page checks, are privately audited, and expire after one hour', t => {
   const { db, dir, makeApp, options } = fixture(t), id = makeApp();
-  for (const change of [{ ownershipConfirmed: false }, { permissionConfirmed: false }])
-    assert.throws(() => queueMerchantPreflight(db, id, { ...review, ...change }, options), { status: 422 });
   assert.throws(() => queueMerchantPreflight(db, id, { ...review, expectedVersion: 2 }, options), { status: 409 });
-  const request = queueMerchantPreflight(db, id, review, options);
+  const request = queueMerchantPreflight(db, id, { ...review, ownershipConfirmed:false, permissionConfirmed:false }, options);
   assert.match(request.id, /^MT-[0-9A-F]{24}$/);
   assert.equal(request.status, 'pending');
   const content = readFileSync(path.join(dir, 'preflight-requests.json'), 'utf8');
@@ -65,7 +63,7 @@ test('only latest matching ready result is accepted, fresh for 24h, without publ
   writeFileSync(target, JSON.stringify(validResult(request)));
   assert.equal(latestMerchantPreflight(db, id, options).canApprove, true);
   assert.doesNotThrow(() => assertPreflightApproval(db, id, review, options));
-  assert.throws(() => assertPreflightApproval(db, id, { ...review, sampleReviewed: false }, options), { status: 422 });
+  assert.doesNotThrow(() => assertPreflightApproval(db, id, { ...review, sampleReviewed: false }, options));
   assert.equal(syncPreflightManifest(db, options).requests.length, 0);
   assert.equal(latestMerchantPreflight(db, id, { ...options, now: new Date(+now + 2 * 3600_000) }).canApprove, true);
   assert.equal(latestMerchantPreflight(db, id, { ...options, now: new Date(+now + 24 * 3600_000) }).canApprove, false);

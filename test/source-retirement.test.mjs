@@ -34,7 +34,7 @@ test('unregistered legacy rows cannot reappear in pages, SEO, outbound, market o
   assert.deepEqual(runWatch(db,{rules:[{id:'old',source:'retired-example',kind:'min_below',threshold:105}]}),[]);
   app=createApp({db});await new Promise(resolve=>app.listen(0,'127.0.0.1',resolve));
   const base='http://127.0.0.1:'+app.address().port;
-  for(const path of ['/','/sources','/sitemap.xml','/?family=chatgpt&product=chatgpt-plus']){
+  for(const path of ['/','/catalog','/sources','/sitemap.xml','/prices/chatgpt-plus']){
    const response=await fetch(base+path);assert.equal(response.status,200,path);
    assert.doesNotMatch(await response.text(),/retired-example|Retired merchant/,path);
   }

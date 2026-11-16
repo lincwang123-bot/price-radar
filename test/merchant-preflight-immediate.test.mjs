@@ -52,7 +52,7 @@ test('manual click starts only its audited request now, coalesces repeats and ne
   const scheduled=processMerchantPreflights(f.ctx);
   assert.equal(f.calls(),2);
   await f.finish(second.id); await scheduled;
-  assert.equal(f.calls(),4); assert.equal(isPreflightRunning(f.resultsDir,request.id),false);
+  assert.equal(f.calls(),6); assert.equal(isPreflightRunning(f.resultsDir,request.id),false);
   assert.equal(f.state(second.id).status,'ready');
   assert.equal(getMerchantApplication(f.db,second.id).status,'pending');
   assert.equal(existsSync(path.join(f.ctx.dataDir,'radar.sqlite')),false);
@@ -66,7 +66,7 @@ test('manual test bypasses a busy scheduled batch while per-request locks still 
   assert.equal(f.calls(),1);
   assert.equal((await f.run(target.id)).state,'running'); assert.equal(f.calls(),2);
   await f.finish(second.id); await scheduled;
-  assert.equal(f.calls(),4);
+  assert.equal(f.calls(),6);
 });
 
 test('private socket enforces request ID only, bounded concurrency and explicit unavailable result', async t => {
@@ -93,7 +93,7 @@ test('private socket enforces request ID only, bounded concurrency and explicit 
 
 test('authenticated manual POST starts immediate IPC; status polling is read-only and keeps review gates', async t => {
   const f=await fixture(t), app=f.app(1), origin='https://airadar.test';
-  const password='immediate-admin-test-password';
+  const password= 'example-fixture-secret';
   let dispatchCalls=0;
   const admin=createAdmin({submissionsDb:f.db,merchantBridgeDir:f.bridgeDir,merchantPreflightResultsDir:f.resultsDir,origin,username:'test',passwordHash:await hashAdminPassword(password),
     immediatePreflight:async id=>{dispatchCalls++;return f.run(id);}});

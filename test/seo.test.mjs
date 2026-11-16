@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {openDb,storeSnapshot} from '../lib/db.mjs';
 import {createApp} from '../lib/web.mjs';
 
-test('sitemap includes current directory canonicals with quotes and omits empty or stale directory products',async()=>{
+test('sitemap includes quote or curated official-reference canonicals and omits other empty or stale products',async()=>{
  const db=openDb(':memory:');
  const offer=(title,url)=>({offerId:title,title,url,price:100,currency:'CNY',status:'in_stock',stockCount:2});
  storeSnapshot(db,{source:'direct-shops',snapshotId:'directory-old',fetchedAt:'2020-01-01T00:00:00Z',products:[{productId:'suno-pro-1m',name:'Suno Pro',currency:'CNY',offers:[offer('Suno Pro 一个月代充','https://example.com/suno')]}]});
@@ -17,16 +17,22 @@ test('sitemap includes current directory canonicals with quotes and omits empty 
  const app=createApp({db});await new Promise(r=>app.listen(0,'127.0.0.1',r));const origin=`http://127.0.0.1:${app.address().port}`;
  try{
   const map=await(await fetch(origin+'/sitemap.xml')).text();
+  const editorialDates=xml=>[...xml.matchAll(/<url><loc>(https:\/\/airadar.vip\/(?:guides|help)[^<]*)<\/loc>(.*?)<\/url>/g)].map(m=>[m[1],m[2].match(/<lastmod>(.*?)<\/lastmod>/)?.[1]]);
+  assert.ok(editorialDates(map).every(([,date])=>/^\d{4}-\d{2}-\d{2}$/.test(date)));
+  storeSnapshot(db,{source:'direct-shops',snapshotId:'directory-price-refresh',products:[{productId:'chatgpt-plus-recharge',name:'ChatGPT Plus',currency:'CNY',offers:[{...offer('ChatGPT Plus 一个月代充','https://example.com/plus'),price:99}]}]});
+  assert.deepEqual(editorialDates(await(await fetch(origin+'/sitemap.xml')).text()),editorialDates(map),'Price collection must not rewrite editorial modification dates');
   const urls=[...map.matchAll(/<loc>(.*?)<\/loc>/g)].map(m=>m[1].replaceAll('&amp;','&'));
-  const directoryUrls=urls.filter(u=>new URL(u).searchParams.has('family'));
+  const directoryUrls=urls.filter(u=>new URL(u).searchParams.has('family')||/^\/(?:en\/)?prices\//.test(new URL(u).pathname));
   assert.deepEqual(directoryUrls,[
-   'https://airadar.vip/?family=chatgpt','https://airadar.vip/?family=chatgpt&product=chatgpt-plus',
-   'https://airadar.vip/?family=gemini','https://airadar.vip/?family=gemini&product=gemini-pro',
-   'https://airadar.vip/?family=grok','https://airadar.vip/?family=grok&product=super-grok',
+   'https://airadar.vip/en/prices/chatgpt-plus','https://airadar.vip/en/prices/chatgpt-pro-25x','https://airadar.vip/prices/chatgpt-plus','https://airadar.vip/prices/chatgpt-pro-25x',
+   'https://airadar.vip/en/prices/gemini-pro','https://airadar.vip/prices/gemini-pro',
+   'https://airadar.vip/en/prices/super-grok','https://airadar.vip/prices/super-grok',
+   'https://airadar.vip/en/prices/x-subscription-plus','https://airadar.vip/en/prices/x-subscription-premium','https://airadar.vip/en/prices/x-subscription-super','https://airadar.vip/en/prices/x-subscription-ultra','https://airadar.vip/prices/x-subscription-plus','https://airadar.vip/prices/x-subscription-premium','https://airadar.vip/prices/x-subscription-super','https://airadar.vip/prices/x-subscription-ultra',
+   'https://airadar.vip/en/prices/muse-power','https://airadar.vip/en/prices/muse-max','https://airadar.vip/prices/muse-power','https://airadar.vip/prices/muse-max',
   ]);
   assert.equal(new Set(urls).size,urls.length);
-  assert.doesNotMatch(map,/delivery=|sort=|channel=|utm_|<lastmod>/);
-  assert.ok(urls.includes('https://airadar.vip/product?source=direct-shops&id=chatgpt-plus-recharge'));
+  assert.doesNotMatch(map,/delivery=|sort=|channel=|utm_/);
+  assert.ok(!urls.includes('https://airadar.vip/product?source=direct-shops&id=chatgpt-plus-recharge'));
   for(const url of directoryUrls){
    const target=new URL(url),response=await fetch(origin+target.pathname+target.search);
    assert.equal(response.status,200);
@@ -51,10 +57,11 @@ test('SEO canonical、sitemap、真实404、私密noindex及可信HTTPS重定向
  const app=createApp({db});await new Promise(r=>app.listen(0,'127.0.0.1',r));const origin=`http://127.0.0.1:${app.address().port}`;
  try{const get=(p,options={})=>fetch(origin+p,{redirect:'manual',...options});
  const home=await(await get('/')).text();assert.match(home,/<link rel="canonical" href="https:\/\/airadar.vip\/"/);assert.match(home,/name="description"/);assert.match(home,/application\/ld\+json/);
- const product=await(await get('/product?source=direct-shops&id=claude-pro-month&channel=16688&utm_source=x')).text();assert.match(product,/rel="canonical" href="https:\/\/airadar.vip\/product\?source=direct-shops&amp;id=claude-pro-month"/);for(const m of product.matchAll(/<script type="application\/ld\+json">(.*?)<\/script>/gs))assert.doesNotThrow(()=>JSON.parse(m[1]));
+ const redirectProduct=await get('/product?source=direct-shops&id=claude-pro-month&channel=16688&utm_source=x');assert.equal(redirectProduct.status,301);assert.equal(redirectProduct.headers.get('location'),'/prices/claude-pro?channel=16688&utm_source=x');
  assert.equal((await get('/product?id=missing')).status,404);assert.equal((await get('/index.html')).status,301);assert.equal((await get('/product/?id=x')).status,301);
  for(const p of ['/submit','/api/submissions','/missing'])assert.match((await get(p)).headers.get('x-robots-tag'),/noindex/);
- const map=await(await get('/sitemap.xml')).text();assert.match(map,/<loc>https:\/\/airadar.vip\/product\?source=direct-shops&amp;id=claude-pro-month<\/loc>/);assert.doesNotMatch(map,/utm_|channel=|admin|submit/);assert.doesNotMatch(map,/<lastmod>/);
+ const map=await(await get('/sitemap.xml')).text();assert.match(map,/<loc>https:\/\/airadar.vip\/prices\/claude-pro<\/loc>/);assert.doesNotMatch(map,/utm_|channel=|admin|submit/);assert.match(map,/<lastmod>2026-09-18<\/lastmod>/);
+ assert.doesNotMatch(map.match(/<url><loc>https:\/\/airadar.vip\/product\?.*?<\/url>/)?.[0]||'',/<lastmod>/);
  assert.match(await(await get('/robots.txt')).text(),/Sitemap: https:\/\/airadar.vip\/sitemap.xml/);
  const redirect=await get('/?x=1',{headers:{'x-forwarded-proto':'http'}});assert.equal(redirect.status,301);assert.equal(redirect.headers.get('location'),'https://airadar.vip/?x=1');
  }finally{await new Promise(r=>app.close(r));db.close();}

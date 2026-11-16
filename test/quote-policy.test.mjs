@@ -9,7 +9,7 @@ import { marketEntries } from '../lib/market-view.mjs';
 import { directTargets } from '../collectors/direct/registry.mjs';
 
 const now=Date.now();
-function setup(offers,{stale=false}={}) { const db=openDb(':memory:'); storeSnapshot(db,{source:'direct-shops',snapshotId:'s',fetchedAt:new Date(now).toISOString(),stale,products:[{productId:'claude-pro-month',name:'Claude Pro',productType:'订阅/会员',currency:'CNY',lowestPrice:1,offers:offers.map((o,i)=>({offerId:String(i),title:'Claude Pro 代充月卡',status:'in_stock',price:100,currency:'CNY',capturedAt:new Date(now).toISOString(),...o}))}]}); return db; }
+function setup(offers,{stale=false}={}) { const db=openDb(':memory:'); storeSnapshot(db,{source:'direct-shops',snapshotId:'s',fetchedAt:new Date(now).toISOString(),stale,products:[{productId:'claude-pro-month',name:'Claude Pro',productType:'订阅/会员',currency:'CNY',lowestPrice:1,offers:offers.map((o,i)=>({offerId:String(i),title:'Claude Pro 代充月卡 新开续费均可',status:'in_stock',price:100,currency:'CNY',capturedAt:new Date(now).toISOString(),...o}))}]}); return db; }
 function project(db){return projectProduct(db,'direct-shops',recentSnapshots(db,'direct-shops',1)[0],productsOfSnapshot(db,'direct-shops','s')[0],{now});}
 test('全部订阅族明示期限分组，质保不能变成订阅周期，旧ID不删除',()=>{
  for(const brand of ['ChatGPT Plus','Claude Pro','Gemini Pro','Super Grok','X Premium']) {
@@ -17,13 +17,24 @@ test('全部订阅族明示期限分组，质保不能变成订阅周期，旧ID
    assert.notEqual(offerSpec({title:`${brand} 月卡`}).key,offerSpec({title:`${brand} 年卡`}).key);
    assert.equal(offerSpec({title:`${brand} 质保12个月`}).known,false);
  }
- const db=setup([{title:'Claude Pro 代充月卡'},{title:'Claude Pro 代充年卡',price:900}]);
+ const db=setup([{title:'Claude Pro 代充月卡 新开续费均可'},{title:'Claude Pro 代充年卡 新开续费均可',price:900}]);
  try {const p=project(db);assert.equal(p.lowest_price,null);assert.equal(p.comparable,false);assert.equal(productQuoteGroups(p).length,2);assert.equal(quoteSeries(db,{source:'direct-shops',productId:'claude-pro-month'})[0].lowest_price,null);assert.equal(db.prepare('SELECT count(*) n FROM offers').get().n,2);}finally{db.close();}
 });
 test('单店失败保留健康店，整体pull失败及过期报价无法在售',()=>{
  const db=setup([{price:10,extra:{quoteHealth:{status:'stale'}}},{price:100,extra:{quoteHealth:{status:'ok'}}}],{stale:true});
  try {const p=project(db);assert.equal(p.lowest_price,100);assert.equal(p.offers[0].quote_stale,false);assert.equal(p.stale,false);metaSet(db,'health:direct-shops',JSON.stringify({status:'failed',checkedAt:new Date(now+1).toISOString()}));assert.equal(project(db).lowest_price,null);}finally{db.close();}
  const old=setup([{capturedAt:new Date(now-25*3600000).toISOString()}]);try{assert.equal(project(old).lowest_price,null);}finally{old.close();}
+});
+test('projection reads source health once and exposes the exact next expiry without caching private state',()=>{
+ const db=setup([{expiresAt:new Date(now+500).toISOString()},{capturedAt:new Date(now-60000).toISOString(),extra:{quoteHealth:{status:'ok',maxAgeMinutes:1}}}]);
+ let healthReads=0;const proxy=new Proxy(db,{get(target,key){if(key==='prepare')return sql=>{if(sql==='SELECT value FROM meta WHERE key = ?')healthReads++;return target.prepare(sql);};const v=target[key];return typeof v==='function'?v.bind(target):v;}});
+ try{
+  const snapshot=recentSnapshots(db,'direct-shops',1)[0],product=productsOfSnapshot(db,'direct-shops','s')[0],deadlines=[];
+  const p=projectProduct(proxy,'direct-shops',snapshot,product,{now,onValidUntil:at=>deadlines.push(at)});
+  assert.equal(healthReads,1);assert.equal(p.offers.filter(o=>!o.quote_stale).length,2);assert.equal(Math.min(...deadlines),now+1);
+  assert.equal(projectProduct(db,'direct-shops',snapshot,product,{now:now+1}).offers.filter(o=>!o.quote_stale).length,1);
+  assert.equal(projectProduct(db,'direct-shops',snapshot,product,{now:now+500}).offers.filter(o=>!o.quote_stale).length,0);
+ }finally{db.close();}
 });
 test('watch从有效报价重算最低价，过滤售罄无保障及混周期，失败不误报',()=>{
  for(const offers of [[{price:100},{price:1,status:'sold_out'}],[{price:100},{price:1,title:'Claude Pro 月卡 无质保'}],[{price:1},{price:100,title:'Claude Pro 年卡'}]]) {
@@ -40,7 +51,7 @@ test('ShopApi在maxPages或错误total导致目录未完整时拒绝发布',asyn
 test('market即使调用者未投影也不合并同ID月卡年卡，期限分组历史不串线',()=>{
  const p={product_id:'claude-pro-month',name:'Claude Pro',currency:'CNY',product_type:'订阅/会员'};
  assert.equal(marketEntries(['月卡','年卡'].map((term,i)=>({source:i?'ldxp-goods':'direct-shops',products:[{...p,selected_offer:{title:`Claude Pro ${term}`,status:'in_stock',price:100+i}}]}))).length,2);
- const db=setup([{title:'Claude Pro 代充月卡',price:100},{title:'Claude Pro 代充年卡',price:900}]);
+ const db=setup([{title:'Claude Pro 代充月卡 新开续费均可',price:100},{title:'Claude Pro 代充年卡 新开续费均可',price:900}]);
  try { const groups=productQuoteGroups(project(db));for(const group of groups){assert.equal(quoteSeries(db,{source:'direct-shops',productId:p.product_id,comparisonKey:group.comparison_key})[0].lowest_price,group.lowest_price);} } finally{db.close();}
 });
 test('旧历史中的API误分类仅在查询排除，不修改数据库',()=>{
@@ -87,7 +98,7 @@ test('历史LIMIT先取最近观察再正序，不限制CLI默认全部历史；
  const db=openDb(':memory:');
  const target=directTargets().find(t=>t.kind==='kami');
  try {
-   for(let i=1;i<=5;i++) storeSnapshot(db,{source:'direct-shops',snapshotId:`s${i}`,fetchedAt:new Date(now+i*1000).toISOString(),products:[{productId:'claude-pro-month',name:'Claude Pro',offers:[{offerId:'o',title:'Claude Pro 代充月卡',price:i,status:'in_stock',url:`${target.origin}/buy/1`}]}]});
+   for(let i=1;i<=5;i++) storeSnapshot(db,{source:'direct-shops',snapshotId:`s${i}`,fetchedAt:new Date(now+i*1000).toISOString(),products:[{productId:'claude-pro-month',name:'Claude Pro',currency:'CNY',offers:[{offerId:'o',title:'Claude Pro 代充月卡 新开续费均可',price:i,status:'in_stock',url:`${target.origin}/buy/1`}]}]});
    const options={source:'direct-shops',productId:'claude-pro-month'};
    assert.equal(quoteSeries(db,options).length,5);
    assert.deepEqual(quoteSeries(db,{...options,limit:2}).map(p=>p.lowest_price),[4,5]);

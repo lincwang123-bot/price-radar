@@ -1,0 +1,10 @@
+{
+  "destinations": [
+    {"destination":"https://tracker.example.test/shared/reviewed","merchantId":"domain:merchant.example.test","websiteUrl":"https://merchant.example.test/","downloadKind":"android-apk","affiliate":true},
+    {"destination":"invalid"}
+  ],
+  "creatives": [
+    {"source":"sponsor-websites","merchant_id":"domain:merchant.example.test","destinations":["https://tracker.example.test/shared/reviewed"],"placement":"sponsored_home","page_key":"home","image":"/assets/runtime.png","imageWebp":"/assets/runtime.webp","imageAlt":"Fictional creative","width":16,"height":16,"title":"Runtime artwork","description":"Fictional offer","notice":"Reviewed artwork","action":"View offer","telegram":"https://brand.example.test/contact"},
+    {"source":"invalid","image":"/assets/../private.png"}
+  ]
+}

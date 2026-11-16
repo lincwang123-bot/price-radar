@@ -14,7 +14,8 @@ test('verified dotted GPT spelling preserves subscription, credit, account and t
     ['GP.T Pro 5x API 中转余额充值', undefined],
   ];
   for (const [title, id] of cases) assert.equal(classifyDirectOffer({ title })?.id, id, title);
-  for (const title of ['GP.T Free 普号', 'XGP.T Pro 5X', 'G Pro X20', 'CDK Gro Super 1个月充值', 'GP.T Pro 1.5x']) {
+  assert.equal(classifyDirectOffer({ title: 'GP.T Free 普号' })?.id, 'chatgpt-free-account');
+  for (const title of ['XGP.T Pro 5X', 'G Pro X20', 'CDK Gro Super 1个月充值', 'GP.T Pro 1.5x']) {
     assert.equal(classifyDirectOffer({ title }), null, title);
   }
   for (const title of ['GP.T Plus + Claude Pro', 'GP.T Plus + Gemini Pro', 'GP.T Plus + Canva']) {

@@ -17,8 +17,8 @@
 | ChatGPT | Claude | 更多 AI |
 | --- | --- | --- |
 | [ChatGPT Plus →](https://airadar.vip/prices/chatgpt-plus) | [Claude Pro →](https://airadar.vip/prices/claude-pro) | [Google AI Pro →](https://airadar.vip/prices/gemini-pro) |
-| [ChatGPT Pro 5x →](https://airadar.vip/prices/chatgpt-pro-5x) | [Claude Max 5x →](https://airadar.vip/prices/claude-max-5x) | [Google AI Ultra →](https://airadar.vip/prices/gemini-ultra) |
-| [ChatGPT Pro 20x →](https://airadar.vip/prices/chatgpt-pro-20x) | [Claude Max 20x →](https://airadar.vip/prices/claude-max-20x) | [Cursor Pro →](https://airadar.vip/prices/cursor-pro) |
+| [ChatGPT Pro 100 →](https://airadar.vip/prices/chatgpt-pro-5x) | [Claude Max（原 Max 5x） →](https://airadar.vip/prices/claude-max-5x) | [Google AI Ultra →](https://airadar.vip/prices/gemini-ultra) |
+| [ChatGPT Pro 200 →](https://airadar.vip/prices/chatgpt-pro-20x) | [Claude Ultra（原 Max 20x） →](https://airadar.vip/prices/claude-max-20x) | [Cursor Pro →](https://airadar.vip/prices/cursor-pro) |
 | [ChatGPT Go →](https://airadar.vip/prices/chatgpt-go) | [全部产品 →](https://airadar.vip/catalog) | [SuperGrok →](https://airadar.vip/prices/super-grok) |
 
 ## 从选购到续费，少做几次重复功课
@@ -50,3 +50,9 @@ Compare public AI subscription offers by product, delivery method, duration and 
 开发与部署：[开发文档](docs/development.md) · [源码目录](lib/)
 
 反馈与合作：[反馈数据问题](https://airadar.vip/submit?type=feedback) · [提交店铺](https://airadar.vip/submit-shop) · [X / @superwang](https://x.com/superwang)
+
+### 失败后沿用报价的公开展示时限
+
+`AIRADAR_RETAINED_QUOTE_MAX_HOURS` 控制所有店铺来源在采集失败后沿用旧价的公开展示时限，默认 72 小时，从 `captured_at`（最近成功采集时间）计算。恰好达到时限仍展示，超过即暂停展示；采集恢复成功后自动恢复。成功采集的报价和历史曲线不受此规则影响。
+
+可设为正数（例如 `24`）；`0`、空值及无效值回落到 72。设为 `-1` 或 `off` 可回滚到原先不限制沿用时长的行为。修改环境变量后重启服务生效。

@@ -17,11 +17,12 @@ test('shop search matches names, aliases and domains without case/width sensitiv
 test('shop search retains distinct stores on one marketplace and paginates only after matching',()=>{
  const shops=Array.from({length:25},(_,i)=>store(String(i),'测试店 '+String(i).padStart(2,'0'),'https://16688.com.cn/shop/S'+i));
  const result=searchShops(shops,'16688.com.cn',{page:2});
- assert.equal(result.total,25);assert.equal(result.pages,2);assert.equal(result.shops.length,5);
+ assert.equal(result.total,25);assert.equal(result.pages,3);assert.equal(result.shops.length,10);assert.equal(result.pageSize,10);
+ const all=[1,2,3].flatMap(page=>searchShops(shops,'16688.com.cn',{page}).shops.map(s=>s.id));assert.equal(all.length,25);assert.equal(new Set(all).size,25);
  assert.equal(searchShops(shops,'16688.com.cn/shop/S24').shops[0].id,'24');
  assert.equal(searchShops(shops,'测试店 24').total,1);
  for(const page of ['bad',-2,Infinity])assert.equal(searchShops(shops,'测试店',{page}).page,1);
- assert.equal(searchShops(shops,'测试店',{page:999}).page,2);
+ assert.equal(searchShops(shops,'测试店',{page:999}).page,3);assert.equal(searchShops(shops,'测试店',{page:999}).shops.length,5);
 });
 
 test('public search is global, groups quotes by shop, excludes blocked shops, and opens the existing shop page',async()=>{
@@ -42,8 +43,12 @@ test('public search is global, groups quotes by shop, excludes blocked shops, an
   const base='http://127.0.0.1:'+server.address().port;
   const get=async url=>await(await fetch(base+url)).text();
   const form=/<form[^>]*role="search"[\s\S]*?<\/form>/;
-  for(const path of ['/','/?family=chatgpt','/?family=chatgpt&product=chatgpt-plus']){
+  for(const path of ['/','/catalog','/?family=chatgpt','/?family=chatgpt&product=chatgpt-plus','/prices/chatgpt-plus']){
    const html=await get(path);assert.match(html,form);
+   if(path.includes('product=')||path.startsWith('/prices/'))assert.match(html,/<details class="directory-shop-search"><summary>找店铺<\/summary><form class="shop-search"/);
+   else assert.match(html,/<section class="directory"[^>]*><form class="shop-search"/);
+   assert.equal((html.match(/id="shop-search-input"/g)||[]).length,1);
+   assert.doesNotMatch(html,/<details class="growth-shop-search"/);
    assert.match(html.match(form)[0],/name="shop_q"/);assert.match(html.match(form)[0],/action="\/"/);
    assert.doesNotMatch(html.match(form)[0],/name="(?:product|family)"/);
   }
@@ -51,6 +56,7 @@ test('public search is global, groups quotes by shop, excludes blocked shops, an
   const html=await response.text();assert.equal(response.status,200);
   assert.match(response.headers.get('x-robots-tag'),/noindex/);
   assert.match(html,/<title>.*搜索店铺/);assert.match(html,/<meta name="robots" content="noindex, follow">/);
+  assert.equal((html.match(/id="shop-search-input"/g)||[]).length,1);
   assert.equal([...html.matchAll(/data-shop-result="/g)].length,1);
   assert.match(html,/找到 1 家店铺/);assert.match(html,/ChatGPT Plus/);assert.match(html,/Claude Pro/);
   const href=html.match(/data-shop-result-link href="([^"]+)"/)[1];
@@ -58,7 +64,8 @@ test('public search is global, groups quotes by shop, excludes blocked shops, an
   const domain=await get('/?shop_q=STELLAR.EXAMPLE.ORG');assert.equal([...domain.matchAll(/data-shop-result="/g)].length,1);
   const platform=await get('/?shop_q=16688.com.cn');assert.equal([...platform.matchAll(/data-shop-result="/g)].length,2);
   assert.match(await get('/?shop_q=fk.10886.xyz'),/没有找到相关店铺/);
-  const second=await get('/?shop_q='+encodeURIComponent('示例店')+'&page=2');assert.equal([...second.matchAll(/data-shop-result="/g)].length,4);assert.match(second,/第 2 \/ 2 页/);
+  const second=await get('/?shop_q='+encodeURIComponent('示例店')+'&page=2');assert.equal([...second.matchAll(/data-shop-result="/g)].length,10);assert.match(second,/第 2 \/ 3 页/);
+  const last=await get('/?shop_q='+encodeURIComponent('示例店')+'&page=3');assert.equal([...last.matchAll(/data-shop-result="/g)].length,4);assert.match(last,/第 3 \/ 3 页/);
   const missing=await get('/?shop_q='+encodeURIComponent('<script>alert(1)</script>'));assert.match(missing,/没有找到相关店铺/);assert.doesNotMatch(missing,/<script>alert\(1\)<\/script>/);
   assert.match(await get('/?shop_q=%20%20'),/AI 订阅报价/);
  }finally{

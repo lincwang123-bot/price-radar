@@ -30,6 +30,11 @@ const cases = [
   ["Claude Max 20X直充月卡", "Claude", "claude-max-20x"],
   ["Claude Max X5 代充", "CDK", "claude-max-5x"],
   ["Claude Max X20 代充", "CDK", "claude-max-20x"],
+  ["Claude Ultra 直充月卡", "Claude", "claude-max-20x"],
+  ["Claude Ultra 代充", "CDK", "claude-max-20x"],
+  ["Claude Max 代充月卡", "Claude", "claude-max-5x"],
+  ["Claude Max 100刀 官方订阅", "Claude", "claude-max-5x"],
+  ["Claude Max 200刀 官方订阅", "Claude", "claude-max-20x"],
   ["Gemini Pro 12个月成品号", "Gemini", "gemini-pro-recharge"],
   ["Gemini Ultra 独享月卡", "Gemini", "gemini-ultra"],
   ["全自动激活 Gemini pro 和antigravity 权限", "Gemini", "gemini-activation-service"],
@@ -53,6 +58,9 @@ test("扩充原店标题写法，且 API 与组合套餐不冒充高价订阅", 
   for (const [title, category, expected] of [
     ["Claude 正价Max5X", "Claude", "claude-max-5x"],
     ["Claude 正价Max20X", "Claude", "claude-max-20x"],
+    ["Claude Max", "Claude", undefined],
+    ["Claude Ultra", "Claude", "claude-max-20x"],
+    ["Claude Max Ultra 代充", "Claude", "claude-max-20x"],
     ["【质保30天】GPT PRO 20× 正规代充", "ChatGPT", "chatgpt-pro-20x"],
     ["ChatGPT plus30天会员", "ChatGPT", "chatgpt-plus-recharge"],
     ["Mail.tm长效邮箱", "邮箱产品", "email-accounts"],
@@ -62,12 +70,13 @@ test("扩充原店标题写法，且 API 与组合套餐不冒充高价订阅", 
     ["100刀Codex API中转额度(纯Pro号池)", "ChatGPT业务", undefined],
     ["AI平台直充100美元额度-Claude Opus / Max / 官API", "Claude API", undefined],
   ]) assert.equal(classifyDirectOffer({title, category})?.id, expected, title);
-  for (const title of ["Claude MAX5x/20x 官方订阅", "GPT Pro 5x 和 20x 版本", "GPT PLUS 月年卡", "GPT PLUS 月卡/年卡"]) {
+  for (const title of ["Claude MAX5x/20x 官方订阅", "Claude Max 5x Ultra 代充", "GPT Pro 5x 和 20x 版本", "GPT PLUS 月年卡", "GPT PLUS 月卡/年卡"]) {
     assert.equal(classifyDirectOffer({title, category:'ChatGPT'}) , null, title);
   }
   const titled = {title:'1个月PLUS代充 订阅质保 IOS 渠道', category:'CDK'};
   assert.equal(classifyDirectOffer({...titled,sourceId:'redeemgpt'})?.id, 'chatgpt-plus-recharge');
-  assert.equal(classifyDirectOffer({...titled,sourceId:'unknown'}), null);
+  // 2026-10-23：无品牌也可按规格归类；代充语境下非 redeemgpt 来源同样归 Plus。
+  assert.equal(classifyDirectOffer({...titled,sourceId:'unknown'})?.id, 'chatgpt-plus-recharge');
 });
 
 test("新 AI 品类按套餐、期限和额度区分，不从质保天数推断订阅周期", () => {
@@ -93,6 +102,29 @@ test("新 AI 品类按套餐、期限和额度区分，不从质保天数推断�
   assert.equal(classifyDirectOffer({title:'mail.com邮箱 普号注册专用',category:'邮箱产品'})?.id,'email-accounts');
 });
 
+test("无品牌标题可按明确规格归类，无关商品不乱归", () => {
+  for (const [title, expected] of [
+    ["30秒到账plus官方充值月卡（质保30天）----直冲个人账号---自动发货-(24h全自动充值)----限时优惠", "chatgpt-plus-recharge"],
+    ["🔥【官网正价直充】菲区 Plus 1个月｜ 质保30天售后同步官方 充自己号｜带官方发票账单｜24H全自动秒充", "chatgpt-plus-recharge"],
+    ["一卡一绑【官网直充】（质保30天）pro5x 1个月会员充自己号", "chatgpt-pro-5x"],
+    ["【官网正价直充】菲区 Pro200 20x 质保30天售后同步官方 充自己号（1号1卡1付）", "chatgpt-pro-20x"],
+    ["【官网正价直充】Go 1个月｜自己号直充｜拍下立刻可充｜官方账单收据｜24H全自动｜30天售后同步官方", "chatgpt-go"],
+    ["Business/Team席位 plus平替 质保30天 长期稳定 可续费 标准版", "chatgpt-team-business"],
+    ["一卡一绑【官网直充】（质保30天） 200刀（20x） 1个月会员充自己号", "chatgpt-pro-20x"],
+    ["plus成品号得资询客服，85一个，质保30天", "chatgpt-plus"],
+  ]) assert.equal(classifyDirectOffer({ title })?.id, expected, title);
+
+  for (const title of [
+    "plus 会员 超市",
+    "pro 鼠标垫",
+    "Adobe Premiere Pro 月卡",
+    "Canva Pro 年费",
+    "Netflix Premium Plus",
+    "500刀的咨询客服，5分钟就能到账",
+    "plus升级pro，需要咨询客服",
+  ]) assert.equal(classifyDirectOffer({ title }), null, title);
+});
+
 test("库存紧张属于可购买报价，且新类别仍排除售罄与无质保商品", () => {
   const products=groupDirectOffers([
     {...offer('low','Perplexity Pro 代充月卡',36,'low_stock'),stockCount:null},
@@ -111,8 +143,9 @@ test("无法可靠识别的商品不进入公开排行", () => {
   assert.equal(classifyDirectOffer({ title: "0 刀虚拟卡手搓 G Plus 教程", category: "ChatGPT Plus" }), null);
   assert.equal(classifyDirectOffer({ title: "Claude 成品账号 Free 版", category: "Claude Pro" }), null);
   assert.equal(classifyDirectOffer({ title: "Grok 普号 | 成品帐密SSO | 可生图", category: "Grok" }), null);
-  assert.equal(classifyDirectOffer({ title: "Gpt-Free普号 | 账密 AT | outlook邮箱", category: "GPT" }), null);
-  assert.equal(classifyDirectOffer({ title: "Claude Max 代充（倍数未注明）", category: "Claude" }), null);
+  assert.equal(classifyDirectOffer({ title: "Gpt-Free普号 | 账密 AT | outlook邮箱", category: "GPT", price: 0.4, currency: "CNY" })?.id, "chatgpt-free-account");
+  assert.equal(classifyDirectOffer({ title: "Gpt-Free普号 | 账密 AT | outlook邮箱", category: "GPT", price: 88, currency: "CNY" }), null);
+  assert.equal(classifyDirectOffer({ title: "Claude Max 代充（倍数未注明）", category: "Claude" })?.id, "claude-max-5x");
   assert.equal(classifyDirectOffer({ title: "豆包专业版一个月 VIP 会员", category: "ChatGPT Plus" }), null);
   assert.equal(classifyDirectOffer({ title: "Instagram账号新建，手机号注册，开通2FA", category: "账号" }), null);
   assert.equal(classifyDirectOffer({ title: "推特老号｜邮箱可用｜token登录", category: "社交账号" }), null);
@@ -197,3 +230,77 @@ function offer(id, title, price, status, capturedAt = "2026-09-05T00:00:00Z", st
     capturedAt,
   };
 }
+
+test("ChatGPT Free/Codex Free 成品号进普通账号品类，不进 Plus/Pro，超价格带或无质保仍排除", () => {
+  const freeId = "chatgpt-free-account";
+  for (const title of [
+    "已接🐎成品账号丨Codex Free 普号｜iCloud 邮箱｜量大管饱",
+    "【已接马】Codex | 账密带2FA丨icloud邮箱丨支持6-luna",
+    "GFree-iCloud格式：邮箱---账密---2FA丨未接马丨一号一住宅IP",
+    "ChatGPT Free 成品号 已接码",
+    "Gpt-Free普号 | 账密 AT | outlook邮箱",
+  ]) {
+    assert.equal(classifyDirectOffer({ title, price: 0.4, currency: "CNY" })?.id, freeId, title);
+    assert.notEqual(classifyDirectOffer({ title, price: 0.4, currency: "CNY" })?.id, "chatgpt-plus");
+    assert.notEqual(classifyDirectOffer({ title, price: 0.4, currency: "CNY" })?.id, "chatgpt-plus-recharge");
+  }
+  // 价格带：CNY > 20 不收录到普通账号品类
+  assert.equal(classifyDirectOffer({ title: "Codex Free 普号 iCloud", price: 21, currency: "CNY" }), null);
+  // 付费档仍走原规则
+  assert.equal(classifyDirectOffer({ title: "ChatGPT Plus 月卡 官方直充", price: 88 })?.id, "chatgpt-plus-recharge");
+  assert.equal(classifyDirectOffer({ title: "Codex ProMax 500刀 1个月 正价代充", price: 500 })?.id, "chatgpt-pro-25x");
+  // 明示无质保仍排除
+  assert.equal(directOfferExclusionReason({ title: "GFree 未接码", extra: { deliveryEvidence: { description: "特价商品，无任何质保，购买即视为接受", descriptionScope: "product", productTitle: "GFree 未接码" } } }), "no_warranty");
+  // 他牌 Free 仍不收录
+  assert.equal(classifyDirectOffer({ title: "Claude 成品账号 Free 版", category: "Claude Pro" }), null);
+  assert.equal(classifyDirectOffer({ title: "Cursor Free 普号" }), null);
+  assert.equal(classifyDirectOffer({ title: "Grok 普号 | 成品帐密SSO | 可生图", category: "Grok" }), null);
+});
+
+test("站长拍板的档位样例：非官方倍率、Pro 10X、Max 20、多档可选与 json 档", () => {
+  const id = title => classifyDirectOffer({ title })?.id;
+  // 无 Max/Ultra/5x/20x 时，6.25X 不能只因「订阅」落入 Claude Pro。
+  for (const title of ["Claude 6.25X【质保订阅】", "Claude 6.25X 质保订阅", "Claude Pro 6.25X 订阅"]) {
+    assert.equal(id(title), undefined, title);
+  }
+  assert.equal(id("Claude Pro直充月卡"), "claude-pro-month");
+  assert.equal(id("Claude Max 5x 代充月卡"), "claude-max-5x");
+  assert.equal(id("Claude Max 20x 代充月卡"), "claude-max-20x");
+
+  // Pro 10X 的「可覆盖 plus」不是 Plus；无 $200 时归 Pro 100。$200 仍是 Pro 200。
+  for (const title of ["ChatGPT Pro 10X 可覆盖plus", "ChatGPT Pro 10X …可覆盖plus", "ChatGPT Pro 10X"]) {
+    assert.equal(id(title), "chatgpt-pro-5x", title);
+  }
+  assert.equal(id("GPT Pro 100刀 10x"), "chatgpt-pro-5x");
+  assert.equal(id("PRO 10X 200$ 官方充值月卡"), "chatgpt-pro-20x");
+  assert.equal(id("ChatGPT Pro 5x 可覆盖plus"), "chatgpt-pro-5x");
+  assert.equal(id("ChatGPT Plus 代充【可覆盖iOS】"), "chatgpt-plus-recharge");
+
+  // Max 20 / 等同 Max20 没有 x，仍是 Ultra（20x），不是默认 5x。
+  for (const title of ["Claude Max 20", "Claude Max20", "Claude 代充 等同Max20", "Claude 等同 Max20"]) {
+    assert.equal(id(title), "claude-max-20x", title);
+  }
+  assert.equal(id("Claude Max 20 5x"), undefined);
+  assert.equal(id("Claude Max 代充月卡"), "claude-max-5x");
+  assert.equal(id("Claude Max 200刀 官方订阅"), "claude-max-20x");
+
+  // 多档可选不能兜底进单一 Pro 100。裸「claude max」先不归类。
+  assert.equal(id("ChatGPT Pro 代充（100/200/500 美金档位可选）"), undefined);
+  assert.equal(id("claude max"), undefined);
+  assert.equal(id("Claude Max"), undefined);
+
+  // json 档不是团队席位。真实席位和「已过 cyber」的 Plus 成品号保持原分类。
+  assert.equal(id("ChatGPT Business Pro 5X*僅json檔"), undefined);
+  assert.equal(id("ChatGPT Business Pro 5X*仅json档"), undefined);
+  assert.equal(id("48月 GPT Business Standard 标准席位"), "chatgpt-team-business");
+  assert.equal(id("ChatGPT Plus 成品号 已过 cyber"), "chatgpt-plus");
+  assert.equal(directOfferExclusionReason({ title: "ChatGPT Plus 成品号 已过 cyber", status: "in_stock", stockCount: 1 }), null);
+
+  const hidden = groupDirectOffers([
+    offer("json", "ChatGPT Business Pro 5X*僅json檔", 88, "in_stock"),
+    offer("menu", "ChatGPT Pro 代充（100/200/500 美金档位可选）", 699, "in_stock"),
+    offer("seat", "48月 GPT Business Standard 标准席位", 128, "in_stock"),
+  ]);
+  assert.deepEqual(hidden.map(product => product.productId), ["chatgpt-team-business"]);
+  assert.deepEqual(hidden[0].offers.map(item => item.offerId), ["seat"]);
+});

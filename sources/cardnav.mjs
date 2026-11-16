@@ -30,8 +30,8 @@ const LABELS = {
   "chatgpt-pro-5x": { name: "ChatGPT Pro 5x（官方区价）", platform: "ChatGPT", family: "ChatGPT Pro 5x" },
   "chatgpt-pro-20x": { name: "ChatGPT Pro 20x（官方区价）", platform: "ChatGPT", family: "ChatGPT Pro 20x" },
   "claude-pro": { name: "Claude Pro（官方区价）", platform: "Claude", family: "Claude Pro" },
-  "claude-max-5x": { name: "Claude Max 5x（官方区价）", platform: "Claude", family: "Claude Max 5x" },
-  "claude-max-20x": { name: "Claude Max 20x（官方区价）", platform: "Claude", family: "Claude Max 20x" },
+  "claude-max-5x": { name: "Claude Max（原 Max 5x）（官方区价）", platform: "Claude", family: "Claude Max（原 Max 5x）" },
+  "claude-max-20x": { name: "Claude Ultra（原 Max 20x）（官方区价）", platform: "Claude", family: "Claude Ultra（原 Max 20x）" },
   "gemini-ai-plus": { name: "Gemini AI Plus（官方区价）", platform: "Gemini", family: "Gemini Plus" },
   "gemini-advanced": { name: "Gemini AI Advanced（官方区价）", platform: "Gemini", family: "Gemini Advanced" },
   "gemini-ai-ultra": { name: "Gemini AI Ultra（官方区价）", platform: "Gemini", family: "Gemini Ultra" },
@@ -72,11 +72,21 @@ function parseNumeric(s) {
 /** 解析一个 official-price 页 → { slug, name, platform, refreshedAt, rows:[{rank,region,localPrice,currency,cny}] } */
 export function parseCardnavPage(html, slug) {
   const meta = LABELS[slug] ?? { name: slug, platform: "其他", family: slug };
-  const refresh = /最近刷新[（(]北京时间[)）]?\s*[:：]?\s*([\d-]+\s[\d:]+)/.exec(html);
-  const refreshedAt = refresh ? refresh[1].trim().replace(" ", "T") + "+08:00" : null;
+  // 兼容新旧页面：旧文案「最近刷新（北京时间）：…」，新版 <time data-refresh-time datetime=…>
+  let refreshedAt = null;
+  const timeTag = /<time\b[^>]*\bdata-refresh-time\b[^>]*>/i.exec(html);
+  if (timeTag) {
+    const dt = /\bdatetime="([^"]+)"/i.exec(timeTag[0]);
+    if (dt) refreshedAt = dt[1];
+  }
+  if (!refreshedAt) {
+    const refresh = /最近刷新[（(]北京时间[)）]?\s*[:：]?\s*([\d-]+\s[\d:]+)/.exec(html);
+    if (refresh) refreshedAt = refresh[1].trim().replace(" ", "T") + "+08:00";
+  }
 
   const rows = [];
-  const rowRe = /<tr data-sort-sequence="(\d+)">([\s\S]*?)<\/tr>/g;
+  // data-sort-sequence 可能不是 <tr> 的第一个属性
+  const rowRe = /<tr\b[^>]*\bdata-sort-sequence="(\d+)"[^>]*>([\s\S]*?)<\/tr>/g;
   let m;
   while ((m = rowRe.exec(html)) !== null) {
     const rowHtml = m[2];

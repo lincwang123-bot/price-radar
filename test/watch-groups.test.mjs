@@ -17,7 +17,7 @@ test('Web旧表只读正常，新提醒列在线升级后同只读连接显示�
   const html=await(await fetch(base+'/alerts')).text();assert.ok(html.includes('spec='+encodeURIComponent(events[0].groupId)));assert.match(html,/历史 ¥88/);assert.throws(()=>reader.exec('CREATE TABLE x(id)'),/readonly/i);
  }finally{if(app.listening)await new Promise(r=>app.close(r));reader.close();db.close();rmSync(dir,{recursive:true,force:true});}
 });
-function save(db,id,offers,{stale=false}={}){storeSnapshot(db,{source:'direct-shops',snapshotId:id,fetchedAt:new Date(Date.now()-60000+Number(id)*1000).toISOString(),stale,products:[{productId:'chatgpt-plus-recharge',name:'ChatGPT Plus',currency:'CNY',offers:offers.map(([term,price,extra={}],i)=>({offerId:term+i,title:'ChatGPT Plus 代充 '+term,price,currency:'CNY',status:'in_stock',stockCount:1,url:'https://morimm.com/products/'+term,...extra}))}]});}
+function save(db,id,offers,{stale=false}={}){storeSnapshot(db,{source:'direct-shops',snapshotId:id,fetchedAt:new Date(Date.now()-60000+Number(id)*1000).toISOString(),stale,products:[{productId:'chatgpt-plus-recharge',name:'ChatGPT Plus',currency:'CNY',offers:offers.map(([term,price,extra={}],i)=>({offerId:term+i,title:'ChatGPT Plus 代充  新开续费均可'+term,price,currency:'CNY',status:'in_stock',stockCount:1,url:'https://morimm.com/products/'+term,...extra}))}]});}
 test('提醒同规格独立窗口，新周期和缺失周期不制造降价，重复运行不重复',()=>{const db=openDb(':memory:');try{
  save(db,'1',[['1年',1000]]);assert.deepEqual(runWatch(db,cfg),[]);
  save(db,'2',[['1年',1000],['1个月',100],['',1]]);assert.deepEqual(runWatch(db,cfg),[]);
@@ -30,7 +30,7 @@ test('旧自定义规则原source保留，同规格换店和全无货提醒保�
  save(db,'2',[['1个月',100,{url:'https://morimm.com/products/b'}],['1年',5]]);const changed=runWatch(db,rule);assert.equal(changed.length,1);assert.match(changed[0].groupId,/^1m:/);assert.match(changed[0].message,/¥110 →.*¥100/);
  const gone={rules:[{...rule.rules[0],id:'gone',kind:'offer_gone'}]};runWatch(db,gone);
  save(db,'3',[['1个月',100,{status:'out_of_stock',stockCount:0}],['1年',5]]);assert.equal(runWatch(db,gone).filter(e=>e.groupId.startsWith('1m:')).length,1);assert.equal(runWatch(db,gone).length,0);
- const legacy={rules:[{id:'legacy',source:'ldxp-goods',kind:'min_below',threshold:105,product:'chatgpt-plus-recharge'}]};storeSnapshot(db,{source:'ldxp-goods',snapshotId:'legacy',products:[{productId:'chatgpt-plus-recharge',currency:'CNY',offers:[{offerId:'x',title:'ChatGPT Plus 代充 1个月',price:90,currency:'CNY',status:'in_stock',stockCount:1}]}]});assert.equal(runWatch(db,legacy)[0].source,'ldxp-goods');
+ const legacy={rules:[{id:'legacy',source:'ldxp-goods',kind:'min_below',threshold:105,product:'chatgpt-plus-recharge'}]};storeSnapshot(db,{source:'ldxp-goods',snapshotId:'legacy',products:[{productId:'chatgpt-plus-recharge',currency:'CNY',offers:[{offerId:'x',title:'ChatGPT Plus 代充 1个月 新开续费均可',price:90,currency:'CNY',status:'in_stock',stockCount:1}]}]});assert.equal(runWatch(db,legacy)[0].source,'ldxp-goods');
  }finally{db.close();}
 });
 test('月付阈值过滤旧、无货、无质保，partial整轮跳过且恢复不重复',()=>{const db=openDb(':memory:');try{

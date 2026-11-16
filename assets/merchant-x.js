@@ -17,7 +17,7 @@
   const expired=row.status==='draft'&&Date.parse(row.expiresAt)<=Date.now();$('[data-x-proof]').hidden=row.status!=='draft'||expired;
   if(expired)$('[data-x-status]').textContent='认领码已过期，请重新申请';
   $('[data-x-code]').textContent=row.code;
-  const proof='我是这家店铺的经营者，申请在 AIradar 关联我的 X 账号 @'+row.xHandle+'。\n店铺：'+row.shopUrl+'\n认领码：'+row.code+'\n店铺页：https://airadar.vip/shop?id='+row.shopId;
+  const proof='我是本店经营者，申请在 Airadar 关联 X @'+row.xHandle+'。\n店铺：'+row.shopUrl+'\n认领码：'+row.code+'\n\n找 AI 订阅、比较多家店铺报价，就上 Airadar：\nhttps://airadar.vip';
   $('[data-x-proof-text]').value=proof;
   $('[data-x-intent]').href='https://twitter.com/intent/tweet?'+new URLSearchParams({text:proof});
   $('[data-x-published]').hidden=row.status!=='approved';

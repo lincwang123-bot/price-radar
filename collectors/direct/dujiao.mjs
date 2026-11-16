@@ -155,10 +155,20 @@ function skuOffer(sku, product, context) {
   const skuId = identifier(sku.id ?? sku.sku_id ?? sku.sku_code);
   // Default labels can appear in translated spec values as well as sku_code.
   // A parent title is safe only when there is exactly one priced SKU.
-  const rawSkuTitle = nonDefaultSkuCode(localizedText(sku.spec_values))
-    || nonDefaultSkuCode(localizedText(sku.title ?? sku.name ?? sku.label ?? sku.spec))
+  const namedSkuTitle = nonDefaultSkuCode(localizedText(sku.title ?? sku.name ?? sku.label ?? sku.spec));
+  let rawSkuTitle = nonDefaultSkuCode(localizedText(sku.spec_values))
+    || namedSkuTitle
     || nonDefaultSkuCode(sku.sku_code)
     || (context.skuCount === 1 ? context.productTitle : "");
+  // A sole duration SKU, or a delivery+duration SKU like "CDK 兑换 / 一个月",
+  // describes fulfillment—not the subscription tier. Keep the parent title so
+  // Plus/Pro/Max stay classifiable. Explicit plan-bearing SKU names remain
+  // authoritative; never spread a parent bundle's plan names across multiple SKUs.
+  if (context.skuCount === 1 && nonPlanSkuTitle(rawSkuTitle)) {
+    rawSkuTitle = namedSkuTitle && !nonPlanSkuTitle(namedSkuTitle)
+      ? namedSkuTitle
+      : [context.productTitle, rawSkuTitle].filter(Boolean).join(" / ");
+  }
   const skuTitle = withBrandPrefix(rawSkuTitle, context.productTitle, context.category);
   // SKU price is intentionally not inherited from the parent product. A
   // parent price is commonly just the lowest variant and can misprice others.
@@ -219,7 +229,8 @@ function skuInventory(sku, product, deliveryMode) {
   if (stockCount === 0) return { stockCount: 0, status: "out_of_stock" };
   if (/low[_ -]?stock|库存紧张|库存较少/.test(state)) return { stockCount, status: "low_stock" };
   if (stockCount !== null && stockCount > 0) return { stockCount, status: "in_stock" };
-  if (/in[_ -]?stock|available|有货/.test(state)) return { stockCount: null, status: "in_stock" };
+  // Dujiao-Next exposes open inventory as stock_status=unlimited with -1 counters.
+  if (/in[_ -]?stock|available|有货|unlimited|不限(?:库存|量)?|库存充足/.test(state)) return { stockCount: null, status: "in_stock" };
   return { stockCount: null, status: "unknown" };
 }
 
@@ -315,7 +326,29 @@ function localizedText(value) {
 
 function nonDefaultSkuCode(value) {
   const code = cleanText(value);
-  return code && !/^(?:default(?:\s+(?:sku|variant))?|默认(?:规格)?|默認(?:規格)?|预设|預設|sku[-_ ]?\d+)$/i.test(code) ? code : "";
+  // Pure DEFAULT/默认 placeholders, plus merchant codes like P22896-DEFAULT that
+  // only mark the sole SKU and are not a real customer-facing title.
+  return code && !/^(?:(?:[A-Z]*\d+[-_ ]?)?default(?:\s+(?:sku|variant))?|默认(?:规格)?|默認(?:規格)?|预设|預設|sku[-_ ]?\d+)$/i.test(code) ? code : "";
+}
+
+function durationOnlySkuTitle(value) {
+  return /^(?:(?:订阅)?(?:周期|时长|期限)\s*[:：]?\s*)?(?:[1-9]\d{0,3}\s*(?:天|日|周|星期|个?月|年|days?|weeks?|months?|years?)|月|年|季度|半年|月卡|季卡|年卡|monthly|yearly|annually|annual|weekly|daily)$/i.test(cleanText(value));
+}
+
+// Delivery/fulfillment wording plus an optional duration is still not a plan tier.
+function nonPlanSkuTitle(value) {
+  const text = cleanText(value);
+  if (!text || durationOnlySkuTitle(text) || chineseDurationOnlySkuTitle(text)) return true;
+  const stripped = text
+    .replace(/(?:cdk|cd\s*key|卡密|兑换码?|充值码?|代充|直充|直冲|自动发货|手动发货|人工发货|自助发货|交付)/gi, ' ')
+    .replace(/[\/|·、，,]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return !stripped || durationOnlySkuTitle(stripped) || chineseDurationOnlySkuTitle(stripped);
+}
+
+function chineseDurationOnlySkuTitle(value) {
+  return /^(?:[一二三四五六七八九十两零〇]+\s*(?:天|日|周|星期|个?月|年)|月|年|季度|半年|月卡|季卡|年卡)$/u.test(cleanText(value));
 }
 
 function normalizedDeliveryMode(value) {

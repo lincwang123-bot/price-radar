@@ -15,7 +15,7 @@ test('proof and shop links only link safe HTTP(S) URLs in isolated new tabs',()=
   }
   assert.doesNotMatch(safeExternalLink('https://example.com/','<img src=x onerror=alert(1)>'),/<img/);
 });
-test('public preflight recheck is independent while manual approval retains all confirmations',()=>{
+test('public preflight recheck and product-based approval do not assert identity',()=>{
   const html = merchantReviewContent({application,csrfToken:'test-token'});
   const form = html.match(/<form[^>]*id="merchant-preflight">([\s\S]*?)<\/form>/)[1];
   assert.match(form,/name="version" value="3"/);
@@ -25,7 +25,7 @@ test('public preflight recheck is independent while manual approval retains all 
   assert.match(form,/name="action" value="auto_test"/);
   assert.doesNotMatch(form,/name="note"/);
   assert.match(html,/value="approve" type="submit" disabled/);
-  assert.match(html,/name="sampleReviewed"/);
+  assert.doesNotMatch(html,/name="sampleReviewed"|name="ownershipConfirmed"|name="permissionConfirmed"/);
 });
 test('preflight renders actionable states, counts and escaped bounded samples',()=>{
   for (const status of ['pending','queued','expired','invalid','no_valid_offers','waiting_adapter','unavailable']) {
@@ -35,7 +35,7 @@ test('preflight renders actionable states, counts and escaped bounded samples',(
     assert.doesNotMatch(html,/<script|fetch\(/);
     if (status==='queued') assert.match(html,/通常 5 分钟/);
   }
-  const html = merchantReviewContent({application,preflight:{status:'ready',canApprove:true,result:{rawCount:9,validCount:6,checkedAt:'2026-09-07T00:00:00Z',message:'<script>x</script>',samples:Array.from({length:8},(_,i)=>({title:`商品${i}<img>`,currency:'CNY',price:19.9,url:'https://example.com/item'}))}}});
+  const html = merchantReviewContent({application:{...application,phoneVerified:true},preflight:{status:'ready',canApprove:true,result:{rawCount:9,validCount:6,checkedAt:'2026-09-07T00:00:00Z',message:'<script>x</script>',samples:Array.from({length:8},(_,i)=>({title:`商品${i}<img>`,currency:'CNY',price:19.9,url:'https://example.com/item'}))}}});
   assert.match(html,/可收录报价：6 条/);
   assert.match(html,/原始解析：9 条/);
   assert.equal(html.match(/>打开商品页 ↗<\/a>/g).length,5);

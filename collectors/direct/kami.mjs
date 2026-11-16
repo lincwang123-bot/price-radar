@@ -82,7 +82,9 @@ function kamiOffer(item, source, capturedAt) {
 
   const id = identifier(item.id ?? item.commodity_id ?? item.goods_id);
   const title = cleanText(item.name ?? item.title);
-  const price = positiveNumber(item.user_price) ?? positiveNumber(item.price);
+  // ACG/Kami distinguishes guest price from member/reseller user_price.
+  // Public comparisons cannot assume the visitor has a qualifying account.
+  const price = positiveNumber(item.price);
   if (!id || !title || price === null) return null;
 
   const inventory = inventoryState(item.stock ?? item.stock_count, item.stock_state);
@@ -105,7 +107,11 @@ function kamiOffer(item, source, capturedAt) {
     capturedAt,
     expiresAt: null,
     deliveryMode: Number(item.delivery_way) === 0 ? "auto" : Number(item.delivery_way) === 1 ? "manual" : null,
-    extra: { deliveryEvidence: deliveryEvidence({ productTitle:title, category, description:item.description }) },
+    extra: {
+      publicUserPrice: positiveNumber(item.user_price),
+      priceEvidence: '公开目录 price 游客价；会员 user_price 不参与普通报价',
+      deliveryEvidence: deliveryEvidence({ productTitle:title, category, description:item.description }),
+    },
   };
 }
 

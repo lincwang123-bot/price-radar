@@ -11,7 +11,7 @@ test('商务合作独立收件箱保留历史申请，分类、分页、筛选�
  const sample={kind:'feedback',topic:'sponsor_apply',contextUrl:'https://merchant.test',contact:'X @synthetic_merchant',details:'合成商家希望了解广告位置与合作档期，仅用于自动测试。',consent:true,metadata:{placement:'product',duration:'1m'}};
  const historical=[];for(let i=0;i<27;i++)historical.push(createSubmission(submissionsDb,{...sample,subject:'历史商务申请 '+i},{clientAddress:'business-fixture-'+i}));
  submissionsDb.prepare("UPDATE feedback_submissions SET status='contacted' WHERE public_id=?").run(historical[0].id);
- const password='synthetic-business-inbox-password',origin='https://airadar.test';
+ const password= 'example-fixture-secret',origin='https://airadar.test';
  const app=createApp({db,submissionsDb,adminOptions:{username:'qa',passwordHash:await hashAdminPassword(password),origin},retentionOptions:{env:{}}});
  await new Promise(r=>app.listen(0,'127.0.0.1',r));const base='http://127.0.0.1:'+app.address().port;
  const get=(path,cookie='')=>fetch(base+path,{headers:{cookie},redirect:'manual'});

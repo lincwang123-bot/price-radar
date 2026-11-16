@@ -43,30 +43,30 @@ function fixture(){
 }
 test('official pages render references, filter and paginate independently, retain legacy URLs and use matching metadata',async()=>{
  const db=fixture(),app=createApp({db});await new Promise(r=>app.listen(0,'127.0.0.1',r));const origin='http://127.0.0.1:'+app.address().port;
- const get=path=>fetch(origin+path,{redirect:'manual'}),detail='/product?source=cardnav-official&id=chatgpt-plus';
+ const get=path=>fetch(origin+path,{redirect:'manual'}),detail='/official-prices/chatgpt-plus';
  try{
-  const home=await(await get('/')).text();assert.match(home,/<title>AI订阅比价与降价提醒/);assert.match(home,/href="\/official-prices"/);
+  const home=await(await get('/')).text();assert.match(home,/<title>AIradar · AI 订阅选购与续费雷达/);assert.match(home,/href="\/official-prices"/);
   const index=await(await get('/official-prices')).text();assert.match(index,/<h1>AI 官方订阅地区价格<\/h1>/);assert.equal((index.match(/<article class="official-card"/g)||[]).length,3);
   const schemas=h=>JSON.parse(h.match(/<script type="application\/ld\+json">(.*?)<\/script>/s)[1]);
   assert.equal(schemas(index).find(x=>x['@type']==='ItemList').itemListElement.length,3);
   const only=await(await get('/official-prices?brand=Claude')).text();assert.equal((only.match(/<article class="official-card"/g)||[]).length,1);assert.equal(schemas(only).find(x=>x['@type']==='ItemList').itemListElement[0].name,'Claude Pro');
   const empty=await(await get('/official-prices?q=nonexistent')).text();assert.match(empty,/没有匹配的套餐/);assert.ok(!schemas(empty).some(x=>x['@type']==='ItemList'));
   for(const [suffix,page,count] of [['',1,10],['&page=2',2,10],['&page=999',3,3],['&page=NaN',1,10],['&page=-1',1,10]]){
-   const response=await get(detail+suffix);assert.equal(response.status,200);const html=await response.text();
+   const response=await get(detail+suffix.replace(/^&/,'?'));assert.equal(response.status,200);const html=await response.text();
    assert.match(html,new RegExp('data-official-page="'+page+'"'));assert.equal((html.match(/<th scope="row">/g)||[]).length,count);
-   const canonical=html.match(/rel="canonical" href="([^"]+)"/)[1].replaceAll('&amp;','&');assert.equal(canonical,'https://airadar.vip'+detail+(page>1?'&page='+page:''));
-   assert.match(html,/<title>ChatGPT Plus 官方地区价格/);assert.match(html,/汇率日期未提供/);assert.match(html,/未经本站逐条结账核验/);
+   const canonical=html.match(/rel="canonical" href="([^"]+)"/)[1].replaceAll('&amp;','&');assert.equal(canonical,'https://airadar.vip'+detail+(page>1?'?page='+page:''));
+   assert.match(html,/<title>ChatGPT Plus 哪个地区最便宜/);assert.match(html,/汇率日期未提供/);assert.match(html,/未经本站逐条结账核验/);
    const content=html.split('<section class="official-page"')[1].split('</main>')[0];assert.doesNotMatch(content,/店主认领|name="channel"|历史价格走势|data-store-risk/);
-   const dataset=schemas(html).find(x=>x['@type']==='Dataset');assert.equal(dataset.isBasedOn,'https://cardnav.xyz/official-price/chatgpt-plus');assert.equal(dataset.offers,undefined);assert.equal(dataset.dateModified,undefined);
+   const dataset=schemas(html).find(x=>x['@type']==='Dataset');assert.equal(dataset.isBasedOn,'https://cardnav.xyz/official-price/chatgpt-plus');assert.equal(dataset.offers,undefined);assert.equal(dataset.dateModified,iso);
   }
-  const filtered=await(await get(detail+'&period=month&page=2')).text();assert.equal((filtered.match(/<th scope="row">/g)||[]).length,2);assert.match(filtered,/period=month/);
-  const none=await(await get(detail+'&period=year')).text();assert.match(none,/没有符合条件的地区记录/);assert.doesNotMatch(none,/<th scope="row">/);
-  const attack=await(await get(detail+'&region='+encodeURIComponent('"><script>alert(1)</script>'))).text();assert.doesNotMatch(attack,/<script>alert\(1\)<\/script>/);assert.match(attack,/&lt;script&gt;/);
+  const filtered=await(await get(detail+'?period=month&page=2')).text();assert.equal((filtered.match(/<th scope="row">/g)||[]).length,2);assert.match(filtered,/period=month/);
+  const none=await(await get(detail+'?period=year')).text();assert.match(none,/没有符合条件的地区记录/);assert.doesNotMatch(none,/<th scope="row">/);
+  const attack=await(await get(detail+'?region='+encodeURIComponent('"><script>alert(1)</script>'))).text();assert.doesNotMatch(attack,/<script>alert\(1\)<\/script>/);assert.match(attack,/&lt;script&gt;/);
   const missing=await get('/product?source=cardnav-official&id=missing');assert.equal(missing.status,404);assert.match(await missing.text(),/noindex/);
   const map=await(await get('/sitemap.xml')).text();assert.match(map,/<loc>https:\/\/airadar.vip\/official-prices<\/loc>/);assert.doesNotMatch(map,/period=|region=/);
   const head=await fetch(origin+'/official-prices',{method:'HEAD'});assert.equal(head.status,200);assert.equal(await head.text(),'');
   const slash=await get('/official-prices/?q=x');assert.equal(slash.status,301);assert.equal(slash.headers.get('location'),'/official-prices?q=x');
   assert.equal((await fetch(origin+'/official-prices',{method:'POST'})).status,405);
-  const data=officialPageData(db,new URL('https://airadar.vip'+detail+'&page=2'));assert.equal(data.page,2);assert.equal(data.shown.length,10);
+  const data=officialPageData(db,new URL('https://airadar.vip'+detail+'?page=2'));assert.equal(data.page,2);assert.equal(data.shown.length,10);
  }finally{await new Promise(r=>app.close(r));db.close();}
 });

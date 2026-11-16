@@ -64,6 +64,24 @@
       }
     ]
   },
+  "offerRetention": {
+    "_说明": "主库 offers 瘦身。enabled 打开后，采集进程在上海时间 2:00–5:00 把超出 days 的明细滚成 K 线并清理。candleHours 默认 4，桶起点是上海时间 0/4/8/12/16/20 点。dedupe 打开后，热窗口（至少 160 个快照）之外价格和库存相同的报价不再保留新行。两者默认关闭。quietHourStart 与 quietHourEnd 相等（例如都是 2）时采集侧不进入滚动窗口，仅由 timer 执行 retain-offers。batchSnapshots 为每批删除快照数；maxDeleteBatches 为删除批数上限；maxRollSnapshots 为滚动快照上限；busyTimeout 为锁等待毫秒数；maxRuntimeMs 为批次边界运行时长上限（毫秒）；dedupeSnapshots 为 timer 去重快照总上限。archiveDir 请指到有空间的挂载卷；不要在只剩数 GB 的系统盘上 VACUUM。",
+    "enabled": false,
+    "dedupe": false,
+    "days": 30,
+    "candleHours": 4,
+    "protectSnapshots": 160,
+    "quietHourStart": 2,
+    "quietHourEnd": 5,
+    "batchSnapshots": 20,
+    "maxDeleteBatches": 40,
+    "maxRollSnapshots": 400,
+    "busyTimeout": 10000,
+    "maxRuntimeMs": 2400000,
+    "dedupeSnapshots": 4,
+    "archiveDir": null,
+    "allowUnarchivedDelete": false
+  },
   "notify": {
     "console": true,
     "logFile": true,

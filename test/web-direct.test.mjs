@@ -9,7 +9,7 @@ test("原店直采报价支持完整排行与翻页", async () => {
   const db = openDb(":memory:");
   const server = createApp({ db });
   try {
-    const capturedAt = "2026-09-05T00:00:00.000Z";
+    const capturedAt = new Date().toISOString();
     storeSnapshot(db, snapshot("direct-shops", "direct-fixture", capturedAt, 23, 23));
 
     server.listen(0, "127.0.0.1");
@@ -21,12 +21,12 @@ test("原店直采报价支持完整排行与翻页", async () => {
     assert.match(homeHtml, /data-category="chatgpt"/);
     assert.doesNotMatch(homeHtml, /<table/);
 
-    const directHtml = await fetch(`http://127.0.0.1:${port}/product?source=direct-shops&id=chatgpt-plus-recharge&page=2`).then((response) => response.text());
-    assert.match(directHtml, /共 23 条公开报价/);
+    const directHtml = await fetch(`http://127.0.0.1:${port}/prices/chatgpt-plus?page=2`).then((response) => response.text());
+    assert.equal((directHtml.match(/data-directory-quote /g)||[]).length,10);
     assert.match(directHtml, /第 2 \/ 3 页/);
-    assert.match(directHtml, />#11</);
-    assert.match(directHtml, />#20</);
-    assert.doesNotMatch(directHtml, />#21</);
+    assert.match(directHtml, /data-price="110"/);
+    assert.match(directHtml, /data-price="119"/);
+    assert.doesNotMatch(directHtml, /data-price="120"/);
 
   } finally {
     if (server.listening) await new Promise((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
@@ -45,21 +45,21 @@ test("原店历史走势排除售罄与无质保低价，但保留库存紧张�
         historyOffer("bad-warranty", "GPT PRO 20X 直冲卡密（无任何质保）", 348, "in_stock", 5),
         historyOffer("bad-stock", "GPT PRO 20X 已售罄", 99, "out_of_stock", 0),
         historyOffer("bad-category", "100刀Codex API中转额度(纯Pro号池)", 10, "in_stock", 8),
-        historyOffer("valid-old", "GPT PRO 20X 菲区代充1个月", 1050, "in_stock", 3),
+        historyOffer("valid-old", "GPT PRO 20X 菲区代充1个月 新开续费均可", 1050, "in_stock", 3),
       ],
       99,
     ));
     storeSnapshot(db, directHistorySnapshot(
       "direct-history-new",
       "2026-09-05T01:00:00.000Z",
-      [historyOffer("valid-new", "GPT PRO 20X 菲区代充1个月", 1060, "low_stock", 2)],
+      [historyOffer("valid-new", "GPT PRO 20X 菲区代充1个月 新开续费均可", 1060, "low_stock", 2)],
       1060,
     ));
 
     server.listen(0, "127.0.0.1");
     await once(server, "listening");
     const { port } = server.address();
-    const html = await fetch(`http://127.0.0.1:${port}/product?source=direct-shops&id=chatgpt-pro-20x`).then((response) => response.text());
+    const html = await fetch(`http://127.0.0.1:${port}/product?source=ldxp-goods&id=chatgpt-pro-20x`).then((response) => response.text());
 
     assert.match(html, /最近 2 次记录/);
     assert.match(html, /从 09\/05 08:00 的 ¥1050 到 09\/05 09:00 的 ¥1060/);
@@ -122,7 +122,8 @@ test("首页为已采集的新品牌生成独立分类，详情可返回对应�
       if(key==='cursor')assert.match(html, /data-directory-family="cursor"/);else assert.doesNotMatch(html,new RegExp(`data-directory-family="${key}"`));
     }
     assert.match(html, /data-family-filter="mail"/);
-    assert.match(html, /\[data-family\]\[hidden\]\{display:none!important\}/);
+    const stylesheet=await fetch(base+/href="(\/assets\/site\.css\?v=[a-f0-9]+)"/.exec(html)[1]).then(res=>res.text());
+    assert.match(stylesheet, /\[data-family\]\[hidden\]\{display:none!important\}/);
     const detail = await fetch(base + "/product?source=direct-shops&id=cursor-pro-1m").then((res) => res.text());
     assert.match(detail, /class="breadcrumb" href="\/\?family=cursor(?:&amp;[^"]*)?"/);
   } finally {
@@ -133,7 +134,7 @@ test("首页为已采集的新品牌生成独立分类，详情可返回对应�
 
 function directHistorySnapshot(snapshotId, capturedAt, offers, lowestPrice) {
   return {
-    source: "direct-shops",
+    source: "ldxp-goods",
     snapshotId,
     fetchedAt: capturedAt,
     stale: false,

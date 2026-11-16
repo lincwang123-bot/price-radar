@@ -10,7 +10,7 @@ test('legacy missing email is explicit and cannot be approved despite ready quot
   const missing=merchantReviewContent({application,preflightCanApprove:true});
   assert.match(missing,/value="approve" type="submit" disabled/);
   assert.match(missing,/请先补充并核对申请人的通知邮箱/);
-  const complete=merchantReviewContent({application:{...application,email:'owner@example.org'},preflightCanApprove:true});
+  const complete=merchantReviewContent({application:{...application,email:'owner@example.org',phoneVerified:true},preflightCanApprove:true});
   assert.doesNotMatch(complete,/value="approve" type="submit" disabled/);
 });
 test('merchant times use Beijing timezone across day boundary and tolerate invalid dates',()=>{
@@ -62,8 +62,8 @@ test('review has no scripts and escapes private fields, audit records and CSRF m
   const note=html.match(/<textarea\b[^>]*name="note"[^>]*>/)[0];
   assert.doesNotMatch(note,/required|minlength/);
   assert.match(note,/maxlength="1500"/);
-  assert.match(html,/name="ownershipConfirmed"/);
-  assert.match(html,/name="permissionConfirmed"/);
+  assert.doesNotMatch(html,/name="ownershipConfirmed"/);
+  assert.doesNotMatch(html,/name="permissionConfirmed"/);
   for(const action of ['approve','reject','pause'])assert.ok(html.includes('value="'+action+'"'));
 });
 test('approval is separate from collection and verified badge requires approval and verification',()=>{
@@ -71,11 +71,21 @@ test('approval is separate from collection and verified badge requires approval 
   assert.ok(!render('pending',{}).includes('class="badge">内部核验已记录'));
   assert.match(render('approved',{}),/class="badge">内部核验已记录/);
   assert.doesNotMatch(render('approved',{}),/店主已核验/);
-  assert.match(render('approved',{}),/公开页面仅显示“店铺已收录”/);
+  assert.match(render('approved',{}),/公开页对短信已验证的已收录店铺显示“已验证商家”/);
   assert.match(render('approved',{}),/class="badge">等待采集/);
   for(const [status,label] of [['ok','目录可读取 / 暂无有效报价'],['unsupported','待适配'],['waiting_adapter','待适配'],['failed','采集暂不可用']])assert.ok(render('approved',{status}).includes('class="badge">'+label));
   assert.match(render('approved',{status:'active',offerCount:1}),/class="badge">已接入/);
   assert.doesNotMatch(render('approved',{status:'active',offerCount:0}),/class="badge">已接入/);
   assert.doesNotMatch(render('approved',{status:'active',offerCount:9,validCount:0}),/class="badge">已接入/);
   assert.match(render('approved',{status:'no_valid_offers',offerCount:9}),/class="badge">目录可读取 \/ 暂无有效报价/);
+  assert.match(render('approved',{status:'unavailable',reasonCode:'robots_disallowed'}),/class="badge">自动读取未放行/);
+  assert.match(render('approved',{status:'unavailable',reasonCode:'timeout'}),/class="badge">读取超时，等待重试/);
+});
+
+test('admin explains SMS badge and blocks unverified approval despite ready preflight',()=>{
+ const html=merchantReviewContent({application:{...application,email:'owner@example.org',identityVerifiedAt:application.createdAt},preflightCanApprove:true});
+ assert.match(html,/value="approve" type="submit" disabled/);
+ assert.match(html,/请先完成当前账号已保存手机号的短信验证/);
+ assert.match(html,/其余已收录店铺仍显示“店铺已收录”/);
+ assert.doesNotMatch(html,/公开页面仅显示/);
 });

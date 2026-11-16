@@ -39,6 +39,18 @@ test('domain-independent HTML collector reads cards and Product JSON-LD without 
   assert.ok(f.calls.every(x => x.method === 'GET'));
 });
 
+test('generic adapter accepts common static detail-page routes while retaining same-origin checks', async () => {
+  const path='/product-detail/one.html';
+  const listing=`<main><article class="product-card"><h3>${name}</h3><strong class="price">¥125.00</strong><a href="${path}">详情</a></article></main>`;
+  const product=detail().replaceAll('/products/one',path);
+  const f=fixture({'/':listing,[path]:product});
+  const rows=await collectPublicHtml(target(),f);
+  assert.equal(rows.length,1);
+  assert.equal(rows[0].url,origin+path);
+  assert.ok(f.calls.some(x=>new URL(x.url).pathname===path));
+  await assert.rejects(collectPublicHtml(target(),fixture({'/':listing.replace(path,'https://outside.example/product-detail/one.html')})),{code:'UNSUPPORTED_PUBLIC_HTML'});
+});
+
 test('another markup uses ItemList @graph, microdata and explicit unknown inventory', async () => {
   const listing = ld({ '@graph': [{ '@type': 'ItemList', itemListElement: [{ '@type': 'ListItem', item: { url: '/products/one', name } }], numberOfItems: 1 }] });
   const rows = await collectPublicHtml(target(), fixture({ '/': listing, '/products/one': detail({ microdata: true, availability: 'https://schema.org/PreOrder' }) }));
@@ -73,15 +85,47 @@ test('crossed-out prices stay excluded inside a price wrapper while current-pric
   await assert.rejects(collectPublicHtml(target(),fixture({'/products/one':ambiguous})),{code:'INVALID_CATALOG'});
 });
 
-test('a 15 or 16 product catalog fits the existing 20-request budget including API discovery',async()=>{
+test('complete HTML catalogs use the actual 20-request budget without reserving unused API probes',async()=>{
   const merchant={id:'merchant-html',shopName:'公开店铺',shopUrl:origin+'/',identity:'domain:public-shop.com',platform:'independent'};
-  for(const count of [15,16]){
+  for(const count of [15,16,17,18]){
     const ids=Array.from({length:count},(_,i)=>String(i)),f=fixture({'/':home(ids),...Object.fromEntries(ids.map(id=>['/products/'+id,detail({id})]))}, 'User-agent: *\nAllow: /');
     const result=await probeMerchantCatalog(merchant,{merchantFetchFactory:()=>f.fetchImpl,sleep:f.sleep},new Date().toISOString(),Date.now()+30000);
-    assert.equal(result.offers.length,count);assert.equal(f.calls.length,count+4);assert.ok(f.calls.length<=20);
+    assert.equal(result.offers.length,count);assert.equal(f.calls.length,count+2);assert.ok(f.calls.length<=20);
   }
-  const tooMany=fixture({'/':home(Array.from({length:17},(_,i)=>String(i)))});
+  const tooMany=fixture({'/':home(Array.from({length:19},(_,i)=>String(i)))});
   await assert.rejects(collectPublicHtml(target(),tooMany),{code:'COLLECTOR_LIMIT'});assert.equal(tooMany.calls.length,2);
+  const ids=Array.from({length:18},(_,i)=>String(i));
+  const extraPage=fixture({'/':'<a href="/catalog">全部商品</a>','/catalog':home(ids)});
+  await assert.rejects(collectPublicHtml(target(),extraPage),{code:'COLLECTOR_LIMIT'});
+  assert.equal(extraPage.calls.length,3);
+});
+
+test('visible CNY suffix agrees with structured price and still rejects mixed current prices',async()=>{
+ for(const currency of ['CNY','RMB']){
+  const html=detail().replace('¥125.00',`125.00 ${currency}`);
+  assert.equal((await collectPublicHtml(target(),fixture({'/products/one':html})))[0].price,125);
+  await assert.rejects(collectPublicHtml(target(),fixture({'/products/one':html.replace(`125.00 ${currency}`,`120.00 ${currency}`)})),{code:'INVALID_CATALOG'});
+ }
+ const ambiguous=detail().replace('¥125.00','125.00 CNY / 120.00 CNY');
+ await assert.rejects(collectPublicHtml(target(),fixture({'/products/one':ambiguous})),{code:'INVALID_CATALOG'});
+});
+
+test('detail selects its exact product URL among unrelated global Product metadata',async()=>{
+ const global=ld({'@type':'Product',name:'全站服务介绍',offers:[{'@type':'Offer',url:origin+'/buy',price:1,priceCurrency:'CNY'}]});
+ assert.equal((await collectPublicHtml(target(),fixture({'/products/one':global+detail()})))[0].price,125);
+ const duplicate=ld({'@type':'Product',name,offers:{'@type':'Offer',url:origin+'/products/one',price:1,priceCurrency:'CNY'}});
+ await assert.rejects(collectPublicHtml(target(),fixture({'/products/one':duplicate+detail()})),{code:'INVALID_CATALOG'});
+ const wrong=detail().replaceAll(origin+'/products/one',origin+'/products/other');
+ await assert.rejects(collectPublicHtml(target(),fixture({'/products/one':global+wrong})),{code:'INVALID_CATALOG'});
+});
+
+test('detail canonical can override a root layout canonical but never another product or origin',async()=>{
+ const body='<body><link rel="canonical" href="'+origin+'/products/one">'+detail()+'</body>';
+ const head=url=>'<head><link rel="canonical" href="'+url+'"></head>';
+ assert.equal((await collectPublicHtml(target(),fixture({'/products/one':head(origin)+body})))[0].price,125);
+ for(const url of [origin+'/products/other','https://other.com/'])
+  await assert.rejects(collectPublicHtml(target(),fixture({'/products/one':head(url)+body})),{code:'INVALID_CATALOG'});
+ await assert.rejects(collectPublicHtml(target(),fixture({'/products/one':head(origin)+detail()})),{code:'INVALID_CATALOG'});
 });
 
 test('robots supports wildcard rules and longest allow; forbidden pages and WAF stop immediately', async () => {
@@ -143,4 +187,11 @@ test('HTML-only prices require list/detail agreement; hidden prices and unrelate
   assert.equal(rows[0].price, 125); assert.equal(rows[0].status, 'unknown');
   assert.equal(rows[0].extra.warrantyEvidence, '');
   await assert.rejects(collectPublicHtml(target(), fixture({ '/products/one': visible.replace('¥125','¥120') })), { code:'INVALID_CATALOG' });
+});
+
+ test('a valid public HTML catalogue is read before an unrelated conventional API requiring login',async()=>{
+ const f=fixture({},'User-agent: *\nAllow: /'),base=f.fetchImpl;
+ f.fetchImpl=async(url,init)=>{assert.ok(!url.includes('/api/')&&!url.includes('/user/'),'do not guess a login-protected API for an already recognized public storefront');return base(url,init);};
+ const result=await probeMerchantCatalog({id:'html',shopName:'公开店',shopUrl:origin+'/',identity:'domain:public-shop.com'}, {merchantFetchFactory:()=>f.fetchImpl,sleep:f.sleep},new Date().toISOString(),Date.now()+30000);
+ assert.equal(result.offers.length,1);assert.deepEqual(f.calls.map(c=>new URL(c.url).pathname),['/robots.txt','/','/products/one']);
 });

@@ -1,0 +1,92 @@
+{
+  "schema_version": 2,
+  "dataset_id": "airadar-chatgpt-go-listing-median",
+  "version": "2026-10-28-v1",
+  "title": "ChatGPT Go 同条件挂牌中位数样本（2026-10-28期）",
+  "observed_from": "2026-10-28T15:11:00+00:00",
+  "observed_to": "2026-10-28T15:28:00+00:00",
+  "display_timezone": "Asia/Shanghai",
+  "citation_url": "https://airadar.vip/guides/chatgpt-go-listing-median#go-observation-20261028-v1",
+  "sample_scope": "从本站 /prices/chatgpt-go 当次公开页人工筛选：交付=代充、订阅期限=1个月、质保=30天、购买条件=新开续费均可的 CNY 挂牌记录。非随机抽样，非全市场统计。",
+  "method": "读取公开产品页可见报价卡片；只把规格字段齐全且条件一致的记录计入中位数主组。地区可不同，故本中位数不是「同地区」统计。挂牌价不是成交价。",
+  "comparison_group": {
+    "currency": "CNY",
+    "delivery": "代充",
+    "period": "1个月",
+    "warranty": "30天",
+    "purchase_condition": "新开续费均可",
+    "region": "不要求同地区"
+  },
+  "derived": {
+    "sample_reviewed": 5,
+    "median_group_count": 3,
+    "median_cny": 28.96,
+    "min_cny": 28.89,
+    "max_cny": 28.98,
+    "excluded_count": 2
+  },
+  "rows": [
+    {
+      "shop": "星辰",
+      "amount_cny": 28.89,
+      "period": "1个月",
+      "delivery": "代充",
+      "region": "埃及",
+      "purchase_condition": "新开续费均可",
+      "warranty": "30天",
+      "included_in_median_group": true,
+      "note": "公开挂牌；规格写明订阅期限1个月与质保30天"
+    },
+    {
+      "shop": "AI源头",
+      "amount_cny": 28.96,
+      "period": "1个月",
+      "delivery": "代充",
+      "region": "未标注",
+      "purchase_condition": "新开续费均可",
+      "warranty": "30天",
+      "included_in_median_group": true,
+      "note": "公开挂牌；地区字段未标注，仍纳入同交付/期限/质保/新开续费组"
+    },
+    {
+      "shop": "星城",
+      "amount_cny": 28.98,
+      "period": "1个月",
+      "delivery": "代充",
+      "region": "菲律宾",
+      "purchase_condition": "新开续费均可",
+      "warranty": "30天",
+      "included_in_median_group": true,
+      "note": "公开挂牌；菲区月卡代充"
+    },
+    {
+      "shop": "火御",
+      "amount_cny": 28.98,
+      "period": "1个月",
+      "delivery": "代充",
+      "region": "埃及",
+      "purchase_condition": "未注明",
+      "warranty": "30天",
+      "included_in_median_group": false,
+      "note": "期限与质保明确，但新开/续费未注明，不计入中位数主组"
+    },
+    {
+      "shop": "凌越穹顶",
+      "amount_cny": 29.38,
+      "period": "1个月",
+      "delivery": "代充",
+      "region": "埃及",
+      "purchase_condition": "仅新开",
+      "warranty": "30天",
+      "included_in_median_group": false,
+      "note": "仅适用新开，与「新开续费均可」不同条件，不计入中位数主组"
+    }
+  ],
+  "limitations": [
+    "仅覆盖本站当次公开页可见记录，不是成交样本。",
+    "主组内地区不完全一致，不能解读为某一地区的中位数。",
+    "商家「官充」等字样为自称，不代表官方授权或履约验证。",
+    "未登录、下单或验证账号资格。"
+  ],
+  "platform_verified": false
+}

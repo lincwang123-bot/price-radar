@@ -112,7 +112,8 @@ test('current quote rejects stock, expiry, no-warranty and stale-snapshot bypass
   ctx.db.prepare("UPDATE snapshots SET fetched_at='2026-09-01T00:00:00Z'").run();assert.equal(follow(ctx).statusCode,404);
  }finally{ctx.analytics.close();ctx.db.close();}
 });
-test('shared-platform shops redirect with separate quote keys but cannot sponsor or open aggregator targets',()=>{
+test('shared-platform shops redirect with separate quote keys but cannot sponsor or open aggregator targets',t=>{
+ t.mock.timers.enable({apis:['Date'],now:date.getTime()});
  const ctx=fixture();try{
   ctx.db.prepare("UPDATE offers SET url='https://16688.com.cn/shop/a',merchant_id='domain:16688.com.cn'").run();
   ctx.db.prepare("INSERT INTO offers(source,snapshot_id,product_id,offer_id,price,currency,status,url,merchant_id) VALUES('direct-shops','s1','p','o2',12,'CNY','in_stock','https://16688.com.cn/shop/b','domain:16688.com.cn')").run();
@@ -155,5 +156,23 @@ test('Sponsor requires explicit review, relevance, dates and server-derived iden
   ctx.analytics.outbound.saveCampaign({...c,end_at:'2026-09-05T00:00:00Z'},{approve:true,now:date});assert.equal(follow(ctx,href).statusCode,404);
   ctx.analytics.outbound.saveCampaign({...c,merchant_id:'domain:other.example'},{approve:true,now:date});assert.equal(follow(ctx,href).statusCode,404);
   ctx.analytics.outbound.recordClick=()=>{throw new Error('fixture metrics failure');};assert.equal(follow(ctx).statusCode,302);
+ }finally{ctx.analytics.close();ctx.db.close();}
+});
+
+test('organic SSR impressions dedupe privately and cannot consume click or sponsor quota',()=>{
+ const ctx=fixture();try{
+  const row={...offer,merchant_id:'domain:shop.example'};
+  for(let n=0;n<310;n++)ctx.analytics.outbound.recordOrganicImpression(request(),{...row,offer_id:'organic-'+n},date);
+  assert.equal(ctx.analytics.outbound.report(30,date)[0].impressions,300);
+  assert.equal(ctx.analytics.outbound.recordClick(request(),row,{placement:'product'},date),true);
+  const campaign={id:'quota-fixture',...row,label:'fixture',placement:'sponsored_product',start_at:'2026-09-01T00:00:00Z',end_at:'2026-10-01T00:00:00Z'};
+  ctx.analytics.outbound.saveCampaign(campaign,{approve:true,now:date});
+  assert.equal(ctx.analytics.outbound.recordImpression(request(),campaign,date),true);
+  const later=new Date(date.getTime()+60000);
+  assert.equal(ctx.analytics.outbound.recordOrganicImpression(request(),row,later),true);
+  assert.equal(ctx.analytics.outbound.recordOrganicImpression(request(),row,later),false);
+  const events=ctx.analytics.db.prepare("SELECT * FROM merchant_outbound_events WHERE campaign_id='' AND kind='impression'").all();
+  assert.equal(events.length,301);assert.ok(events.every(event=>event.placement==='product'&&event.page_path===''&&/^[a-f0-9]{64}$/.test(event.visitor)));
+  assert.doesNotMatch(JSON.stringify(events),/Mozilla|cf-connecting|8\.8\.8\.8/);
  }finally{ctx.analytics.close();ctx.db.close();}
 });

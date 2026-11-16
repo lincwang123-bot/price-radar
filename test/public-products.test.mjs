@@ -41,6 +41,6 @@ test('未知商家自动识别平铺目录，复用第一次响应且不再探�
  const calls=[];
  const result=await probeMerchantCatalog({id:'fixture',shopName:'目录测试',shopUrl:'https://catalog-store.com/',identity:'domain:catalog-store.com'},
   {merchantFetchFactory:()=>async url=>{calls.push(url);return url.endsWith('/robots.txt')?new Response('User-agent: *\nAllow: /'):response(page([product()]));}},new Date().toISOString(),Date.now()+30000);
- assert.equal(result.offers.length,1);assert.equal(calls.length,2);assert.ok(calls[0].endsWith('/robots.txt'));assert.ok(calls[1].includes('/api/v1/public/products?'));
+ assert.equal(result.offers.length,1);assert.equal(calls.length,3);assert.ok(calls[0].endsWith('/robots.txt'));assert.ok(calls[2].includes('/api/v1/public/products?'));
  assert.equal(result.offers[0].extra.merchantIdentity,'domain:catalog-store.com');
 });

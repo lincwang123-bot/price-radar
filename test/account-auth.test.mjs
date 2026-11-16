@@ -9,7 +9,7 @@ import {openSubmissionsDb} from '../lib/submissions.mjs';
 import {retentionMessage,drainRetentionMail} from '../lib/retention-mail.mjs';
 
 const password='a private test passphrase 73';
-const profile={phone:'13800138000',contactType:'telegram',contactValue:'fixture_owner'};
+const profile={phone:'10000000000',contactType:'telegram',contactValue:'fixture_owner'};
 function setup(){
  const db=new DatabaseSync(':memory:');let time=new Date('2026-09-08T10:00:00Z');
  const store=createRetentionStore(db,{secret:'test-secret-'.repeat(8),now:()=>time});
@@ -24,7 +24,7 @@ function setup(){
 test('注册必须验证邮箱并设置密码；密码加盐存储，账号会话隔离',async()=>{
  const f=setup();try{
   const challenge=f.code();
-  await assert.rejects(f.auth.register({...profile,...challenge,password:'short'}),/15/);
+  await assert.rejects(f.auth.register({...profile,...challenge,password:'short'}),/8/);
   await assert.rejects(f.auth.register({...profile,...challenge,code:'000000',password}),/验证码/);
   const a=await f.auth.register({...profile,...challenge,password});
   assert.equal(f.store.session(a.token).email,'reader@example.com');
@@ -38,6 +38,20 @@ test('注册必须验证邮箱并设置密码；密码加盐存储，账号会�
   await assert.rejects(f.auth.login('reader@example.com','incorrect password value','local'),/邮箱或密码不正确/);
   await assert.rejects(f.auth.login('missing@example.com',password,'local'),/邮箱或密码不正确/);
   assert.equal(f.store.watches(logged.account.id).length,0);
+ }finally{f.db.close();}
+});
+test('8 位密码可注册、登录和重置；7 位、超长及常见弱密码被拒绝',async()=>{
+ const f=setup();try{
+  const challenge=f.code();
+  for(const password of ['Abcd123','x'.repeat(129)])await assert.rejects(f.auth.register({...profile,...challenge,password}),/8–128/);
+  for(const password of ['12345678','abcdefgh','aaaaaaaa','password123'])await assert.rejects(f.auth.register({...profile,...challenge,password}),/容易被猜/);
+  const a=await f.auth.register({...profile,...challenge,password:'R8!kL2@x'});
+  assert.equal((await f.auth.login('reader@example.com','R8!kL2@x','local')).account.id,a.account.id);
+  f.advance(61000);const reset=f.code('reader@example.com','reset');
+  await assert.rejects(f.auth.reset({...reset,password:'Abcd123'}),/8–128/);
+  await f.auth.reset({...reset,password:'M9#tQ6&v'});
+  assert.equal((await f.auth.login('reader@example.com','M9#tQ6&v','local')).account.id,a.account.id);
+  assert.equal(f.store.session(a.token),null);
  }finally{f.db.close();}
 });
 test('重置码绑定用途、用后失效；重置撤销全部会话，不自动登录',async()=>{
@@ -108,8 +122,10 @@ test('HTTP 注册登录退出完整链路：CSRF、Cookie、安全头、旧接�
  try{
   await state();
   let r=await fetch(origin+'/login');assert.equal(r.status,200);assert.match(r.headers.get('cache-control'),/no-store/);assert.match(r.headers.get('x-robots-tag'),/noindex/);assert.match(r.headers.get('content-security-policy'),/form-action 'self'/);assert.equal(r.headers.get('referrer-policy'),'no-referrer');
-  assert.match(await r.text(),/type="password" autocomplete="current-password" required/);
-  r=await fetch(origin+'/register');const html=await r.text();assert.match(html,/method="post" action="\/api\/retention\/register"/);assert.match(html,/name="password" type="password" autocomplete="new-password" required minlength="15"/);assert.ok(!html.includes('cloudflareinsights.com'));
+  assert.match(await r.text(),/data-auth-mode="email-login"/);
+  r=await fetch(origin+'/login?method=password');assert.match(await r.text(),/type="password" autocomplete="current-password" required/);
+  r=await fetch(origin+'/register');const html=await r.text();assert.match(html,/method="post" action="\/api\/retention\/email-login"/);assert.ok(!html.includes('name="password"'));assert.ok(!html.includes('name="phone"'));assert.ok(!html.includes('cloudflareinsights.com'));
+  r=await fetch(origin+'/register?method=password');assert.match(await r.text(),/name="password" type="password" autocomplete="new-password" required minlength="8"/);
   r=await fetch(origin+'/account',{redirect:'manual'});assert.equal(r.status,303);
   r=await post('login',{email:'reader@example.com',password},{Origin:'https://evil.example'});assert.equal(r.status,403);
   r=await post('request-code',{email:'reader@example.com',consent:true,purpose:'register'},{'X-CSRF-Token':'bad'});assert.equal(r.status,403);

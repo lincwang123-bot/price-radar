@@ -2,13 +2,22 @@ import { collectKami } from "./kami.mjs";
 import { collectIkunLove } from "./ikunlove.mjs";
 import { collectMooncake } from "./mooncake.mjs";
 import { collectShopApi } from "./shop-api.mjs";
+import {collectCatfk} from './catfk.mjs';
 import { collectDujiao } from "./dujiao.mjs";
 import { collectAikaShop } from './aikashop.mjs';
 import { PLATFORM16688_SHOPS, collect16688 } from './platform16688.mjs';
 import { collectAichong } from './aichong.mjs';
 import { collectBBShare } from './bbshare.mjs';
 import { collectNobrisk } from './nobrisk.mjs';
+import { collectZhanghao66 } from './zhanghao66.mjs';
+import {collectTerry} from './terry.mjs';
 import {collectDujiaokaHtml} from './dujiaoka-html.mjs';
+import {collectAijiayou} from './aijiayou.mjs';
+import {collectDgtXSubscription} from './dgt-x-subscription.mjs';
+import {collectXiaoheiwanXSubscription} from './xiaoheiwan-x-subscription.mjs';
+import {collectInsaiXSubscription} from './insai-x-subscription.mjs';
+import {collectChongXSubscription} from './chong-x-subscription.mjs';
+import {collectSmbdXSubscription} from './smbd-x-subscription.mjs';
 import {merchantUrlBlocked} from '../../lib/merchant-blocklist.mjs';
 import { collectPublicHtml, PUBLIC_HTML_MAX_REQUESTS } from './public-html.mjs';
 import { authorizeMerchantTarget, isAuthorizedMerchantTarget } from '../../lib/merchant-target-capability.mjs';
@@ -18,6 +27,14 @@ import { classifyPreflightError } from '../../lib/merchant-preflight-guidance.mj
 // 这里只登记我们逐个核验过的原站公开入口。URL 不接受运行时任意传入，
 // 避免把采集器变成通用代理或 SSRF 入口。
 const TARGETS = [
+  {id:'dgt-x-subscription',name:'DGT 数字商店',kind:'dgtXSubscription',origin:'https://dgtsell.com',intervalMinutes:60},
+  {id:'xiaoheiwan-x-subscription',name:'小黑丸',kind:'xiaoheiwanXSubscription',origin:'https://upgrade.xiaoheiwan.com',intervalMinutes:60},
+  {id:'insai-x-subscription',name:'INSAI',kind:'insaiXSubscription',origin:'https://www.inswindai.com',intervalMinutes:60},
+  {id:'chonggrok-x-subscription',name:'ChongGrok',kind:'chongXSubscription',origin:'https://chonggrok.com',intervalMinutes:60},
+  {id:'chongai-x-subscription',name:'ChongAI',kind:'chongXSubscription',origin:'https://chongai.pro',intervalMinutes:60},
+  {id:'smbd-x-subscription',name:'Subscription Smart BD',kind:'smbdXSubscription',origin:'https://subscriptionsmartbd.com',intervalMinutes:60},
+  {id:'aijiayou',name:'Ai加油站',kind:'aijiayou',origin:'https://aijiayou.win',intervalMinutes:30},
+  {id:'terry',name:'Terry会员代充',kind:'terry',origin:'https://aiterry.shop',intervalMinutes:30},
   {id:'fufaka',name:'桑丘自动发货资源店',kind:'dujiaokaHtml',origin:'https://fufaka.shop',intervalMinutes:60},
   {id:'nobrisk',name:'BriskAI',kind:'nobrisk',origin:'https://shop.nobrisk.com',endpoint:'/user/api/index/commodity',intervalMinutes:30,maxPages:5,pageSize:100},
   {id:'bbshare',name:'BBShare',kind:'bbshare',origin:'https://www.bbshare.site',intervalMinutes:60},
@@ -88,6 +105,7 @@ const TARGETS = [
     id: "zhanghao66",
     name: "账号66",
     kind: "kami",
+    collector: "zhanghao66",
     origin: "https://zhanghao66.com",
     endpoint: "/user/api/index/commodity",
     intervalMinutes: 30,
@@ -148,6 +166,15 @@ const TARGETS = [
 ];
 
 const COLLECTORS = {
+  dgtXSubscription:collectDgtXSubscription,
+  xiaoheiwanXSubscription:collectXiaoheiwanXSubscription,
+  insaiXSubscription:collectInsaiXSubscription,
+  chongXSubscription:collectChongXSubscription,
+  smbdXSubscription:collectSmbdXSubscription,
+  catfk:collectCatfk,
+  aijiayou:collectAijiayou,
+  zhanghao66:collectZhanghao66,
+  terry:collectTerry,
   dujiaokaHtml:collectDujiaokaHtml,
   nobrisk: collectNobrisk,
   kami: collectKami,
@@ -165,7 +192,7 @@ const COLLECTORS = {
 // Listing here does not enable requests from the production server.
 export const SHOP_API_TARGET_IDS = Object.freeze(TARGETS.filter(target => target.kind === 'shopApi').map(target => target.id));
 // An adapter registration is not approval and does not add a default collector.
-export const MERCHANT_ONLY_TARGET_IDS=Object.freeze(['bbshare','fufaka']);
+export const MERCHANT_ONLY_TARGET_IDS=Object.freeze(['bbshare','fufaka','terry','aijiayou']);
 
 function shop(id, name, token) {
   return {
@@ -185,6 +212,7 @@ function shop(id, name, token) {
 // wzyp.cn 的公开 ShopApi 在普通家庭网络可用，但当前会对本项目
 // 生产 VPS 返回 WAF 挑战页。它们保留为显式可选目标，不在默认列表中启用。
 export const DEFAULT_DIRECT_TARGET_IDS = Object.freeze([
+  'dgt-x-subscription', 'xiaoheiwan-x-subscription', 'insai-x-subscription', 'chonggrok-x-subscription', 'chongai-x-subscription', 'smbd-x-subscription',
   'aikashop', 'otaor',
   "aisou", "redeemgpt", "ai666", "shopcardai", "web3chirou", "morimm", "burstpro-ai", "ikunlove", "mooncake",
   "lynnzee", "zhanghao66", "yufenggpt", "google7676", "tehuio",
@@ -203,9 +231,9 @@ export function directTargets(ids = DEFAULT_DIRECT_TARGET_IDS) {
 
 export function collectorFor(target) {
   if(merchantUrlBlocked(target.origin))throw new Error('该店铺已被站方暂停采集');
-  const collector = COLLECTORS[target.kind];
+  const collector = COLLECTORS[target.collector ?? target.kind];
   if (!collector) throw new Error(`来源 ${target.id} 没有对应采集器: ${target.kind}`);
-  if (target.shopNo || target.token || ['bbshare','aikashop','aichong','dujiaokaHtml'].includes(target.kind)) return collector;
+  if (target.collector || target.shopNo || target.token || ['bbshare','aikashop','aichong','dujiaokaHtml','terry','aijiayou','dgtXSubscription','xiaoheiwanXSubscription','insaiXSubscription','chongXSubscription','smbdXSubscription'].includes(target.kind)) return collector;
   return async (source, options = {}) => {
     try { return await collector(source, options); }
     catch (error) {

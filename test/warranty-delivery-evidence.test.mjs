@@ -10,7 +10,7 @@ const offer = description => ({ title:'Business Pro 5X 附Json 附帳密可自�
 test('Dujiao parent variant-specific disclaimer does not remove the warranted recharge SKU',()=>{
   const rows=parseDujiaoProducts({data:[{id:1,title:'ChatGPT Plus',description:'成品号无售后；代充全程质保',skus:[
     {id:2,title:'成品号',price:100,auto_stock_available:2},
-    {id:3,title:'代充',price:120,auto_stock_available:2}
+    {id:3,title:'代充 新开续费均可',price:120,auto_stock_available:2}
   ]}]},{id:'burstpro-ai',name:'QA',origin:'https://burstpro-ai.online'});
   assert.equal(rows.length,2);
   assert.equal(directOfferExclusionReason(rows[0]),null,'mixed parent description alone cannot establish SKU warranty');
@@ -47,8 +47,8 @@ test('existing stored snapshots are filtered for current, history and alert grou
   const db=openDb(':memory:');
   try{
     for(const snapshotId of ['old','new'])storeSnapshot(db,{source:'ldxp-goods',snapshotId,fetchedAt:new Date().toISOString(),products:[{productId:'claude-pro-month',name:'Claude Pro',currency:'CNY',offers:[
-      {...offer('不提供售後'),title:'Claude Pro 代充 1个月',offerId:'bad',price:1,currency:'CNY',url:'https://example.com/bad'},
-      {...offer('封号不保，正常使用质保'),title:'Claude Pro 代充 1个月',offerId:'good',price:100,currency:'CNY',url:'https://example.com/good'}
+      {...offer('不提供售後'),title:'Claude Pro 代充 1个月 新开续费均可',offerId:'bad',price:1,currency:'CNY',url:'https://example.com/bad'},
+      {...offer('封号不保，正常使用质保'),title:'Claude Pro 代充 1个月 新开续费均可',offerId:'good',price:100,currency:'CNY',url:'https://example.com/good'}
     ]}]});
     const snapshot=db.prepare("SELECT * FROM snapshots WHERE snapshot_id='new'").get();
     const product=db.prepare("SELECT * FROM products WHERE snapshot_id='new'").get();
@@ -59,4 +59,15 @@ test('existing stored snapshots are filtered for current, history and alert grou
     assert.equal(history.length,2);assert.ok(history.every(point=>point.lowest_price===100&&point.offer_count===1));
     assert.equal(db.prepare('SELECT COUNT(*) n FROM offers').get().n,4);
   }finally{db.close()}
+});
+
+
+test('account suspension exceptions retain subscription warranty without masking blanket disclaimers',()=>{
+  const offer=description=>({title:'ChatGPT Plus 官方充值 月卡',price:131,currency:'CNY',status:'in_stock',stockCount:25,offerId:'limited-ban',sourceId:'reviewed',sourceName:'reviewed',storeName:'reviewed',url:'https://example.com/products/plus',capturedAt:new Date().toISOString(),extra:{deliveryEvidence:{description,descriptionScope:'product'}}});
+  for(const text of ['质保订阅30天。账号封禁无售后：官方风控导致的账号封禁。','质保订阅30天。帐号封禁不提供售后。','只质保订阅，封号不质保不退款无售后！介意勿拍！']) {
+    assert.equal(directOfferExclusionReason(offer(text)),null,text);
+  }
+  for(const text of ['账号封禁、错充无售后','账号封禁无售后。本商品无质保','封号不质保不退款。本商品无售后','封号不质保，任何问题无售后','账号封禁风险较高，所有商品无售后']) {
+    assert.equal(directOfferExclusionReason(offer(text)),'no_warranty',text);
+  }
 });

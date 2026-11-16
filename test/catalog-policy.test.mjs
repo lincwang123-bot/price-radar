@@ -74,7 +74,7 @@ test('retired historical market groups are not restored to watch choices or week
     const service=createRetention({db,submissionsDb:privateDb,env:{},now:()=>new Date('2026-09-09T02:00:00Z')});
     const market=service.market();assert.equal(market.groups.length,0);assert.equal(market.products.length,0);
     assert.equal(weeklyMarket(privateDb,market,{now:new Date('2026-09-09T02:00:00Z')}).items.length,0);
-    assert.equal(privateDb.prepare('SELECT COUNT(*) n FROM retention_market_daily').get().n,2);
+    assert.equal(privateDb.prepare('SELECT COUNT(*) n FROM retention_market_daily_v2').get().n,2);
   } finally {privateDb.close();db.close();}
 });
 
@@ -128,6 +128,9 @@ test('bottom sponsor invitation names suitable businesses and all quote cells le
  for(const placement of ['home','category','product']){
   const invite=sponsorInvite(placement);assert.match(invite,/云服务器、IP 服务、网络检测、域名与开发者工具/);assert.match(invite,/href="https:\/\/t.me\/lincwang"/);
   const html=sponsorAdvertiseContent(new URL('https://airadar.vip/advertise?placement='+placement));
+  const intro=html.match(/<section class="sponsor-intro">[\s\S]*?<\/section>/)[0];
+  const label={product:'产品页',category:'分类页',home:'首页'}[placement];
+  assert.match(intro,new RegExp('<div class="sponsor-intro-actions"><a class="offer-shop-button" href="/submit\\?topic=sponsor_apply&placement='+placement+'&duration=7d">获取'+label+'合作报价</a><a class="sponsor-contact" href="https://t\\.me/lincwang" target="_blank" rel="noopener noreferrer">联系站长</a></div>'));
   const rates=html.match(/<section class="sponsor-rates">[\s\S]*?<\/section>/)[0];
   assert.equal((rates.match(/href="https:\/\/t.me\/lincwang" target="_blank" rel="noopener noreferrer"/g)||[]).length,9);
   assert.doesNotMatch(rates,/¥|￥/);assert.match(html,/class="sponsor-starter sponsor-fit"/);

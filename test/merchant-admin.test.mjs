@@ -1,3 +1,4 @@
+import {verifyApplicationPhone} from './helpers/merchant-phone.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
@@ -12,7 +13,7 @@ import { createMerchantApplication, getMerchantApplication, approvedMerchantBadg
 test('merchant admin protects private intake and requires tested samples before approval', async () => {
   const db = openDb(':memory:'), submissionsDb = openSubmissionsDb(':memory:');
   const bridgeDir = mkdtempSync(path.join(os.tmpdir(), 'merchant-admin-'));
-  const origin = 'https://airadar.test', password = 'merchant-admin-fixture-password';
+  const origin = 'https://airadar.test', password = 'example-fixture-secret';
   let clock = Date.now();
   const admin = createAdmin({ db, submissionsDb, merchantBridgeDir: bridgeDir, merchantPreflightResultsDir: bridgeDir, origin, username: 'owner', passwordHash: await hashAdminPassword(password), now: () => clock });
   const server = createServer(async (req, res) => {
@@ -48,7 +49,7 @@ test('merchant admin protects private intake and requires tested samples before 
     assert.doesNotMatch(detailHtml, /<script>商店/);
     assert.match(detailHtml, /href="\/admin\/merchants">店铺审核/);
     const csrf = /name="csrf" value="([^"]+)"/.exec(detailHtml)[1];
-    const fields = { action: 'approve', note: '已通过店铺公告与联系人核实归属及采集授权', version: '1', ownershipConfirmed: 'true', permissionConfirmed: 'true', sampleReviewed: 'true', csrf };
+    const fields = { action: 'approve', note: '已核对商品样例', version: '1', csrf };
     const manifestPath = path.join(bridgeDir, 'preflight-requests.json');
     renameSync(manifestPath, manifestPath + '.backup');
     mkdirSync(manifestPath);
@@ -59,8 +60,6 @@ test('merchant admin protects private intake and requires tested samples before 
     } finally { rmSync(manifestPath, { recursive: true }); renameSync(manifestPath + '.backup', manifestPath); }
     assert.equal((await post(detailPath, fields, session, { origin: 'https://evil.test' })).status, 403);
     assert.equal((await post(detailPath, { ...fields, csrf: 'forged' }, session)).status, 403);
-    assert.equal((await post(detailPath, { ...fields, ownershipConfirmed: 'false' }, session)).status, 422);
-    assert.equal((await post(detailPath, { ...fields, permissionConfirmed: '1' }, session)).status, 422);
     assert.equal((await post(detailPath, { ...fields, note: 'yes' }, session)).status, 422);
     assert.equal(getMerchantApplication(submissionsDb, id).actions.length, 0);
     assert.equal((await post(detailPath, fields, session)).status, 422, 'cannot bypass test by submitting approve directly');
@@ -68,7 +67,6 @@ test('merchant admin protects private intake and requires tested samples before 
       const testing = { ...fields, action: 'test', version: String(version), note: '' };
       assert.equal((await post(detailPath, testing, session, { origin: 'https://evil.test' })).status, 403);
       assert.equal((await post(detailPath, { ...testing, csrf: 'forged' }, session)).status, 403);
-      assert.equal((await post(detailPath, { ...testing, permissionConfirmed: 'false' }, session)).status, 422);
       assert.equal((await post(detailPath, testing, session)).status, 303, 'test does not require review note');
       assert.equal((await post(detailPath, testing, session)).status, 429);
       const request = JSON.parse(readFileSync(path.join(bridgeDir, 'preflight-requests.json'))).requests[0];
@@ -78,7 +76,8 @@ test('merchant admin protects private intake and requires tested samples before 
       writeFileSync(path.join(bridgeDir, request.id + '.json'), JSON.stringify(result));
     };
     await finishPreflight(1);
-    assert.equal((await post(detailPath, { ...fields, sampleReviewed: 'false' }, session)).status, 422);
+    assert.equal((await post(detailPath, fields, session)).status,422);
+    verifyApplicationPhone(submissionsDb,id);
     assert.equal((await post(detailPath, { ...fields, note: '字'.repeat(1501) }, session)).status, 422);
     assert.equal((await post(detailPath, { ...fields, note: '' }, session)).status, 303, 'blank note does not prevent approval once all real checks pass');
     const approved = getMerchantApplication(submissionsDb, id);
@@ -88,7 +87,7 @@ test('merchant admin protects private intake and requires tested samples before 
     assert.equal(approved.actions[0].note, '');
     assert.equal(submissionsDb.prepare('SELECT COUNT(*) n FROM merchant_mail_outbox WHERE application_id=? AND stage=?').get(id,'approved').n,1);
     const approvedHtml = await (await get(detailPath)).text();
-    assert.match(approvedHtml, /内部核验已记录/);
+    assert.doesNotMatch(approvedHtml, /内部核验已记录/);
     assert.match(approvedHtml, /等待采集/);
     assert.match(approvedHtml, /审核通过且采集成功后展示有效报价/);
     assert.doesNotMatch(approvedHtml, /badge">已接入/);

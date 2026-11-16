@@ -5,7 +5,7 @@
  const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
  const local={read(key,fallback){try{return JSON.parse(localStorage.getItem(key))??fallback;}catch{return fallback;}},write(key,value){try{localStorage.setItem(key,JSON.stringify(value));return true;}catch{return false;}}};
  const guestKey='airadar_follows_v1',seenKey='airadar_follow_seen_v1';
- let state=null,market=null,loading=null,tab='all',toastTimer;
+ let state=null,market=null,loading=null,tab='all',toastTimer,sharing=null;
  const guest=()=>{const value=local.read(guestKey,[]);return Array.isArray(value)?value.filter(w=>w&&typeof w.productKey==='string'&&typeof w.id==='string').slice(0,40):[];};
  const watches=()=>state?.account?state.watches:guest();
  function visitor(create=false){let id=local.read('airadar_follow_visitor_v1','');if(!id&&create){id=crypto.randomUUID();local.write('airadar_follow_visitor_v1',id);}return id;}
@@ -26,11 +26,11 @@
    state=results[0].status==='fulfilled'?results[0].value:{account:null,watches:[],notices:[],mailConfigured:false,csrf:''};
   })().finally(()=>{loading=null;});return loading;
  }
- function event(kind,entity='',create=false){const id=visitor(create);if(!state?.csrf||!state.account&&!id)return;api('event',{kind,entity,visitor:id}).catch(()=>{});}
+ function event(kind,entity='',create=false,productKey=''){const id=visitor(create);if(!state?.csrf||!state.account&&!id)return;api('event',{kind,entity,visitor:id,productKey}).catch(()=>{});}
  const product=key=>market?.products.find(p=>p.key===key);
  const group=id=>market?.groups.find(g=>g.id===id);
  const money=g=>g&&g.state==='available'?g.currency+' '+Number(g.price).toLocaleString('zh-CN',{maximumFractionDigits:2}):g?.state==='unavailable'?'暂时售罄':'暂未确认';
- const href=w=>{const p=product(w.productKey),g=group(w.groupId),params=new URLSearchParams({family:p?.family||g?.family||'chatgpt',product:w.productKey});if(g?.comparisonKey)params.set('spec',g.comparisonKey);return '/?'+params;};
+ const href=w=>{const p=product(w.productKey),g=group(w.groupId),params=new URLSearchParams(p?.path?{}:{family:p?.family||g?.family||'chatgpt',product:w.productKey});if(g?.comparisonKey)params.set('spec',g.comparisonKey);return (p?.path||'/')+(params.size?'?'+params:'');};
  function render(){
   const list=$('[data-watch-list]');if(!list)return;
   const a=state?.account;
@@ -89,7 +89,7 @@
     if(!data.id&&rows.length>=40)throw new Error('最多关注 40 个规格');
     const w={...data,id:data.id||crypto.randomUUID(),dropPct:Number(data.dropPct||5),leadDays:Number(data.leadDays??3),targetPrice:data.targetPrice?Number(data.targetPrice):null,createdAt:new Date().toISOString()};
     if(!local.write(guestKey,[...rows.filter(x=>x.id!==w.id),w]))throw new Error('当前浏览器不能保存数据，请允许网站存储后再试。');
-    if(!data.id)event('follow',w.id,true);if(w.renewalDate)event('renewal',w.id,true);
+    if(!data.id)event('follow',w.id,true,w.productKey);if(w.renewalDate)event('renewal',w.id,true,w.productKey);
    }
    $('#retention-watch-dialog').close();render();toast(state.account?'关注已保存':data.mode==='off'?'已保存到当前浏览器':'已保存到本机；登录并开启邮件后才会收到提醒');
   }catch(err){error.textContent=err.message;}finally{button.disabled=false;}
@@ -118,22 +118,40 @@
  }
  function wrap(ctx,text,x,y,maxWidth,lineHeight,maxLines=3){let line='',n=0;for(const char of text){if(ctx.measureText(line+char).width>maxWidth&&line){ctx.fillText(line,x,y+n*lineHeight);n++;line='';if(n>=maxLines)return y+n*lineHeight;}line+=char;}if(line)ctx.fillText(line,x,y+n*lineHeight);return y+(n+1)*lineHeight;}
  async function share(groupId,date=''){
-  await init();const g=group(groupId);if(!g)throw new Error('该规格暂不可分享');
+  await init();const g=group(groupId);
   const historical=date?await api('share?group='+encodeURIComponent(groupId)+'&date='+date):null;
-  const data=historical?.group||g;if(!historical&&g.state!=='available')throw new Error('当前没有有效报价可生成卡片');
+  const data=historical?.group||g;if(!data||!historical&&g.state!=='available')throw new Error('当前没有有效报价可分享');
+  const link='https://airadar.vip'+(historical?'/weekly?'+new URLSearchParams({date:historical.date,group:groupId}):href({productKey:g.productKey,groupId:g.id}));
+  const context=historical?historical.group.history.series[0].day+' — '+historical.group.history.series.at(-1).day+' · '+historical.group.attribution.label:'观察截至 '+new Date(data.observedAt).toLocaleString('zh-CN');
+  const text=data.name+' · '+data.spec+' · '+data.currency+' '+data.price+'（'+(historical?'末次观察起价':'已收录同规格起价')+'）';
+  sharing={data,historical,link,context,text};
+  $('[data-share-link-label]').textContent=historical?'包含产品、规格与观察日期的链接':'包含产品与购买规格的链接';
+  $('[data-share-summary]').textContent=text;$('[data-share-context]').textContent=context;$('[data-share-link]').value=link;
+  $('[data-share-x]').href='https://twitter.com/intent/tweet?'+new URLSearchParams({text:text+'\n'+context,url:link});
+  $('[data-share-telegram]').href='https://t.me/share/url?'+new URLSearchParams({url:link,text:text+'\n'+context});
+  $('#retention-share-dialog').showModal();
+ }
+ async function shareImage(){
+  if(!sharing)return;const {data,historical,context}=sharing;
   const canvas=document.createElement('canvas');canvas.width=1200;canvas.height=675;const c=canvas.getContext('2d');
   c.fillStyle='#f3f6ee';c.fillRect(0,0,1200,675);c.fillStyle='#1d654f';c.fillRect(0,0,16,675);c.font='600 22px system-ui';c.fillText('AIradar / AI 产品价格观察',65,65);
   c.fillStyle='#1d3227';c.font='700 56px system-ui';wrap(c,data.name,65,158,1070,65,2);
   c.font='400 24px system-ui';c.fillStyle='#607567';wrap(c,data.spec+' · '+data.currency,65,260,1060,36,2);
   c.fillStyle='#1d654f';c.font='700 90px system-ui';c.fillText(data.currency+' '+data.price,65,425);c.font='400 22px system-ui';c.fillStyle='#607567';c.fillText(historical?'最后观察起价 · 此前 '+historical.firstPrice:'当前已收录的同规格挂牌起价',65,468);
   c.fillStyle='#d6e1d5';c.fillRect(65,522,1070,1);c.font='400 22px system-ui';c.fillStyle='#344e3d';c.fillText('airadar.vip · 查价格，看变化',65,570);
-  c.font='400 17px system-ui';c.fillStyle='#788779';c.fillText('观察截至 '+(date||new Date(g.observedAt).toLocaleString('zh-CN'))+' · 最终价格与适用条件以店铺结算页为准',65,616);
+  c.font='400 17px system-ui';c.fillStyle='#788779';wrap(c,context+' · 最终价格与适用条件以店铺结算页为准',65,608,1070,24,2);
   const blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/png'));if(!blob)throw new Error('卡片生成失败');
-  download(blob,'AIradar-'+g.productKey+'-'+(date||new Date().toISOString().slice(0,10))+'.png');
-  const link=date?'https://airadar.vip/weekly?date='+date:'https://airadar.vip'+href({productKey:g.productKey,groupId:g.id});
-  try{await navigator.clipboard.writeText(link);toast('分享卡片已生成，页面链接已复制。');}catch{toast('分享卡片已生成；可复制浏览器中的页面地址。');}event('share',g.id,true);
+  download(blob,'AIradar-'+data.productKey+'-'+(historical?.date||new Date().toISOString().slice(0,10))+'.png');
+  toast('分享图片已下载。发送时可附上这里的页面链接。');event('share',data.id,true,data.productKey);
  }
  document.addEventListener('click',async e=>{
+  const shareAction=e.target.closest('[data-share-copy],[data-share-image],[data-share-x],[data-share-telegram]');
+  if(shareAction&&sharing){
+   if(shareAction.matches('a')){event('share',sharing.data.id,true,sharing.data.productKey);return;}
+   e.preventDefault();shareAction.disabled=true;
+   try{if(shareAction.hasAttribute('data-share-image'))await shareImage();else{await navigator.clipboard.writeText(sharing.link);toast('已复制包含产品、规格与观察范围的链接。');event('share',sharing.data.id,true,sharing.data.productKey);}}
+   catch{const input=$('[data-share-link]');input.focus();input.select();toast('操作未完成。可长按或手动复制上方链接。');}finally{shareAction.disabled=false;}return;
+  }
   const button=e.target.closest('[data-follow-product],[data-add-watch],[data-edit-watch],[data-login],[data-remove-watch],[data-list-tab],[data-close-dialog],[data-logout],[data-email-toggle],[data-calendar],[data-share-group],[data-delete-account],[data-import-watches]');if(!button)return;
   e.preventDefault();
   try{

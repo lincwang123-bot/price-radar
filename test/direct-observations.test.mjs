@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { openDb, storeSnapshot, lastSnapshotId } from "../lib/db.mjs";
 import { pull } from "../sources/direct-shops.mjs";
+import {projectProduct} from '../lib/quote-policy.mjs';
 
 test("直采每轮观察独立记录：A→B→A、不变与失败恢复均保留当前状态", async (t) => {
   const dataDir = mkdtempSync(path.join(tmpdir(), "direct-observations-"));
@@ -42,11 +43,15 @@ test("直采每轮观察独立记录：A→B→A、不变与失败恢复均保�
     assert.equal(db.prepare("SELECT COUNT(*) AS n FROM snapshots").get().n, 6);
     fail=true;t.mock.timers.tick(25*60*60_000);
     const expired=await pull(ctx);assert.equal(expired.snapshot.stale,true);
-    assert.equal(expired.snapshot.products.length,0,"expired cache must not keep a current minimum");
+    assert.equal(expired.snapshot.products.length,1,"failed collection keeps the last observed price");
     storeSnapshot(db,expired.snapshot);
-    assert.equal(db.prepare("SELECT COUNT(*) n FROM products WHERE snapshot_id=?").get(lastSnapshotId(db,"direct-shops")).n,0);
+    const snapshot=db.prepare("SELECT * FROM snapshots WHERE snapshot_id=?").get(lastSnapshotId(db,'direct-shops'));
+    const product=db.prepare("SELECT * FROM products WHERE snapshot_id=?").get(snapshot.snapshot_id);
+    const projected=projectProduct(db,'direct-shops',snapshot,product);
+    assert.equal(projected.lowest_price,null);assert.equal(projected.offers[0].quote_retained,true);assert.equal(projected.offers[0].price,100);
+    assert.equal(projected.offers[0].captured_at,snapshots[5].products[0].offers[0].capturedAt);
     const health=JSON.parse(db.prepare("SELECT value FROM meta WHERE key='health:direct-targets'").get().value);
-    assert.equal(health.targets[0].status,"unavailable");assert.equal(health.targets[0].target,"aisou");
+    assert.equal(health.targets[0].status,"stale");assert.equal(health.targets[0].target,"aisou");
   } finally {
     db.close();
     t.mock.restoreAll();

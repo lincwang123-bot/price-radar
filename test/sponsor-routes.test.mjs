@@ -10,15 +10,15 @@ import {sponsorDirectory,sponsorEntries,sponsorOfferKey,saveAdminSponsor} from '
 
 async function fixture(run){
  const db=openDb(':memory:'),submissionsDb=openSubmissionsDb(':memory:'),analytics=openAnalytics(':memory:','sponsor-route-fixture-secret-over-32-characters');
- const password='only-used-in-this-fixture-1234',origin='https://airadar.test';
- storeSnapshot(db,{source:'direct-shops',snapshotId:'sponsor-fixture',products:[{productId:'chatgpt-plus-recharge',name:'ChatGPT Plus',platform:'ChatGPT',currency:'CNY',offers:[89,99,109,119,129].map((price,i)=>({offerId:'merchant'+i,title:'ChatGPT Plus 代充 1个月',storeName:'虚构店铺 '+i,price,currency:'CNY',status:'in_stock',stockCount:1,url:'https://sponsor'+i+'.test/product/1'}))}]});
+ const password= 'example-fixture-secret',origin='https://airadar.test';
+ storeSnapshot(db,{source:'direct-shops',snapshotId:'sponsor-fixture',products:[{productId:'chatgpt-plus-recharge',name:'ChatGPT Plus',platform:'ChatGPT',currency:'CNY',offers:Array.from({length:15},(_,i)=>89+i*10).map((price,i)=>({offerId:'merchant'+i,title:'ChatGPT Plus 代充 1个月 新开续费均可',storeName:'虚构店铺 '+i,price,currency:'CNY',status:'in_stock',stockCount:1,url:'https://sponsor'+i+'.test/product/1'}))}]});
  const app=createApp({db,submissionsDb,analytics,adminOptions:{username:'owner',passwordHash:await hashAdminPassword(password),origin}});
  try{
   await new Promise(r=>app.listen(0,'127.0.0.1',r));const base='http://127.0.0.1:'+app.address().port;
   const get=(path,headers={})=>fetch(base+path,{redirect:'manual',headers});
   const post=(path,fields,cookie,extra={})=>fetch(base+path,{method:'POST',redirect:'manual',headers:{origin,'content-type':'application/x-www-form-urlencoded',cookie,...extra},body:new URLSearchParams(fields)});
   const login=async()=>{const r=await get('/admin/login'),h=await r.text(),csrf=h.match(/name="csrf" value="([^"]+)"/)[1],cookie=r.headers.getSetCookie()[0].split(';')[0];const response=await post('/admin/login',{csrf,username:'owner',password},cookie);assert.equal(response.status,303);const session=response.headers.getSetCookie()[0].split(';')[0];const page=await(await get('/admin/sponsors',{cookie:session})).text();return {cookie:session,csrf:page.match(/name="csrf" value="([^"]+)"/)[1]}};
-  const entries=sponsorEntries(sponsorDirectory(db));assert.equal(entries.length,5);
+  const entries=sponsorEntries(sponsorDirectory(db));assert.equal(entries.length,15);
   const local=t=>new Date(t+8*3600000).toISOString().slice(0,16);
   const fields=(i,placement='product')=>({action:'approve',offer_key:sponsorOfferKey(entries[i]),placement,label:'测试赞助商 '+i,version:'0',reviewed:'true',start_at:local(Date.now()-60000),end_at:local(Date.now()+7*86400000),amount_cny:'99'});
   await run({db,submissionsDb,analytics,base,get,post,login,fields});
@@ -33,13 +33,26 @@ test('admin draft/approve/pause flow is authenticated, CSRF protected, scoped an
  assert.equal((await post('/admin/sponsors',{...fields(0),csrf,reviewed:'false'},cookie)).status,422);
  assert.equal((await post('/admin/sponsors',draft,cookie)).status,303);
  let row=analytics.outbound.listCampaigns()[0];assert.equal(row.status,'draft');assert.equal(row.amount_cny,99);assert.match(await(await get('/admin/sponsors?id='+row.id,{cookie})).text(),/name="amount_cny"[^>]+value="99"/);
- const route='/?family=chatgpt&product=chatgpt-plus';assert.doesNotMatch(await(await get(route)).text(),/<article class="sponsor-card"/);
+  const route='/prices/chatgpt-plus';
+  const bare=await(await get(route)).text();
+  assert.doesNotMatch(bare,/<article class="sponsor-card"|sponsored-area/);
+  assert.ok(bare.indexOf('class="directory-intro"')<bare.indexOf('id="quote-results"'));
+  assert.ok(bare.indexOf('sponsor-invite')>bare.indexOf('id="quote-results"'));
  assert.equal((await post('/admin/sponsors',{...fields(0),id:row.id,version:'1',csrf},cookie)).status,303);
  assert.equal(analytics.outbound.listCampaigns().find(c=>c.id===row.id).amount_cny,99);
  for(let i=1;i<4;i++)assert.equal((await post('/admin/sponsors',{...fields(i),csrf},cookie)).status,303);
  assert.equal((await post('/admin/sponsors',{...fields(4),csrf},cookie)).status,409);
  const html=await(await get(route)).text();assert.equal((html.match(/<article class="sponsor-card"/g)||[]).length,4);
- assert.ok(html.indexOf('<section class="surface sponsored-area')>html.indexOf('<div class="directory-quotes">'));
+ assert.equal((html.match(/data-directory-quote data-price=/g)||[]).length,10);
+ assert.match(html,/支持本站的赞助商/);assert.match(html,/Sponsored \/ 广告/);
+ const prices=[...html.matchAll(/data-directory-quote data-price="(\d+)"/g)].map(m=>Number(m[1]));
+ assert.deepEqual(prices,[...prices].sort((a,b)=>a-b));
+ assert.ok(html.indexOf('class="directory-intro"')<html.indexOf('<section class="surface sponsored-area'));
+ assert.ok(html.indexOf('<section class="surface sponsored-area')<html.indexOf('id="quote-results"'));
+ assert.ok(html.indexOf('<section class="surface sponsored-area')<html.indexOf('<div class="directory-quotes">'));
+ const quotes=html.slice(html.indexOf('<div class="directory-quotes">'),html.indexOf('<p class="note">第 '));
+ assert.doesNotMatch(quotes,/sponsor-card|sponsored-area/);
+ const secondPage=await(await get(route+'?page=2')).text();assert.equal((secondPage.match(/data-directory-quote data-price=/g)||[]).length,5);assert.equal((secondPage.match(/<article class="sponsor-card"/g)||[]).length,4);assert.ok(secondPage.indexOf('<section class="surface sponsored-area')<secondPage.indexOf('id="quote-results"'));assert.ok(secondPage.indexOf('<section class="surface sponsored-area')<secondPage.indexOf('data-directory-quote data-price='));
  assert.doesNotMatch(await(await get('/')).text(),/<article class="sponsor-card"/);
  assert.doesNotMatch(await(await get('/?family=chatgpt')).text(),/<article class="sponsor-card"/);
  assert.equal((await post('/admin/sponsors',{action:'pause',id:row.id,version:'1',csrf},cookie)).status,409);
@@ -49,10 +62,10 @@ test('admin draft/approve/pause flow is authenticated, CSRF protected, scoped an
  const csv=await get('/admin/sponsors.csv',{cookie});assert.equal(csv.status,200);assert.match(csv.headers.get('content-type'),/text\/csv/);assert.match(await csv.text(),/测试赞助商 0/);
 }));
 
-test('home/category/product show their own sponsors only, current availability enforced and view endpoint signed',()=>fixture(async({db,analytics,fields,get,base})=>{
+test('home/category/product show their own scheduled sponsors regardless of stock and view endpoint stays signed',()=>fixture(async({db,analytics,fields,get,base})=>{
  for(const placement of ['home','category','product'])saveAdminSponsor(db,analytics,fields(0,placement),'fixture');
- for(const route of ['/','/?family=chatgpt','/?family=chatgpt&product=chatgpt-plus','/product?source=direct-shops&id=chatgpt-plus-recharge']){
-  const html=await(await get(route)).text();assert.equal(html.match(/<article class="sponsor-card"/g).length,1,route);assert.match(html,/data-sponsor-token="\d{10}\.[a-f0-9]{64}"/);
+ for(const route of ['/','/?family=chatgpt','/prices/chatgpt-plus','/prices/chatgpt-plus']){
+  const html=await(await get(route)).text();assert.equal(html.match(/<article class="sponsor-card"/g).length,1,route);assert.match(html,/data-sponsor-token="v2\.\d{10}\.\d+\.[A-Za-z0-9_-]*\.[a-f0-9]{64}"/);
   const href=html.match(/<article class="sponsor-card"[^>]*>[\s\S]*?href="([^"]+)"/)[1].replaceAll('&amp;','&');assert.equal((await get(href)).status,200);
  }
  assert.doesNotMatch(await(await get('/?family=claude')).text(),/<article class="sponsor-card"/);
@@ -62,7 +75,7 @@ test('home/category/product show their own sponsors only, current availability e
  assert.equal((await send('forged')).status,200);assert.equal(analytics.outbound.report(7).length,0);
  assert.equal((await send(token)).status,200);assert.equal((await send(token)).status,200);assert.equal(analytics.outbound.report(7)[0].visible,1);
  db.prepare("UPDATE offers SET status='sold_out'").run();
- for(const route of ['/','/?family=chatgpt','/?family=chatgpt&product=chatgpt-plus'])assert.doesNotMatch(await(await get(route)).text(),/<article class="sponsor-card"/);
+ for(const route of ['/','/?family=chatgpt','/prices/chatgpt-plus'])assert.equal(((await(await get(route)).text()).match(/<article class="sponsor-card"/g)||[]).length,1);
 }));
 
 test('public sponsor inquiry hides fees, preserves demos and stores no implied quote',()=>fixture(async({get,base,submissionsDb,analytics})=>{

@@ -1,4 +1,5 @@
 import test from "node:test";
+import {ARTICLES} from '../lib/guides.mjs';
 import assert from "node:assert/strict";
 import { openAnalytics, analyticsCsv } from "../lib/analytics.mjs";
 import { openDb } from "../lib/db.mjs";
@@ -18,7 +19,7 @@ test('指南统计仅记录固定文章标识和同站下一步比价，不保�
   a.record(request(undefined,{url:article,headers:{...request().headers,'user-agent':'Mozilla/5.0 PriceRadarQA'}}),200,now);
   a.record(request(undefined,{url:'/guides/missing'}),200,now);
   a.record(request(undefined,{url:article}),404,now);
-  const r=a.contentReport(7,now),row=r.rows.find(r=>r.path===article);assert.equal(row.views,1);assert.equal(row.quoteVisits,1);assert.equal(r.rows.find(r=>r.path==='/help/price-alerts').views,1);assert.equal(r.rows.length,13);assert.ok(r.rows.some(r=>r.path==='/guides/chatgpt-go-vs-plus'));
+  const r=a.contentReport(7,now),row=r.rows.find(r=>r.path===article);assert.equal(row.views,1);assert.equal(row.quoteVisits,1);assert.equal(r.rows.find(r=>r.path==='/help/price-alerts').views,1);assert.equal(r.rows.length,ARTICLES.length);assert.ok(r.rows.some(r=>r.path==='/guides/chatgpt-go-vs-plus'));
   a.record(request(undefined,{url:'/official-prices?brand=Claude',headers:{...request().headers,referer:'https://airadar.vip/guides/official-subscription-channels'}}),200,now);
   assert.equal(a.contentReport(7,now).rows.find(r=>r.path==='/guides/official-subscription-channels').quoteVisits,1);
   const stored=JSON.stringify(a.db.prepare('SELECT * FROM analytics_content_days').all());assert.doesNotMatch(stored,/private|never-store|203\.0\.113|https:|secret/);

@@ -1,7 +1,8 @@
+import {reviewWithProductFixture as reviewMerchantApplication} from './fixtures/merchant-approval.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {openSubmissionsDb,createSubmission} from '../lib/submissions.mjs';
-import {createMerchantApplication,getMerchantApplication,reviewMerchantApplication,convertSupplySubmission} from '../lib/merchant-onboarding.mjs';
+import {createMerchantApplication,getMerchantApplication,convertSupplySubmission} from '../lib/merchant-onboarding.mjs';
 import {importSupplyIntakes} from '../lib/merchant-intake.mjs';
 import {recordMerchantReply,listMerchantReplies,queueReplyClarification} from '../lib/merchant-replies.mjs';
 import {queueMerchantMail,drainMerchantMail,merchantMailStatus} from '../lib/merchant-mail.mjs';

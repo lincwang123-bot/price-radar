@@ -13,7 +13,7 @@ import {createMerchantX,normalizeXHandle,shopPublicId,shopDescriptorForOffer} fr
 
 function fixture(){
  const db=openSubmissionsDb(':memory:'),quotes=openDb(':memory:');let time=new Date();
- storeSnapshot(quotes,{source:'ldxp-goods',snapshotId:'x-shops',products:[{productId:'chatgpt-plus-recharge',name:'ChatGPT Plus',currency:'CNY',offers:[{offerId:'one',title:'ChatGPT Plus 代充1个月',price:99,currency:'CNY',status:'in_stock',storeName:'合成店铺',url:'https://merchant.com/product/1'}]}]});
+ storeSnapshot(quotes,{source:'ldxp-goods',snapshotId:'x-shops',products:[{productId:'chatgpt-plus-recharge',name:'ChatGPT Plus',currency:'CNY',offers:[{offerId:'one',title:'ChatGPT Plus 代充1个月 新开续费均可',price:99,currency:'CNY',status:'in_stock',storeName:'合成店铺',url:'https://merchant.com/product/1'}]}]});
  const readDirectory=()=>{const snapshot=quotes.prepare('SELECT * FROM snapshots').get();return buildProductDirectory([{source:'ldxp-goods',products:quotes.prepare('SELECT * FROM products').all().map(p=>projectProduct(quotes,'ldxp-goods',snapshot,p))}]);};
  const service=createMerchantX({privateDb:db,readDirectory,secret:'s'.repeat(64),now:()=>time});
  const shop=[...service.catalog().values()][0];assert.ok(shop);
@@ -70,7 +70,7 @@ test('claims require publication consent, bound drafts expire and requests are t
 });
 
 test('HTTP claim flow requires same-origin CSRF and admin review; approved X displays beside quotes and in a shareable shop page',async()=>{
- const f=fixture(),bridge=mkdtempSync(path.join(os.tmpdir(),'airadar-x-test-'));const adminOrigin='https://airadar.test',password='synthetic-x-review-password';
+ const f=fixture(),bridge=mkdtempSync(path.join(os.tmpdir(),'airadar-x-test-'));const adminOrigin='https://airadar.test',password= 'example-fixture-secret';
  const app=createApp({db:f.quotes,submissionsDb:f.db,adminOptions:{origin:adminOrigin,username:'owner',passwordHash:await hashAdminPassword(password),merchantBridgeDir:bridge,merchantPreflightResultsDir:bridge}});
  await new Promise(r=>app.listen(0,'127.0.0.1',r));const base='http://127.0.0.1:'+app.address().port;
  const get=(url,cookie='')=>fetch(base+url,{headers:{cookie},redirect:'manual'});
@@ -83,7 +83,7 @@ test('HTTP claim flow requires same-origin CSRF and admin review; approved X dis
   response=await post('start',input);assert.equal(response.status,201);const receipt=await response.json();
   assert.equal((await get('/api/shop-claims/start')).status,405);
   response=await post('submit',{id:receipt.id,token:receipt.token,proofType:'profile',details:'店铺的联系页已注明本 X 账号'});assert.equal(response.status,200);
-  const productPath='/?family=chatgpt&product=chatgpt-plus',before=await(await get(productPath)).text();assert.ok(!before.includes('class="merchant-x"'));
+  const productPath='/prices/chatgpt-plus',before=await(await get(productPath)).text();assert.ok(!before.includes('class="merchant-x"'));
   const detailPath='/admin/x-claims/'+receipt.id;assert.equal((await get(detailPath)).status,303);
   const login=await get('/admin/login'),loginHtml=await login.text(),loginToken=loginHtml.match(/name="csrf" value="([^"]+)"/)[1],loginCookie=login.headers.getSetCookie()[0].split(';')[0];
   const adminPost=(url,fields,adminCookie)=>fetch(base+url,{method:'POST',redirect:'manual',headers:{Origin:adminOrigin,Cookie:adminCookie,'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams(fields)});
@@ -92,7 +92,7 @@ test('HTTP claim flow requires same-origin CSRF and admin review; approved X dis
   const fields={csrf:adminCsrf,version:2,action:'approve',note:'private-check: inspected live X code and independent shop control'};
   assert.equal((await adminPost(detailPath,fields,adminCookie)).status,422);
   assert.equal((await adminPost(detailPath,{...fields,xConfirmed:'true',shopConfirmed:'true'},adminCookie)).status,303);
-  const after=await(await get(productPath)).text();assert.ok(after.includes('href="https://x.com/shop_owner"'));assert.ok(after.includes('class="merchant-x"'));
+  const after=await(await get(productPath,'airadar_nocache=1')).text();assert.ok(after.includes('href="https://x.com/shop_owner"'));assert.ok(after.includes('class="merchant-x"'));
   assert.deepEqual([...after.matchAll(/data-price="([^"]+)"/g)].map(m=>m[1]),[...before.matchAll(/data-price="([^"]+)"/g)].map(m=>m[1]));
   const legacy=await(await get('/product?source=ldxp-goods&id=chatgpt-plus-recharge')).text();assert.equal((legacy.match(/class="merchant-x"/g)||[]).length,2);
   const shop=await(await get('/shop?id='+f.shop.id)).text();assert.ok(shop.includes('class="merchant-x"'));assert.ok(shop.includes('https://twitter.com/intent/tweet?'));assert.ok(shop.includes('rel="canonical" href="https://airadar.vip/shop?id='+f.shop.id+'"'));

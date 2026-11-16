@@ -13,11 +13,11 @@ const reply=(data={shop_no:'S332568',shop_alias:'XIAOQING2'})=>new Response(JSON
 test('16688 aliases resolve through the exact official endpoint and preserve canonical deduplication',async()=>{
  let calls=0;const resolve=createMerchantShopUrlResolver({fetchFactory:(origin,limits)=>{
   assert.equal(origin,'https://www.16688.com.cn');assert.equal(limits.maxRequests,1);assert.equal(limits.timeoutMs,8000);
-  return async(url,init)=>{calls++;assert.equal(url,origin+'/shopApi/shop/detail');assert.equal(init.method,'POST');assert.deepEqual(JSON.parse(init.body),{shop_no:'XIAOQING2'});return reply();};
+  return async(url,init)=>{calls++;assert.equal(url,origin+'/shopApi/shop/detail');assert.equal(init.method,'POST');const token=JSON.parse(init.body).shop_no;assert.ok(['XIAOQING2','S332568'].includes(token));return reply();};
  }});
  const normalized=await normalizeMerchantSubmission(body,{resolveShopUrl:resolve});assert.equal(normalized.shopUrl,'https://www.16688.com.cn/shop/S332568');assert.equal(body.shopUrl,'https://www.16688.com.cn/shop/XIAOQING2');
  assert.equal(await resolve('https://16688.com.cn/shop/XIAOQING2/'),normalized.shopUrl);assert.equal(calls,1);
- assert.equal(await resolve('https://16688.com.cn/shop/S332568'),'https://16688.com.cn/shop/S332568');assert.equal(await resolve('https://xiaocaiyu.vip/'),'https://xiaocaiyu.vip/');assert.equal(calls,1);
+ assert.equal(await resolve('https://16688.com.cn/shop/S332568'),normalized.shopUrl);assert.equal(await resolve('https://xiaocaiyu.vip/'),'https://xiaocaiyu.vip/');assert.equal(calls,2);
  const db=openSubmissionsDb(':memory:');try{createMerchantApplication(db,normalized);assert.throws(()=>createMerchantApplication(db,{...body,shopUrl:'https://16688.com.cn/shop/S332568'}),e=>e.status===409);assert.equal(db.prepare('SELECT identity FROM merchant_applications').get().identity,'shop:16688:S332568');}finally{db.close();}
 });
 
@@ -51,7 +51,8 @@ test('the authenticated submission API awaits alias resolution, rejects duplicat
  try{
   const store=createRetentionStore(privateDb,{secret:'fixture-alias-secret'.repeat(3)}),auth=createAccountAuth(store);
   const challenge=auth.requestCode(body.email,'fixture','register'),code=JSON.parse(privateDb.prepare('SELECT payload FROM retention_mail WHERE event_key=?').get('code:'+challenge.requestId).payload).code;
-  const user=await auth.register({...challenge,code,password:'fixture merchant password 73',phone:'13800138000',contactType:'wechat',contactValue:'fixture_owner'});
+  const user=await auth.register({...challenge,code,password:'fixture merchant password 73',phone:'10000000000',contactType:'wechat',contactValue:'fixture_owner'});
+  privateDb.prepare('INSERT INTO reader_phone_verifications(account_id,phone,verified_at) VALUES(?,?,?)').run(user.account.id,'10000000000',new Date().toISOString());
   const page=await fetch(base+'/submit-shop',{headers:{cookie:'airadar_reader='+user.token}}),html=await page.text();const csrf=html.match(/name="csrf-token" content="([^"]+)"/)[1];
   const csrfCookie=page.headers.getSetCookie().map(v=>v.split(';')[0]).join('; ');const headers={origin:base,'content-type':'application/json','x-csrf-token':csrf,cookie:csrfCookie+'; airadar_reader='+user.token};
   const send=(payload,extra={})=>fetch(base+'/api/merchant-applications',{method:'POST',headers:{...headers,...extra},body:JSON.stringify(payload)});
@@ -59,7 +60,15 @@ test('the authenticated submission API awaits alias resolution, rejects duplicat
   assert.equal((await send({...body,consent:false})).status,422);assert.equal(resolveCalls,0);
   let r=await send(body);assert.equal(r.status,201);assert.ok((await r.json()).id);assert.equal(resolveCalls,1);
   assert.equal(privateDb.prepare('SELECT shop_url FROM merchant_applications').get().shop_url,'https://www.16688.com.cn/shop/S332568');
-  r=await send({...body,shopUrl:'https://16688.com.cn/shop/S332568'});assert.equal(r.status,409);assert.equal(resolveCalls,1);
+  r=await send({...body,shopUrl:'https://16688.com.cn/shop/S332568'});assert.equal(r.status,409);assert.equal(resolveCalls,2);
   const inFlight=send({...body,shopUrl:'https://16688.com.cn/shop/SECOND'});await waiting;store.logout(user.token);release();assert.equal((await inFlight).status,401);assert.equal(privateDb.prepare('SELECT COUNT(*) n FROM merchant_applications').get().n,1);
  }finally{release?.();await new Promise(r=>server.close(r));await server.retentionWorkflowDone();await server.merchantWorkflowDone();db.close();privateDb.close();}
+});
+
+ test('numeric aliases must resolve before validation and canonical deduplication',async()=>{
+ const resolve=createMerchantShopUrlResolver({fetchFactory:()=>async()=>reply({shop_no:'S454911',shop_alias:'S19988'})});
+ const result=await normalizeMerchantSubmission({...body,shopUrl:'https://www.16688.com.cn/shop/S19988'},{resolveShopUrl:resolve});
+ assert.equal(result.shopUrl,'https://www.16688.com.cn/shop/S454911');
+ const wrong=createMerchantShopUrlResolver({fetchFactory:()=>async()=>reply({shop_no:'S454911',shop_alias:'S99999'})});
+ await assert.rejects(wrong('https://16688.com.cn/shop/S19988'),e=>e.status===422);
 });

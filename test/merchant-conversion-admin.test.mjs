@@ -7,7 +7,7 @@ import { createAdmin, hashAdminPassword } from '../lib/admin.mjs';
 import { getMerchantApplication } from '../lib/merchant-onboarding.mjs';
 
 test('conversion routes protect authorization, preserve editable failures and only create pending applications', async () => {
-  const db=openDb(':memory:'),submissionsDb=openSubmissionsDb(':memory:'),origin='https://airadar.test',password='conversion-admin-fixture-password';
+  const db=openDb(':memory:'),submissionsDb=openSubmissionsDb(':memory:'),origin='https://airadar.test',password= 'example-fixture-secret';
   for(const [n,topic]of [[1,'supply'],[2,'demand'],[3,'supply'],[4,'supply']])submissionsDb.prepare(`INSERT INTO cooperation_submissions(public_id,created_at,topic,subject,product_area,scale,assurance,settlement,source_url,details,contact,consent_at,content_hash)
     VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(`CO-20260907-00000000000${n}`,new Date().toISOString(),topic,'供应广告标题不是店名','chatgpt','small','conditional','cny','https://conversion-shop.com/','原投稿说明','private-source@example.org',new Date().toISOString(),String(n));
   let aliasCalls=0;
@@ -37,7 +37,7 @@ test('conversion routes protect authorization, preserve editable failures and on
       const body=await failed.text();assert.match(body,/已核实的店铺/);assert.match(body,/已补充核验材料/);
       assert.doesNotMatch(body,/<input[^>]*type="checkbox"[^>]*checked/);
     }
-    const secret='sk-abcdefghijklmnopqrstuvwxyz123456';
+    const secret= 'example-fixture-secret';
     const rejected=await post(route,{...fields,note:secret},cookie);assert.equal(rejected.status,422);assert.doesNotMatch(await rejected.text(),new RegExp(secret));
     const result=await post(route,fields,cookie);assert.equal(result.status,303);
     const destination=result.headers.get('location');assert.match(destination,/^\/admin\/merchants\/MA-/);

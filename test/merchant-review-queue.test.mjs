@@ -123,7 +123,7 @@ test('fresh checks after restore and supply conversion remain approvable with ol
 });
 test('admin queue actions enforce session, origin, CSRF and version, update filters and preserve notes',async t=>{
   const {db,options}=fixture(t),id=supply(db,1),ma=createMerchantApplication(db,payload(1),options);
-  const origin='https://airadar.test',password='queue-admin-fixture-password';
+  const origin='https://airadar.test',password= 'example-fixture-secret';
   const admin=createAdmin({submissionsDb:db,merchantBridgeDir:options.bridgeDir,merchantPreflightResultsDir:options.resultsDir,origin,username:'owner',passwordHash:await hashAdminPassword(password)});
   const server=createServer(async(req,res)=>{try{await admin(req,res,new URL(req.url,origin));}catch(error){res.statusCode=500;res.end(error.message);}});
   await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
@@ -136,13 +136,13 @@ test('admin queue actions enforce session, origin, CSRF and version, update filt
     const signed=await post('/admin/login',{username:'owner',password,csrf:/name="csrf" value="([^"]+)"/.exec(loginHtml)[1]},login.headers.getSetCookie()[0].split(';')[0]);
     const cookie=signed.headers.getSetCookie()[0].split(';')[0],get=url=>request(url,{headers:{cookie}});
     const initial=await (await get('/admin/merchants')).text(),csrf=/name="csrf" value="([^"]+)"/.exec(initial)[1];
-    assert.match(initial,/待审核 · 2/);assert.match(initial,/填写意见 · 拒绝 \/ 暂存/);
+    assert.match(initial,/新申请 \/ 检测中 · 2/);assert.match(initial,/填写意见 · 拒绝 \/ 暂存/);
     const fields={action:'reject',queueAction:'true',version:'1',csrf,note:'<script>不在收录范围</script>',returnStatus:'pending',returnPage:'1'};
     for(const [change,headers,status] of [[{csrf:'forged'},{},403],[{},{origin:'https://evil.test'},403],[{version:'2'},{},409],[{action:'approve'},{},422]])assert.equal((await post(target,{...fields,...change},cookie,headers)).status,status);
     const mailCount=db.prepare('SELECT COUNT(*) n FROM merchant_mail_outbox').get().n;
     const rejected=await post(target,fields,cookie);
     assert.equal(rejected.status,303);assert.equal(rejected.headers.get('location'),'/admin/merchants?status=pending&page=1');
-    const pending=await (await get('/admin/merchants')).text();assert.match(pending,/待审核 · 1/);assert.doesNotMatch(pending,new RegExp('data-application-id="'+id+'"'));
+    const pending=await (await get('/admin/merchants')).text();assert.match(pending,/新申请 \/ 检测中 · 1/);assert.doesNotMatch(pending,new RegExp('data-application-id="'+id+'"'));
     const archived=await (await get('/admin/merchants?status=rejected')).text();assert.match(archived,/已拒绝 · 1/);assert.match(archived,/&lt;script&gt;不在收录范围/);assert.doesNotMatch(archived,/<script>不在收录范围/);
     const detail=await (await get(target)).text();assert.match(detail,/处理记录/);assert.match(detail,/自动检测已停止/);assert.doesNotMatch(detail,/核对资料并转为正式申请/);
     assert.equal((await post(target,{...fields,action:'restore',version:'2',returnStatus:'rejected'},cookie)).status,303);

@@ -21,6 +21,7 @@ test('BriskAI publishes subscription details and listed prices without misclassi
   assert.deepEqual(requests.map(url => new URL(url).pathname), ['/user/api/index/commodity', '/item/2']);
   assert.equal(offers.length, 2);
   assert.equal(offers[0].price, 130);
+  assert.equal(offers[0].extra.publicUserPrice, 125);
   assert.equal(offerDelivery(offers[0]).kind, 'recharge');
   assert.match(offers[0].extra.deliveryEvidence.description, /覆盖时间/);
   assert.match(offers[0].extra.publicDescription, /帐号共享/);

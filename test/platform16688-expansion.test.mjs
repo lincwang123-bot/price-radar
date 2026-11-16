@@ -33,7 +33,7 @@ test('public source-square discovery adds verified retail shops without ingestin
       { goods_no: 'G3', name: 'Codex Plus 月卡代充', description: '<p>无质保无售后</p>', price: 9, stock_available_quantity: 2 },
     ] } });
   } });
-  assert.deepEqual(calls, ['https://www.16688.com.cn/shopApi/goods/list']);
+  assert.deepEqual(calls, ['https://www.16688.com.cn/shopApi/goods/list','https://www.16688.com.cn/shopApi/payment/list']);
   const visible = groupDirectOffers(rows).flatMap(row => row.offers);
   assert.equal(visible.length, 1);
   assert.equal(visible[0].price, 114.8);

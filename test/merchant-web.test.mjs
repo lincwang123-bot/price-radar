@@ -1,3 +1,5 @@
+import {shopPublicId} from '../lib/merchant-x.mjs';
+import {reviewWithProductFixture as reviewMerchantApplication} from './fixtures/merchant-approval.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
@@ -6,19 +8,18 @@ import path from 'node:path';
 import { openDb, storeSnapshot } from '../lib/db.mjs';
 import { openSubmissionsDb } from '../lib/submissions.mjs';
 import { createApp } from '../lib/web.mjs';
-import { reviewMerchantApplication } from '../lib/merchant-onboarding.mjs';
 import {createRetentionStore} from '../lib/retention-store.mjs';
 import {createAccountAuth} from '../lib/account-auth.mjs';
 import { merchantApplicationHref } from '../lib/merchant-badges.mjs';
 
-test('public merchant intake stays private; approval prioritizes comprehensive results and preserves pure price order', async () => {
+test('public merchant intake stays private; approval keeps comprehensive results unchanged and preserves pure price order', async () => {
   const directory=mkdtempSync(path.join(os.tmpdir(),'merchant-web-'));
   const db=openDb(':memory:'),submissionsDb=openSubmissionsDb(':memory:');
   const app=createApp({db,submissionsDb,adminOptions:{merchantBridgeDir:directory}});
   try {
     storeSnapshot(db,{source:'direct-shops',snapshotId:'merchant-web',fetchedAt:new Date().toISOString(),products:[{
       productId:'chatgpt-plus-recharge',name:'ChatGPT Plus',platform:'ChatGPT',currency:'CNY',offers:[100,110].map((price,i)=>({
-        offerId:'merchant-web-'+i,title:'ChatGPT Plus 代充 1个月',storeName:'合成测试商店'+i,
+        offerId:'merchant-web-'+i,title:'ChatGPT Plus 代充 1个月 新开续费均可',storeName:'合成测试商店'+i,
         price,currency:'CNY',status:'in_stock',stockCount:2,url:`https://merchant-${i}.com/product/1`,
       })),
     }]});
@@ -27,7 +28,8 @@ test('public merchant intake stays private; approval prioritizes comprehensive r
     const store=createRetentionStore(submissionsDb,{secret:'fixture-merchant-reader-'.repeat(3)}),auth=createAccountAuth(store);
     const challenge=auth.requestCode('owner@example.org','fixture','register');
     const code=JSON.parse(submissionsDb.prepare('SELECT payload FROM retention_mail WHERE event_key=?').get('code:'+challenge.requestId).payload).code;
-    const registered=await auth.register({...challenge,code,password:'fixture merchant password 73',phone:'13800138000',contactType:'wechat',contactValue:'private_contact'});
+    const registered=await auth.register({...challenge,code,password:'fixture merchant password 73',phone:'10000000000',contactType:'wechat',contactValue:'private_contact'});
+    submissionsDb.prepare('INSERT INTO reader_phone_verifications(account_id,phone,verified_at) VALUES(?,?,?)').run(registered.account.id,'10000000000',new Date().toISOString());
     const readerCookie='airadar_reader='+registered.token;
     const form=await fetch(base+'/submit-shop',{headers:{cookie:readerCookie}}),html=await form.text();
     assert.equal(form.status,200);
@@ -41,7 +43,7 @@ test('public merchant intake stays private; approval prioritizes comprehensive r
     assert.doesNotMatch(privacy,/身份核验标识|店主已核验/);
     const csrf=html.match(/name="csrf-token" content="([^"]+)"/)[1];
     const headers={origin:base,'content-type':'application/json',cookie:readerCookie+'; airadar_csrf='+csrf,'x-csrf-token':csrf};
-    const payload={shopName:'合成测试商店1',shopUrl:'https://merchant-1.com/',platform:'auto',productAreas:['chatgpt','grok_x','mail_verify'],email:'owner@example.org', contact:'private-contact@merchant-1.com',details:'仅限后台的合成审核说明',consent:true};
+    const payload={shopName:'合成测试商店1',shopUrl:'https://merchant-1.com/',platform:'auto',productAreas:['chatgpt','grok_x','mail_verify'],email:'owner@example.org', contact:'private-contact@example.test',details:'仅限后台的合成审核说明',consent:true};
     const send=(body,extra={})=>fetch(base+'/api/merchant-applications',{method:'POST',headers:{...headers,...extra},body:JSON.stringify(body)});
     assert.equal((await fetch(base+'/api/merchant-applications')).status,405);
     assert.equal((await send(payload,{'x-csrf-token':'bad'})).status,403);
@@ -60,21 +62,30 @@ test('public merchant intake stays private; approval prioritizes comprehensive r
     assert.match(before,/合成测试商店0/);assert.match(before,/合成测试商店1/);
     assert.match(before,/href="\/submit-shop"/);
     reviewMerchantApplication(submissionsDb,body.id,{action:'approve',note:'已用店内公告确认身份与公开采集授权',actor:'fixture',expectedVersion:1,ownershipConfirmed:true,permissionConfirmed:true},{bridgeDir:directory});
-    const after=await(await fetch(base+route)).text();
+    const after=await(await fetch(base+route,{headers:{cookie:'airadar_nocache=1'}})).text();
     assert.equal((after.match(/<span class="merchant-verified"/g)||[]).length,1);
     assert.match(after,/合成测试商店1<span class="merchant-verified"/);
-    assert.match(after,/>店铺已收录<\/span>/);
+    assert.match(after,/>已验证商家<\/span>/);
     assert.doesNotMatch(after,/店主已核验|站长已核验店铺经营身份/);
-    assert.ok(after.indexOf('合成测试商店1')<after.indexOf('合成测试商店0'));
+    assert.ok(after.indexOf('合成测试商店0')<after.indexOf('合成测试商店1'));
     const byPrice=await(await fetch(base+route+'&sort=price_asc')).text();
     assert.ok(byPrice.indexOf('合成测试商店0')<byPrice.indexOf('合成测试商店1'));
     assert.doesNotMatch(after,/private-contact|仅限后台|已用店内公告|merchantIdentity/);
-    const detail=await(await fetch(base+'/product?source=direct-shops&id=chatgpt-plus-recharge')).text();
-    assert.equal((detail.match(/<span class="merchant-verified"/g)||[]).length,2,'desktop and mobile render badge');
-    assert.equal((detail.match(/>店铺已收录<\/span>/g)||[]).length,2);
-    assert.match(detail,/<div class="offer-title"><strong>合成测试商店1<span class="merchant-verified"[^>]*>店铺已收录<\/span><\/strong>/,'desktop badge stays inline with the shop name, not a stretched flex-column row');
+    const detail=await(await fetch(base+'/product?source=direct-shops&id=chatgpt-plus-recharge',{headers:{cookie:'airadar_nocache=1'}})).text();
+    assert.equal((detail.match(/<span class="merchant-verified"/g)||[]).length,1,'clean product page renders one quote badge');
+    assert.equal((detail.match(/>已验证商家<\/span>/g)||[]).length,1);
+    assert.match(detail,/<h2>合成测试商店1<span class="merchant-verified"[^>]*>已验证商家<\/span>/,'desktop badge stays inline with the shop name, not a stretched flex-column row');
     assert.doesNotMatch(detail,/店主已核验|站长已核验店铺经营身份/);
     assert.match(detail,/href="\/claim-shop\?shop=[a-f0-9]{24}/);
+    const shopId=shopPublicId('domain:merchant-1.com');
+    for(const prefix of ['', '/en']){
+      const homepage=await(await fetch(base+prefix+'/shop?id='+shopId,{headers:{cookie:'airadar_nocache=1'}})).text();
+      assert.match(homepage,prefix?/>Verified merchant</:/>已验证商家</);
+      assert.match(homepage,prefix?/saved mainland China phone number/:/已保存中国大陆手机号/);
+    }
+    submissionsDb.exec('DELETE FROM reader_phone_verifications');
+    const listed=await(await fetch(base+'/shop?id='+shopId,{headers:{cookie:'airadar_nocache=1'}})).text();
+    assert.match(listed,/>店铺已收录</);assert.doesNotMatch(listed,/>已验证商家</);
     reviewMerchantApplication(submissionsDb,body.id,{action:'pause',note:'合成测试暂停授权流程',expectedVersion:2},{bridgeDir:directory});
     const paused=await(await fetch(base+route)).text();
     assert.doesNotMatch(paused,/<span class="merchant-verified"/);

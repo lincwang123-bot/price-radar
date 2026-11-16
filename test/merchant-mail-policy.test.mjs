@@ -1,7 +1,8 @@
+import {reviewWithProductFixture as reviewMerchantApplication} from './fixtures/merchant-approval.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {openSubmissionsDb,createSubmission} from '../lib/submissions.mjs';
-import {createMerchantApplication,reviewMerchantApplication,updateMerchantEmail,convertSupplySubmission} from '../lib/merchant-onboarding.mjs';
+import {createMerchantApplication,updateMerchantEmail,convertSupplySubmission} from '../lib/merchant-onboarding.mjs';
 import {importSupplyIntakes} from '../lib/merchant-intake.mjs';
 import {queueMerchantMail,drainMerchantMail} from '../lib/merchant-mail.mjs';
 import {reconcileMerchantMailPolicy} from '../lib/merchant-mail-policy.mjs';
@@ -92,4 +93,19 @@ test('admin policy copy distinguishes cancelled notices from provider acceptance
  assert.match(mailSummary({items:[{status:'accepted'}]}),/发送服务已接受/);
  const html=mailPanel({...payload,id:'MA-TEST',version:1},{items:[]},'csrf',{configured:true});
  assert.match(html,/常规流程两封/);assert.match(html,/同一封来信、相同资料和普通重测不重复发信/);
+});
+
+
+test('collection failure occupies one result slot and does not create extra mail on retest or approval',async t=>{
+ const f=fixture(t);await f.drain();assert.equal(f.queue('collection_failed'),true);await f.drain();
+ f.queue('collection_failed','retest');f.queue('need_info','changed-reason');f.approve();await f.drain();
+ assert.equal(f.messages.length,2);assert.match(f.messages[1].subject,/采集暂未成功/);
+});
+test('unsent collection failure is superseded by approval and retains uncertain delivery reservation',async t=>{
+ const f=fixture(t);f.queue('collection_failed');f.approve();await f.drain();
+ assert.equal(f.messages.length,2);assert.match(f.messages[1].subject,/审核已通过/);
+ const b=fixture(t);await b.drain();b.queue('collection_failed');
+ await b.drain({sendMail:async()=>{throw Object.assign(new Error('hidden'),{code:'ECONNECTION',command:'DATA'});}});
+ b.queue('need_info');b.approve();await b.drain();assert.equal(b.messages.length,1);
+ assert.equal(b.db.prepare("SELECT status FROM merchant_mail_outbox WHERE stage='collection_failed'").get().status,'uncertain');
 });

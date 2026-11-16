@@ -1,7 +1,8 @@
-import { safeFetchJson } from '../../lib/safe-fetch.mjs';
+import { safeFetchJson, isAccessDeniedError } from '../../lib/safe-fetch.mjs';
 import { deliveryEvidence } from '../../lib/delivery-evidence.mjs';
 import { directOfferExclusionReason, classifyDirectOffer } from './catalog.mjs';
 import { isAuthorizedMerchantTarget } from '../../lib/merchant-target-capability.mjs';
+import { checkoutQuote } from '../../lib/checkout-price.mjs';
 
 // Verified 2026-09-06 from existing public /goods/G… links, then the public
 // goods/detail response. No shop-number enumeration or authenticated APIs.
@@ -91,13 +92,16 @@ export function parse16688Goods(payload, target, capturedAt = new Date().toISOSt
     const count = Number.isSafeInteger(number) && number >= 0 ? number : null;
     const state = String(item.stock_available_status ?? '').toLowerCase();
     // Explicit sold-out takes precedence even when upstream quantities conflict.
-    // The public purchase panel accepts manual fulfillment with the -1 sentinel;
-    // it is not a counted card inventory. Preserve an unknown quantity, not -1 or infinity.
-    const manualAvailable = Number(item.delivery_method) === 2 && number === -1 && state === '';
+    // The public purchase panel accepts manual (2) and service (3) fulfillment
+    // with the -1 sentinel (GoodsPurchasePanel.205a5586.js, checked 2026-10-09).
+    // This means orderable without counted cards, not an infinite inventory.
+    // Keep unknown modes/negative values closed and preserve a null quantity.
+    const manualAvailable = [2, 3].includes(Number(item.delivery_method)) && number === -1 && state === '';
     const status = state === 'out' || count === 0 ? 'out_of_stock'
       : state === 'low' ? 'low_stock'
       : count > 0 || ['normal', 'high'].includes(state) || manualAvailable ? 'in_stock' : 'unknown';
-    const evidence=deliveryEvidence({ productTitle:title, category:item.category?.name ?? item.category_name, description:item.description });
+    const multi=['skus','variants','options'].some(key=>item[key]!=null&&(!Array.isArray(item[key])||item[key].length>0));
+    const evidence=deliveryEvidence({ productTitle:title, category:item.category?.name ?? item.category_name, description:item.description, descriptionScope:multi?'product_multi':'product' });
     return [{
       offerId: `${source.id}:${item.goods_no}`, sourceId: source.id,
       sourceName: '16688', storeName: String(target.name || source.name), title, category:evidence.category,
@@ -108,6 +112,155 @@ export function parse16688Goods(payload, target, capturedAt = new Date().toISOSt
         deliveryEvidence:evidence },
     }];
   });
+}
+
+function moneyCents(value) {
+  if (!['string', 'number'].includes(typeof value) || !/^\d+(?:\.\d{1,2})?$/.test(String(value))) return null;
+  const cents = Math.round(Number(value) * 100);
+  return Number.isSafeInteger(cents) && cents >= 0 && cents <= 100_000_000 ? cents : null;
+}
+
+function checkoutUnknown(row, reasonCode, attemptedAt = row.extra.checkoutQuote?.attemptedAt) {
+  row.extra.checkoutQuote = {
+    version: 1, status: 'unknown', source: '16688', currency: 'CNY', quantity: 1,
+    paymentMethod: 'alipay', shopNo: row.extra.shopNo,
+    goodsNo: row.offerId.split(':').at(-1), listedPrice: row.price, reasonCode,
+    ...(attemptedAt ? { attemptedAt } : {}),
+  };
+}
+
+function parseCheckoutQuote(payload, row, channel, capturedAt, pricingUrl) {
+  const value = payload?.data;
+  if (Number(payload?.code) !== 1 || !value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const goodsNo = row.offerId.split(':').at(-1);
+  if (Number(value.quantity) !== 1 || (value.shop_no != null && value.shop_no !== row.extra.shopNo)
+    || (value.goods_no != null && value.goods_no !== goodsNo)
+    || (value.channel_id != null && String(value.channel_id) !== String(channel.id))
+    || (value.currency != null && value.currency !== 'CNY') || String(value.coupon_code ?? '') !== '') return null;
+  const unit = moneyCents(value.unit_price), goods = moneyCents(value.goods_amount);
+  const promotion = moneyCents(value.promotion_discount), coupon = moneyCents(value.coupon_discount);
+  const discounted = moneyCents(value.goods_total_amount), total = moneyCents(value.total_amount);
+  if ([unit, goods, promotion, coupon, discounted, total].some(number => number == null)
+    || unit !== moneyCents(row.price) || goods !== unit || total <= 0
+    || goods - promotion - coupon !== discounted || total < discounted) return null;
+  // fee is upstream's unrounded processing fee (e.g. 3.1441). It can be
+  // merchant-paid; only the amount actually added to total is charged to buyers.
+  if (!['string', 'number'].includes(typeof value.fee) || !/^\d+(?:\.\d{1,8})?$/.test(String(value.fee))) return null;
+  const rawFeeCents = Math.round(Number(value.fee) * 100), buyerFee = total - discounted;
+  if (!Number.isSafeInteger(rawFeeCents) || rawFeeCents > 100_000_000 || (buyerFee !== 0 && buyerFee !== rawFeeCents)) return null;
+  return {
+    version: 1, status: 'verified', source: '16688', currency: 'CNY', quantity: 1,
+    paymentMethod: 'alipay', paymentChannelId: String(channel.id),
+    paymentLabel: String(channel.show_name || channel.paytype?.name || '支付宝').replace(/<[^>]*>/g, '').trim().slice(0, 80),
+    shopNo: row.extra.shopNo, goodsNo, listedPrice: row.price, goodsAmount: goods / 100,
+    discountAmount: (promotion + coupon) / 100, feeAmount: buyerFee / 100,
+    totalAmount: total / 100, capturedAt, pricingUrl,
+  };
+}
+
+async function enrich16688Checkout(rows, goods, source, options) {
+  const byId = new Map(goods.map(item => [item.goods_no, item]));
+  const stamp = () => new Date(typeof options.now === 'function' ? options.now() : options.now ?? Date.now()).toISOString();
+  const now = Date.parse(stamp());
+  const previous = new Map((Array.isArray(options.previousOffers) ? options.previousOffers.slice(0, 2000) : []).map(row => [row.offerId, row]));
+  const history = new Map();
+  const candidates = [];
+  for (const row of rows) {
+    const item = byId.get(row.offerId.split(':').at(-1));
+    const rawMinimum = item?.limit_quantity;
+    const minimum = rawMinimum == null || rawMinimum === '' ? 1 : Number(rawMinimum);
+    const variants = ['skus', 'variants', 'options'].some(key => item?.[key] != null && (!Array.isArray(item[key]) || item[key].length > 0));
+    const reason = !['in_stock', 'low_stock'].includes(row.status) ? 'not_orderable'
+      : !Number.isSafeInteger(minimum) || minimum < 0 || minimum > 1 ? 'quantity_restricted'
+      : variants ? 'variant_required'
+      : !classifyDirectOffer(row) || directOfferExclusionReason(row) ? 'unclassified' : 'not_queried';
+    const prior = previous.get(row.offerId), old = prior?.extra?.checkoutQuote;
+    const matches = prior?.sourceId === row.sourceId && prior?.url === row.url && prior?.currency === row.currency
+      && prior?.price === row.price && old?.version === 1 && old?.source === '16688'
+      && old?.shopNo === source.shopNo && old?.goodsNo === item?.goods_no && old?.listedPrice === row.price
+      && old?.quantity === 1 && old?.paymentMethod === 'alipay';
+    const attempted = matches ? Date.parse(old.status === 'verified' ? old.capturedAt : old.attemptedAt) : NaN;
+    const attemptedAt = Number.isFinite(attempted) && attempted <= now + 300_000 ? new Date(attempted).toISOString() : undefined;
+    history.set(row.offerId, { attempted: attemptedAt ? attempted : 0, quote: matches ? checkoutQuote(prior, { now }) : null });
+    checkoutUnknown(row, reason, attemptedAt);
+    if (reason === 'not_queried') candidates.push(row);
+  }
+  if (!candidates.length) return rows;
+  // The prior catalog cache is also the cursor: never-attempted goods first,
+  // then the oldest actual attempt. A bounded scan must not starve the tail.
+  candidates.sort((a, b) => history.get(a.offerId).attempted - history.get(b.offerId).attempted);
+
+  const bounded = (value, fallback, maximum) => Number.isFinite(Number(value)) && Number(value) >= 0
+    ? Math.min(Math.floor(Number(value)), maximum) : fallback;
+  const maxRequests = bounded(options.checkoutMaxRequests, 32, 64);
+  const budgetMs = bounded(options.checkoutBudgetMs, 30_000, 60_000);
+  const deadline = Math.min(options.deadline ?? Infinity, Date.now() + budgetMs);
+  const requestDelayMs = Math.max(500, Number(options.requestDelayMs) || 0);
+  const sleep = options.sleep ?? (ms => new Promise(resolve => setTimeout(resolve, ms)));
+  let requests = 0;
+  let blocked = false;
+  let channel;
+  const markUnread = (row, reason) => {
+    const prior = reason === 'budget_exceeded' ? history.get(row.offerId)?.quote : null;
+    if (prior && (!channel || prior.paymentChannelId === String(channel.id))) row.extra.checkoutQuote = { ...prior }; // Preserve capturedAt; catalog refresh is not a new fee observation.
+    else checkoutUnknown(row, reason);
+  };
+  const markPending = reason => { for (const row of candidates) if (row.extra.checkoutQuote.reasonCode === 'not_queried') markUnread(row, reason); };
+  const read = async (endpoint, body, onAttempt) => {
+    if (requests >= maxRequests || Date.now() + requestDelayMs >= deadline) throw Object.assign(new Error('checkout budget'), { code: 'CHECKOUT_BUDGET' });
+    await sleep(requestDelayMs);
+    const remaining = deadline - Date.now();
+    if (remaining < 1) throw Object.assign(new Error('checkout budget'), { code: 'CHECKOUT_BUDGET' });
+    requests++;
+    onAttempt?.();
+    return safeFetchJson(`${source.origin}${endpoint}`, {
+      allowedOrigins: [source.origin], allowedMethods: ['POST'], method: 'POST', credentials: 'omit',
+      headers: { Accept: 'application/json', 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+      fetchImpl: options.checkoutFetchImpl ?? options.fetchImpl,
+      timeoutMs: Math.max(1, Math.min(options.timeoutMs ?? 8_000, 8_000, remaining)),
+      maxBytes: 64 * 1024, maxRedirects: 0,
+    });
+  };
+  const handleFailure = async error => {
+    if (isAccessDeniedError(error) || error?.code === 'ROBOTS_DISALLOWED') {
+      blocked = true;
+      try { await options.onCheckoutAccessDenied?.(error); } catch { /* Optional diagnostics must not discard a valid catalog. */ }
+      return 'access_denied';
+    }
+    return error?.code === 'CHECKOUT_BUDGET' ? 'budget_exceeded' : 'quote_failed';
+  };
+  try {
+    const payload = await read('/shopApi/payment/list', { shop_no: source.shopNo });
+    const list = payload?.data?.list;
+    if (Number(payload?.code) !== 1 || !Array.isArray(list) || list.length > 50) {
+      markPending('payment_unverified'); return rows;
+    }
+    // One common anonymous payment method, not each merchant's cheapest channel.
+    channel = list.find(item => item?.paytype?.code === 'alipay' && /^[1-9]\d{0,9}$/.test(String(item.id)));
+    if (!channel) { markPending('payment_unavailable'); return rows; }
+  } catch (error) {
+    markPending(await handleFailure(error)); return rows;
+  }
+  const pricingUrl = `${source.origin}/shopApi/payment/quotePrice`;
+  for (const row of candidates) {
+    let attemptedAt;
+    try {
+      const payload = await read('/shopApi/payment/quotePrice', {
+        shop_no: source.shopNo, goods_no: row.extra.checkoutQuote.goodsNo,
+        quantity: 1, channel_id: channel.id, coupon_code: '',
+      }, () => { attemptedAt = stamp(); });
+      const capturedAt = stamp();
+      const quote = parseCheckoutQuote(payload, row, channel, capturedAt, pricingUrl);
+      if (quote) row.extra.checkoutQuote = quote;
+      else checkoutUnknown(row, 'invalid_quote', attemptedAt);
+    } catch (error) {
+      const reason = await handleFailure(error);
+      if (attemptedAt) checkoutUnknown(row, reason, attemptedAt);
+      else markUnread(row, reason);
+      if (blocked || reason === 'budget_exceeded') { markPending(reason); break; }
+    }
+  }
+  return rows;
 }
 
 export async function collect16688(target, options = {}) {
@@ -140,5 +293,6 @@ export async function collect16688(target, options = {}) {
     }
     payload.data.list=payload.data.list.map(item=>({...item,category_name:item.category?.name||item.category_name||names.get(item.goods_category_no)||''}));
   }
-  return needsCategory?parse16688Goods(payload,target,capturedAt):initial;
+  const rows = needsCategory ? parse16688Goods(payload, target, capturedAt) : initial;
+  return options.checkoutQuotes === false ? rows : enrich16688Checkout(rows, payload.data.list, source, options);
 }

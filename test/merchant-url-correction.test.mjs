@@ -47,3 +47,11 @@ test('correcting www never resets the two-mail lifetime budget',t=>{
  assert.equal(db.prepare("SELECT COUNT(*) n FROM merchant_mail_outbox WHERE status='accepted'").get().n,2);
  assert.equal(db.prepare("SELECT COUNT(*) n FROM merchant_mail_outbox WHERE status IN ('queued','retry')").get().n,0);
 });
+
+
+test('correcting the URL cancels an unsent collection failure from the prior address',t=>{
+ const {db,id,options}=fixture(t);
+ assert.equal(queueMerchantMail(db,{id,email:'owner@example.org',stage:'collection_failed',eventKey:id+':old-address',publicReply:'旧地址读取失败。'}),true);
+ correctPendingMerchantUrl(db,id,'https://www.bbshare.site/',options);
+ assert.equal(db.prepare("SELECT status FROM merchant_mail_outbox WHERE stage='collection_failed'").get().status,'superseded');
+});

@@ -91,3 +91,12 @@ test('SQLite persists sanitized delivery evidence with other extra metadata inta
     }
   }finally{db.close();}
 });
+
+test('single priced 16688 and ShopApi goods retain purchase scope, multi-SKU parent text does not',()=>{
+ const item={goods_no:'G1',id:1,name:'Claude Pro 月卡',price:100,description:'充值自己的账号，支持续费，需等当前会员到期后才可以续费。'};
+ const parsers=[i=>parse16688Goods({code:1,data:{list:[i]}},PLATFORM16688_SHOPS[0],at)[0],i=>parseShopApiGoods({code:1,data:{list:[i]}},{id:'shop',token:'public-shop',origin:'https://wzyp.cn'},at)[0]];
+ for(const parse of parsers){
+  assert.equal(parse(item).extra.deliveryEvidence.descriptionScope,'product');
+  assert.equal(parse({...item,skus:[{id:2}]}).extra.deliveryEvidence.descriptionScope,'product_multi');
+ }
+});

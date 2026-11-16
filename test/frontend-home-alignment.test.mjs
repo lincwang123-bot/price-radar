@@ -32,9 +32,10 @@ test('homepage reserves delivery columns without inventing quotes and keeps othe
   assert.match(row('chatgpt-pro-5x'),/data-delivery-link="code"/);
   assert.match(row('chatgpt-pro-5x'),/其他交付 · 2 条/);
   const links=[...row('chatgpt-pro-5x').matchAll(/<a\b[^>]*data-delivery-link="([^"]+)"[^>]*href="([^"]+)"/g)];
-  for(const [,kind,href]of links){const route=new URL(href.replaceAll('&amp;','&'),base);assert.equal(route.searchParams.get('delivery'),kind);assert.equal(route.searchParams.get('product'),'chatgpt-pro-5x');}
+  for(const [,kind,href]of links){const route=new URL(href.replaceAll('&amp;','&'),base);assert.equal(route.searchParams.get('delivery'),kind);assert.equal(route.pathname,'/prices/chatgpt-pro-5x');}
   assert.equal(links.length,2);
-  assert.doesNotMatch(row('email-accounts'),/data-delivery-slot/);
-  assert.match(row('email-accounts'),/data-directory-minimum/);
+  assert.equal(row('email-accounts'),'');
+  const catalog=await(await fetch(base+'/catalog')).text(),gmail=catalog.match(/<article class="directory-row" data-directory-product="email-accounts">[\s\S]*?<\/article>/)[0];
+  assert.doesNotMatch(gmail,/data-delivery-slot/);assert.match(gmail,/data-directory-minimum/);
  }finally{if(app.listening){app.closeAllConnections();await new Promise(r=>app.close(r));}db.close();}
 });

@@ -176,6 +176,7 @@ function selectCategories(payload, maxCategories) {
 }
 
 function goodsOffer(item, source, capturedAt) {
+  if(source.strictShopToken && item?.user?.token!==source.token)throw new Error('ShopApi 商品店铺身份不匹配');
   if (!item || typeof item !== "object" || item.is_deleted === true || item.deleted === true || item.hide === 1) return null;
   const id = identifier(item.goods_key ?? item.id ?? item.goods_id);
   const title = cleanText(item.name ?? item.goods_name ?? item.title);
@@ -211,7 +212,8 @@ function goodsOffer(item, source, capturedAt) {
     expiresAt: null,
     deliveryMode: Number(item.extend?.send_order) === 0 ? "auto" : null,
     extra: { shopUrl: `${source.origin}/shop/${encodeURIComponent(source.token)}`,
-      deliveryEvidence: deliveryEvidence({ productTitle:title, category:cleanText(item.category?.name ?? item.category_name ?? item.category), description:item.description }) },
+      deliveryEvidence: deliveryEvidence({ productTitle:title, category:cleanText(item.category?.name ?? item.category_name ?? item.category), description:item.description,
+        descriptionScope:['skus','variants','options'].some(key=>item[key]!=null&&(!Array.isArray(item[key])||item[key].length>0))?'product_multi':'product' }) },
   };
 }
 

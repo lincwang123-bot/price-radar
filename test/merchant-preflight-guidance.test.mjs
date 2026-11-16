@@ -97,6 +97,15 @@ test('ShopApi 四条实际分类错误精确归类，不匹配相似商家文本
   }
 });
 
+test('页面适配边界仅由站方结构化代码确认，不从商家文本猜测',()=>{
+ assert.deepEqual(classifyPreflightError(Object.assign(new Error('untrusted-body'),{code:'PAGE_REQUIRES_RENDERING'})),{reasonCode:'page_requires_rendering'});
+ assert.deepEqual(classifyPreflightError(new Error('PAGE_REQUIRES_RENDERING')),{reasonCode:'unknown'});
+ const guidance=preflightGuidance(failed('page_requires_rendering'),application);
+ assert.equal(guidance.requiresOperator,true);assert.match(guidance.explanation,/HTML/);
+ assert.match(guidance.nextStep,/不执行页面脚本/);assert.match(guidance.merchantMessage,/无需重复提交已有商品链接/);
+ assert.doesNotMatch(guidance.merchantMessage,/untrusted-body|重新授权后/);
+});
+
 test('独角数卡超过本站分页或商品上限是采集端限制，单页格式错误仍是目录无效', () => {
   for (const message of ['Dujiao 商品总数超过上限 1000', 'Dujiao 分页超过上限 10', 'Dujiao 商品数量超过上限 1000', 'Dujiao 报价数量超过上限 2000']) {
     assert.equal(classifyPreflightError(new Error(message)).reasonCode, 'collector_limit', message);

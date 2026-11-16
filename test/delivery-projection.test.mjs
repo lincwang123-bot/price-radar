@@ -21,7 +21,7 @@ function fixture(t, offers, productId = 'claude-pro-month') {
 
 test('历史Plus存储ID不能覆盖交付证据或令更正后的报价消失', t => {
   const {db,projected} = fixture(t, [
-    {title:'ChatGPT Plus 自有账号充值1个月',price:120},
+    {title:'ChatGPT Plus 自有账号充值1个月 新开续费均可',price:120},
     {title:'ChatGPT Plus 成品账号1个月',price:30},
   ], 'chatgpt-plus');
   assert.equal(projected.offers.length,2);
@@ -36,7 +36,7 @@ test('历史Plus存储ID不能覆盖交付证据或令更正后的报价消失',
 test('同名不同原店交付说明投影为分开的比较组，读取历史不串价', t => {
   const {db,projected}=fixture(t,[
     {title:'Claude Pro 月卡',price:30,extra:{deliveryEvidence:{category:'成品账号'}}},
-    {title:'Claude Pro 月卡',price:130,extra:{deliveryEvidence:{category:'订阅代充'}}},
+    {title:'Claude Pro 月卡 新开续费均可',price:130,extra:{deliveryEvidence:{category:'订阅代充'}}},
   ]);
   assert.equal(projected.offers.length,2);
   const groups=productQuoteGroups(projected);
@@ -52,7 +52,7 @@ test('交付未注明、裸卡密、多种交付共价的记录保留，但不�
   const {db,projected}=fixture(t,[
     {title:'Claude Pro 月卡',price:1},
     {title:'Claude Pro 月卡卡密',price:2},
-    {title:'Claude Pro 月卡 代充/成品+50',price:3},
+    {title:'Claude Pro 月卡 代充/成品+50 新开续费均可',price:3},
   ]);
   assert.equal(projected.offers.length,3);
   assert.ok(projected.offers.every(offer=>offer.delivery_known===false&&offer.comparison_known===false));
@@ -64,7 +64,7 @@ test('交付未注明、裸卡密、多种交付共价的记录保留，但不�
 test('成品低价不会触发代充比较组的阈值提醒', t => {
   const {db,projected}=fixture(t,[
     {title:'Claude Pro 月卡成品账号',price:30},
-    {title:'Claude Pro 月卡代充',price:130},
+    {title:'Claude Pro 月卡代充 新开续费均可',price:130},
   ]);
   const recharge=projected.offers.find(offer=>offer.price===130);
   assert.equal(recharge.delivery_kind,'recharge');

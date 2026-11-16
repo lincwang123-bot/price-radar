@@ -33,12 +33,14 @@ test('pay preflight selects only the original same-origin public ShopApi and res
   const row={id:'merchant-test',identity:'shop:ldxp-pay:one',shopName:'店一',shopUrl:'https://pay.ldxp.cn/shop/one'};
   const calls=[];
   const ctx={merchantFetchFactory:origin=>{assert.equal(origin,'https://pay.ldxp.cn');return async(url,init)=>{
-    calls.push(url);assert.equal(JSON.parse(init.body).token,'one');
+    calls.push(url);
+    if(url.endsWith('/robots.txt'))return new Response('User-agent: *\nAllow: /');
+    assert.equal(JSON.parse(init.body).token,'one');
     return Response.json(url.includes('categoryList')?{code:1,data:[{id:1,name:'AI'}]}:{code:1,data:{list:[{goods_key:'g1',name:'ChatGPT Plus 月卡代充',price:120,stock:3}],total:1}});
   };}};
   const result=await probeMerchantCatalog(row,ctx,new Date().toISOString(),Date.now()+30000);
   assert.equal(result.offers.length,1);assert.equal(result.offers[0].price,120);
-  assert.deepEqual(calls.map(u=>new URL(u).pathname),['/shopApi/Shop/categoryList','/shopApi/Shop/goodsList']);
+  assert.deepEqual(calls.map(u=>new URL(u).pathname),['/robots.txt','/shopApi/Shop/categoryList','/shopApi/Shop/goodsList']);
   let deniedCalls=0;
   await assert.rejects(probeMerchantCatalog(row,{merchantFetchFactory:()=>async()=>{deniedCalls++;return new Response('denied',{status:403});}},new Date().toISOString(),Date.now()+30000));
   assert.equal(deniedCalls,1);

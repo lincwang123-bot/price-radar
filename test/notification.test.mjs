@@ -1,8 +1,9 @@
+import {reviewWithProductFixture as reviewMerchantApplication} from './fixtures/merchant-approval.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {openDb,storeSnapshot,metaSet} from '../lib/db.mjs';
 import {openSubmissionsDb,createSubmission,updateSubmissionStatus} from '../lib/submissions.mjs';
-import {createMerchantApplication,reviewMerchantApplication,getMerchantApplication} from '../lib/merchant-onboarding.mjs';
+import {createMerchantApplication,getMerchantApplication} from '../lib/merchant-onboarding.mjs';
 import {importSupplyIntakes,updateIntakeEmail} from '../lib/merchant-intake.mjs';
 import {MAIL_STAGES,merchantMailMessage,merchantMailStatus,drainMerchantMail} from '../lib/merchant-mail.mjs';
 import {reconcileMerchantPublication} from '../lib/merchant-publication.mjs';
@@ -14,7 +15,7 @@ const feedback={kind:'feedback',topic:'suggestion',subject:'改进建议',detail
 const merchant={shopName:'测试商店',shopUrl:'https://mail-qa-shop.com/',productAreas:['chatgpt'],contact:'example-tg',email:'owner@example.org',consent:true};
 test('every notification has branded HTML, useful next steps and a full text alternative; dynamic text cannot inject HTML',()=>{
   for(const stage of Object.keys(MAIL_STAGES)){
-    const msg=merchantMailMessage({application_id:'MA-20260907-TEST',recipient:'owner@example.org',stage,event_key:'test:'+stage,public_reply:'资料已核对，请补充店铺介绍。\n<img src=x onerror=alert(1)>'},'notice@airadar.vip',{replyEnabled:true});
+    const msg=merchantMailMessage({application_id:'MA-00000000-EXAMPLE',recipient:'owner@example.org',stage,event_key:'test:'+stage,public_reply:'资料已核对，请补充店铺介绍。\n<img src=x onerror=alert(1)>'},'notice@airadar.vip',{replyEnabled:true});
     assert.match(msg.html,/max-width:600px/);assert.match(msg.html,/AIradar/);assert.match(msg.html,/&lt;img/);
     assert.equal(msg.from.name,'AIradar 通知');assert.equal(msg.from.address,'notice@airadar.vip');
     assert.match(msg.html,/AIradar · airadar\.vip/);assert.match(msg.subject,/^AIradar：/);

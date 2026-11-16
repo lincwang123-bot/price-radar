@@ -4,11 +4,15 @@ import { isAuthorizedMerchantTarget } from '../../lib/merchant-target-capability
 import { publicHttpsUrl } from '../../lib/public-network-fetch.mjs';
 import { discoverCatalog, parsePublicProduct, publicPageUrl, htmlFailure, htmlText } from '../../lib/public-catalog-html.mjs';
 import { recognizesPublicStoreScript, parsePublicStoreList, parsePublicStoreDetail, PUBLIC_STORE_ENDPOINT } from '../../lib/public-store-api.mjs';
+import {publicCentsContract,confirmsCentsFormatter,parsePublicCentsCatalog,PUBLIC_CENTS_ENDPOINT} from '../../lib/public-cents-catalog.mjs';
+import {linkedDujiaoProductModule,confirmsDujiaoProductModule} from '../../lib/public-dujiao-script.mjs';
+import {collectDujiao} from './dujiao.mjs';
+import {parsePublicSinglePlan} from '../../lib/public-single-plan.mjs';
 
 export const PUBLIC_HTML_MAX_REQUESTS = 20;
-// Reserve two API probes, robots.txt and the catalog page within the same
-// 20-request network budget. Extra discovery pages still consume that budget.
-const MAX_PRODUCTS = PUBLIC_HTML_MAX_REQUESTS - 4, MAX_DISCOVERY_PAGES = 3;
+// HTML is tried before API discovery. Count actual robots/catalog reads instead
+// of reserving unused API probes; the network layer also counts retry attempts.
+const MAX_PRODUCTS = PUBLIC_HTML_MAX_REQUESTS - 2, MAX_DISCOVERY_PAGES = 3;
 const BOT = 'AiradarBot';
 
 const robotsPath = value => encodeURI(value).replaceAll('%25', '%').replace(/%[a-f0-9]{2}/gi, encoded => {
@@ -70,10 +74,10 @@ export async function collectPublicHtml(target, options = {}) {
   const origin = target.origin, deadline = Math.min(options.deadline || Infinity, Date.now() + 30000);
   const fetchOptions = { fetchImpl: options.fetchImpl, allowedOrigins: [origin], timeoutMs: 8000, maxBytes: 1024 * 1024, maxRedirects: 0,
     headers: { 'user-agent': BOT + '/1.0 (+https://airadar.vip)', accept: 'text/html,application/ld+json,text/plain,application/xml' } };
-  let requests = 0, lastStart = 0, policy = options.robotsPolicy;
+  let requests = options.robotsPolicy ? 1 : 0, lastStart = 0, policy = options.robotsPolicy;
   const read = async (url, json = false) => {
     if (policy && !policy.allows(url)) throw htmlFailure('公开页面读取被 robots 禁止', 'ROBOTS_DISALLOWED');
-    if (++requests > PUBLIC_HTML_MAX_REQUESTS - 2) throw htmlFailure('公开目录请求达到上限', 'COLLECTOR_LIMIT');
+    if (++requests > PUBLIC_HTML_MAX_REQUESTS) throw htmlFailure('公开目录请求达到上限', 'COLLECTOR_LIMIT');
     const wait = Math.max(0, (policy?.delay || 750) - (Date.now() - lastStart));
     if (Date.now() + wait >= deadline) throw new Error('公开目录采集超时');
     await (options.sleep || delay)(wait); lastStart = Date.now();
@@ -83,13 +87,36 @@ export async function collectPublicHtml(target, options = {}) {
     try { policy = robotsPolicy(await read(origin + '/robots.txt')); }
     catch (error) { if (error.status !== 404) throw error; policy = robotsPolicy(''); }
   }
-  const pages = [origin + '/'], visited = new Set(), entries = new Map(), scripts = new Set();
+  const scriptCache=new Map();
+  const readScript=async url=>{if(!scriptCache.has(url))scriptCache.set(url,await read(url));return scriptCache.get(url);};
+  const pages = [origin + '/'], visited = new Set(), entries = new Map(), scripts = new Set(), modules = new Set();
   while (pages.length) {
     const url = pages.shift(); if (visited.has(url)) continue;
     if (visited.size >= MAX_DISCOVERY_PAGES) throw htmlFailure('公开目录请求达到上限', 'COLLECTOR_LIMIT');
     visited.add(url);
-    const result = discoverCatalog(await read(url), origin);
+    const html=await read(url),result = discoverCatalog(html, origin);
+    if (visited.size === 1 && !result.entries.length && !result.catalogLinks.length) {
+      const singlePlan = parsePublicSinglePlan(html, target, options.capturedAt || new Date().toISOString());
+      if (singlePlan) return singlePlan;
+    }
     result.scriptUrls.forEach(url => scripts.add(url));
+    result.moduleUrls.forEach(url=>modules.add(url));
+    // A Vue shell may advertise product URLs in its sitemap while every detail
+    // returns the same empty app. Resolve its real linked catalog before trying
+    // those pages, and report the actual robots restriction when it is blocked.
+    if(visited.size===1&&/<div\b[^>]*\bid=["']app["'][^>]*>/i.test(html)){
+      for(const scriptUrl of result.scriptUrls.slice(0,2)){
+        const productModule=linkedDujiaoProductModule(await readScript(scriptUrl),scriptUrl);
+        if(!productModule||!confirmsDujiaoProductModule(await readScript(productModule)))continue;
+        // Vue shells may advertise the Dujiao JSON API while robots only allow HTML.
+        // Prefer the public API when allowed; otherwise keep HTML/sitemap discovery.
+        const apiProbe=new URL('/api/v1/public/products', origin).href;
+        // The script identified this API. A robots block is the result; do not
+        // replace it with sitemap guesses or a request to the disallowed API.
+        if(!policy.allows(apiProbe))throw htmlFailure('公开目录读取被 robots 禁止','ROBOTS_DISALLOWED');
+        return collectDujiao(target,{capturedAt:options.capturedAt,fetchImpl:async value=>new Response(JSON.stringify(await read(value,true)),{headers:{'content-type':'application/json'}})});
+      }
+    }
     for (const row of result.entries) {
       const prior = entries.get(row.url);
       if (prior && JSON.stringify(prior) !== JSON.stringify(row)) throw htmlFailure();
@@ -112,8 +139,13 @@ export async function collectPublicHtml(target, options = {}) {
     }
   }
   if (!entries.size) {
+    for(const moduleUrl of [...modules].filter(url=>/\/(?:storefront|product-detail)-[\w-]+\.js$/.test(new URL(url).pathname)).slice(0,1)){
+      const contract=publicCentsContract(await read(moduleUrl),moduleUrl,[...modules]);
+      if(!contract||!confirmsCentsFormatter(await read(contract.formatterUrl),contract))continue;
+      return parsePublicCentsCatalog(await read(origin+PUBLIC_CENTS_ENDPOINT,true),target,options.capturedAt||new Date().toISOString(),{isolateInvalidProducts:!!options.isolateInvalidProducts});
+    }
     for (const scriptUrl of [...scripts].slice(0, 2)) {
-      if (!recognizesPublicStoreScript(await read(scriptUrl))) continue;
+      if (!recognizesPublicStoreScript(await readScript(scriptUrl))) continue;
       const listed = parsePublicStoreList(await read(origin + PUBLIC_STORE_ENDPOINT, true)), offers = [];
       for (const row of listed) {
         const detail = await read(`${origin}${PUBLIC_STORE_ENDPOINT}/${encodeURIComponent(row.slug)}`, true);
@@ -123,7 +155,24 @@ export async function collectPublicHtml(target, options = {}) {
     }
     throw htmlFailure('尚未识别公开商品列表', 'UNSUPPORTED_PUBLIC_HTML');
   }
-  const offers = [];
-  for (const entry of entries.values()) offers.push(parsePublicProduct(await read(entry.url), entry, target, options.capturedAt || new Date().toISOString()));
-  return offers; // Never publish a partially read or inconsistent listed catalogue.
+  if (requests + entries.size > PUBLIC_HTML_MAX_REQUESTS) throw htmlFailure('公开目录请求达到上限', 'COLLECTOR_LIMIT');
+  const offers = [], rejections = [];
+  for (const entry of entries.values()) {
+    // Access restrictions, network failures and budgets still abort the read.
+    // Only reviewed adapters can isolate successfully read but inconsistent
+    // product data; rejected products never inherit a previous cached quote.
+    const html = await read(entry.url);
+    try {
+      offers.push(parsePublicProduct(html, entry, target, options.capturedAt || new Date().toISOString(), {nameNormalizer:options.productNameNormalizer}));
+    } catch(error) {
+      if (!options.isolateInvalidProducts || error.code !== 'INVALID_CATALOG') throw error;
+      rejections.push({url:entry.url,reasonCode:'invalid_catalog'});
+    }
+  }
+  if (rejections.length) {
+    if (!offers.length) throw htmlFailure();
+    const catalogValidation = {listedCount:entries.size,parsedCount:offers.length,rejectedCount:rejections.length,rejections};
+    return offers.map(offer=>({...offer,extra:{...offer.extra,catalogValidation}}));
+  }
+  return offers;
 }

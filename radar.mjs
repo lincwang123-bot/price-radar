@@ -8,6 +8,9 @@
 //   node radar.mjs offers <productId>          列出某产品最新报价
 //   node radar.mjs history <productId> [--n 20] 打印跨快照最低价走势
 //   node radar.mjs alerts [--limit 20]         最近告警
+//   node radar.mjs retain-offers [--force]     滚 K 线并清理超出窗口的明细（默认需配置开启）
+//     [--batch 20] [--max-delete-batches 40] [--max-roll-snapshots 400]
+//     [--busy-timeout 10000] [--max-runtime-ms 2400000] [--dedupe] [--dedupe-snapshots 4]
 //   node radar.mjs sources                      源与最近状态
 //   node radar.mjs submissions [--kind feedback|cooperation] [--status new]
 //   node radar.mjs submission-status <编号> <状态>
@@ -76,6 +79,15 @@ async function cmdDaemon(config, db) {
     } catch (err) {
       console.error("[daemon] 轮次失败:", err.message);
     }
+    try {
+      const { maybeMaintainOffers } = await import("./lib/offer-retention.mjs");
+      const maintained = await maybeMaintainOffers(db, config);
+      if (maintained.deduped?.removed || maintained.slim) {
+        console.log(`[retain] ${JSON.stringify(maintained)}`);
+      }
+    } catch (error) {
+      console.error("[retain] 本轮维护失败:", error.message);
+    }
     const wait = Math.max(5, interval - Math.round((Date.now() - t0) / 1000));
     await new Promise((r) => setTimeout(r, wait * 1000));
   }
@@ -130,7 +142,7 @@ async function cmdHistory(config, db, productId) {
     const p = s.lowest_price;
     const delta = prev != null && p != null ? (p - prev >= 0 ? `  ▲+${(p - prev).toFixed(2)}` : `  ▼${(p - prev).toFixed(2)}`) : "";
     console.log(
-      `${pad(s.fetched_at?.slice(0, 19) ?? "", 20)} 最低 ${pad(p ?? "-", 8)} 有货 ${pad(s.in_stock_count, 6)}` +
+      `${pad(s.fetched_at?.slice(0, 19) ?? "", 20)} ${/^\d+h$/.test(s.granularity || "") ? s.granularity.replace("h", "小时") : "明细"} 最低 ${pad(p ?? "-", 8)} 有货 ${pad(s.in_stock_count, 6)}` +
       ` offer ${pad(s.offer_count, 5)}${delta}`
     );
     if (p != null) prev = p;
@@ -145,6 +157,37 @@ async function cmdAlerts(config, db) {
   for (const r of rows) {
     console.log(`[${r.ts?.slice(0, 19)}] ${pad(r.rule_id ?? "", 32)} ${r.product_name || r.product_id}｜${r.message}`);
   }
+  return 0;
+}
+
+async function cmdRetain(config, db) {
+  const { protectSnapshotCount, slimOffers } = await import("./lib/offer-retention.mjs");
+  const options = config.offerRetention || {};
+  if (!options.enabled && !has("--force")) {
+    console.log(JSON.stringify({
+      ok: true,
+      skipped: true,
+      reason: "offerRetention.enabled 为 false。确认备份和 dry-run 之后，在 config.json 打开，或本次加上 --force。",
+    }));
+    return 0;
+  }
+  const report = await slimOffers(db, {
+    days: Number(arg("--days", options.days ?? 30)) || 30,
+    candleHours: Number(arg("--candle-hours", options.candleHours ?? 4)) || 4,
+    protectSnapshots: protectSnapshotCount(config),
+    archiveDir: arg("--archive", options.archiveDir || ""),
+    allowUnarchivedDelete: has("--allow-unarchived-delete") || !!options.allowUnarchivedDelete,
+    dedupe: has("--dedupe") || !!options.dedupe,
+    batchSnapshots: Number(arg("--batch", options.batchSnapshots ?? 20)) || 20,
+    maxDeleteBatches: Number(arg("--max-delete-batches", options.maxDeleteBatches ?? 40)),
+    maxRollSnapshots: Number(arg("--max-roll-snapshots", options.maxRollSnapshots ?? 400)),
+    busyTimeout: Number(arg("--busy-timeout", options.busyTimeout ?? 10000)),
+    maxRuntimeMs: Number(arg("--max-runtime-ms", options.maxRuntimeMs ?? 2400000)),
+    dedupeSnapshots: Number(arg("--dedupe-snapshots", options.dedupeSnapshots ?? 4)),
+    dbPath: config.dbPath,
+    vacuumInto: arg("--vacuum-into", ""),
+  });
+  console.log(JSON.stringify(report));
   return 0;
 }
 
@@ -250,10 +293,11 @@ async function main() {
       case "history": return await cmdHistory(config, db, productId);
       case "alerts": return await cmdAlerts(config, db);
       case "sources": return await cmdSources(config, db);
+      case "retain-offers": return await cmdRetain(config, db);
       case "serve": return await cmdServe(config, db);
       default:
         console.log(
-          `用法: node radar.mjs <pull|watch|daemon|products|offers|history|alerts|sources|submissions|submission-status|serve> ...\n` +
+          `用法: node radar.mjs <pull|watch|daemon|products|offers|history|alerts|sources|retain-offers|submissions|submission-status|serve> ...\n` +
           `  submissions [--kind feedback|cooperation] [--status new] 查看公开提交\n` +
           `  submission-status <编号> <状态> 更新处理状态\n` +
           `  serve [--port 8090] 启动 Web 页面与投稿接口\n` +

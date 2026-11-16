@@ -3,24 +3,26 @@ import assert from 'node:assert/strict';
 import { openDb, storeSnapshot } from '../lib/db.mjs';
 import { createApp, fmtPrice } from '../lib/web.mjs';
 import { filterFramework } from '../lib/channels.mjs';
-test('跨源店铺一页20条，升降序与所有筛选贯穿分页，安全外链仍进入确认页',async()=>{
+test('跨源店铺一页10条，升降序与所有筛选贯穿分页，安全外链仍进入确认页',async()=>{
  const db=openDb(':memory:'),app=createApp({db});
  try{
-  for(const [source,offset] of [['direct-shops',0],['ldxp-goods',12]])storeSnapshot(db,{source,snapshotId:'multi-'+source,products:[{productId:source==='direct-shops'?'claude-pro-month':'claude-pro-代充',name:'Claude Pro',platform:'Claude',currency:'CNY',offers:Array.from({length:12},(_,i)=>({offerId:'offer-'+(offset+i),title:'Claude Pro 代充 1个月',storeName:'店铺'+(offset+i),price:100+offset+i,status:'in_stock',stockCount:1,url:'https://16688.com.cn/goods/'+(offset+i)}))}]});
+  for(const [source,offset] of [['direct-shops',0],['ldxp-goods',12]])storeSnapshot(db,{source,snapshotId:'multi-'+source,products:[{productId:source==='direct-shops'?'claude-pro-month':'claude-pro-代充',name:'Claude Pro',platform:'Claude',currency:'CNY',offers:Array.from({length:12},(_,i)=>({offerId:'offer-'+(offset+i),title:'Claude Pro 代充 1个月 新开续费均可',storeName:'店铺'+(offset+i),price:100+offset+i,status:'in_stock',stockCount:1,url:'https://16688.com.cn/goods/'+(offset+i)}))}]});
   await new Promise(r=>app.listen(0,'127.0.0.1',r));const base='http://127.0.0.1:'+app.address().port;
   const route='/?family=claude&product=claude-pro',links=html=>[...html.matchAll(/href="([^\"]+)"/g)].map(m=>m[1].replaceAll('&amp;','&')),prices=html=>[...html.matchAll(/data-directory-quote data-price="([^\"]+)"/g)].map(m=>Number(m[1]));
-  const first=await(await fetch(base+route)).text();assert.deepEqual(prices(first),Array.from({length:20},(_,i)=>100+i));assert.match(first,/24 条店铺报价/);assert.match(first,/第 1 \/ 2 页/);assert.doesNotMatch(first,/24 家店|aria-label="价格排序"|价格低 → 高|价格高 → 低/);assert.match(first,/aria-label="交易平台"/);
+  const first=await(await fetch(base+route)).text();assert.deepEqual(prices(first),Array.from({length:10},(_,i)=>100+i));assert.match(first,/24 条店铺报价/);assert.match(first,/第 1 \/ 3 页/);assert.match(first,/本页 10 条店铺报价（每页最多 10 条）/);assert.doesNotMatch(first,/data-quote-alternatives|本页另有|24 家店|aria-label="价格排序"|价格低 → 高|价格高 → 低/);assert.match(first,/aria-label="交易平台"/);
   const catalog=await(await fetch(base+'/')).text();assert.doesNotMatch(catalog,/24 家店/);assert.match(catalog,/24 条报价/);
-  const next=links(first).find(h=>h.startsWith('/?')&&new URL(h,base).searchParams.get('page')==='2');assert.ok(next);const second=await(await fetch(base+next)).text();assert.deepEqual(prices(second),[120,121,122,123]);
-  const descending=await(await fetch(base+route+'&sort=price_desc')).text();assert.deepEqual(prices(descending),Array.from({length:20},(_,i)=>123-i));
+  const next=links(first).find(h=>(h.startsWith('/?')||h.startsWith('/prices/'))&&new URL(h,base).searchParams.get('page')==='2');assert.ok(next);const second=await(await fetch(base+next)).text();assert.deepEqual(prices(second),Array.from({length:10},(_,i)=>110+i));
+  const last=await(await fetch(base+route+'&page=999')).text();assert.deepEqual(prices(last),[120,121,122,123]);assert.match(last,/第 3 \/ 3 页/);assert.match(last,/本页 4 条店铺报价（每页最多 10 条）/);assert.doesNotMatch(last,/data-quote-alternatives/);
+  const descending=await(await fetch(base+route+'&sort=price_desc')).text();assert.deepEqual(prices(descending),Array.from({length:10},(_,i)=>123-i));
   const specification=links(first).find(h=>h.startsWith('/product?')&&new URL(h,base).searchParams.has('spec'));assert.ok(specification);
   const spec=new URL(specification,base).searchParams.get('spec'),filteredRoute=route+'&sort=price_desc&channel=16688&currency=CNY&spec='+encodeURIComponent(spec);
-  const filtered=await(await fetch(base+filteredRoute)).text(),filteredNext=links(filtered).find(h=>h.startsWith('/?')&&new URL(h,base).searchParams.get('page')==='2');assert.ok(filteredNext);
-  for(const key of ['family','product','sort','channel','spec','currency'])assert.equal(new URL(filteredNext,base).searchParams.get(key),new URL(filteredRoute,base).searchParams.get(key));
-  const pageTwo=await(await fetch(base+filteredNext)).text();assert.deepEqual(prices(pageTwo),[103,102,101,100]);const changedChannel=links(pageTwo).find(h=>h.startsWith('/?')&&new URL(h,base).searchParams.get('channel')==='independent');assert.equal(new URL(changedChannel,base).searchParams.has('page'),false);
+  const filtered=await(await fetch(base+filteredRoute)).text(),filteredNext=links(filtered).find(h=>(h.startsWith('/?')||h.startsWith('/prices/'))&&new URL(h,base).searchParams.get('page')==='2');assert.ok(filteredNext);
+  for(const key of ['sort','channel','spec','currency'])assert.equal(new URL(filteredNext,base).searchParams.get(key),new URL(filteredRoute,base).searchParams.get(key));
+  assert.equal(new URL(filteredNext,base).pathname,'/prices/claude-pro');
+  const pageTwo=await(await fetch(base+filteredNext)).text();assert.deepEqual(prices(pageTwo),Array.from({length:10},(_,i)=>113-i));assert.doesNotMatch(pageTwo,/data-quote-alternatives/);const changedChannel=links(pageTwo).find(h=>(h.startsWith('/?')||h.startsWith('/prices/'))&&new URL(h,base).searchParams.get('channel')==='independent');assert.equal(new URL(changedChannel,base).searchParams.has('page'),false);
   const go=links(first).find(h=>h.startsWith('/go?'));assert.ok(go);for(const key of ['family','sort','channel','spec','currency'])assert.equal(new URL(go,base).searchParams.has(key),false);assert.equal(new URL(go,base).searchParams.get('product'),'claude-pro-month');
   const confirmation=await fetch(base+go,{redirect:'manual'});assert.equal(confirmation.status,200);assert.match(await confirmation.text(),/第三方|继续前往/);
-  const empty=await(await fetch(base+route+'&channel=independent')).text();assert.equal(prices(empty).length,0);assert.match(empty,/暂无可用报价/);
+  const empty=await(await fetch(base+route+'&channel=independent')).text();assert.equal(prices(empty).length,0);assert.match(empty,/当前暂无正价报价/);assert.match(empty,/本页 0 条店铺报价/);
  }finally{if(app.listening)await new Promise(r=>app.close(r));db.close();}
 });
 test('独立站框架只使用登记证据',()=>{
@@ -31,7 +33,7 @@ test('独立站框架只使用登记证据',()=>{
 test('详情历史走势遵守独立站框架筛选',async()=>{
  const db=openDb(':memory:'),app=createApp({db});
  try{
-  for(let i=0;i<2;i++)storeSnapshot(db,{source:'ldxp-goods',snapshotId:'framework-'+i,fetchedAt:new Date(Date.now()-(1-i)*3600000).toISOString(),products:[{productId:'claude-pro-month',name:'Claude Pro',platform:'Claude',currency:'CNY',offers:[{offerId:'dujiao',title:'Claude Pro 代充 1个月',price:100+i,status:'in_stock',stockCount:1,url:'https://morimm.com/products/1'},{offerId:'platform',title:'Claude Pro 代充 1个月',price:1+i,status:'in_stock',stockCount:1,url:'https://16688.com.cn/goods/1'}]}]});
+  for(let i=0;i<2;i++)storeSnapshot(db,{source:'ldxp-goods',snapshotId:'framework-'+i,fetchedAt:new Date(Date.now()-(1-i)*3600000).toISOString(),products:[{productId:'claude-pro-month',name:'Claude Pro',platform:'Claude',currency:'CNY',offers:[{offerId:'dujiao',title:'Claude Pro 代充 1个月 新开续费均可',price:100+i,status:'in_stock',stockCount:1,url:'https://morimm.com/products/1'},{offerId:'platform',title:'Claude Pro 代充 1个月 新开续费均可',price:1+i,status:'in_stock',stockCount:1,url:'https://16688.com.cn/goods/1'}]}]});
   await new Promise(r=>app.listen(0,'127.0.0.1',r));const base='http://127.0.0.1:'+app.address().port;
   const h=await(await fetch(base+'/product?source=ldxp-goods&id=claude-pro-month&framework=dujiao')).text();assert.match(h,/最低价走势：[^\"]*¥100[^\"]*¥101/);assert.match(h,/共 1 条公开报价/);assert.match(h,/price-display">¥101</);
  }finally{if(app.listening)await new Promise(r=>app.close(r));db.close();}
@@ -39,7 +41,7 @@ test('详情历史走势遵守独立站框架筛选',async()=>{
 test('公开表单安全退化、方法说明及SSR组合筛选', async()=>{
  const db=openDb(':memory:'),app=createApp({db});
  try {
-  storeSnapshot(db,{source:'ldxp-goods',snapshotId:'ux',products:[{productId:'claude-pro-month',name:'Claude Pro',platform:'Claude',offers:[{offerId:'a',title:'Claude Pro 代充 1个月',price:100,status:'in_stock',stockCount:1,url:'https://16688.com.cn/goods/a'}]},{productId:'chatgpt-go',name:'ChatGPT Go',platform:'ChatGPT',offers:[{offerId:'b',title:'ChatGPT Go 代充 1个月',price:40,status:'in_stock',stockCount:1,url:'https://16688.com.cn/goods/b'}]}]});
+  storeSnapshot(db,{source:'ldxp-goods',snapshotId:'ux',products:[{productId:'claude-pro-month',name:'Claude Pro',platform:'Claude',offers:[{offerId:'a',title:'Claude Pro 代充 1个月 新开续费均可',price:100,status:'in_stock',stockCount:1,url:'https://16688.com.cn/goods/a'}]},{productId:'chatgpt-go',name:'ChatGPT Go',platform:'ChatGPT',offers:[{offerId:'b',title:'ChatGPT Go 代充 1个月 新开续费均可',price:40,status:'in_stock',stockCount:1,url:'https://16688.com.cn/goods/b'}]}]});
   await new Promise(r=>app.listen(0,'127.0.0.1',r));const base='http://127.0.0.1:'+app.address().port;
   const form=await(await fetch(base+'/submit?type=cooperation')).text();
   assert.match(form,/<form[^>]*method="post"[^>]*action="\/api\/submissions"/);assert.match(form,/<noscript>/);
@@ -47,7 +49,7 @@ test('公开表单安全退化、方法说明及SSR组合筛选', async()=>{
   const methods=await(await fetch(base+'/sources')).text();assert.match(methods,/价格与库存/);assert.doesNotMatch(methods,/快照|产品记录|报价记录|补充源/);
   const filtered=await(await fetch(base+'/?family=claude&channel=16688&q=Claude&purpose=recharge')).text();assert.match(filtered,/Claude Pro/);assert.doesNotMatch(filtered,/data-directory-product="chatgpt-go"/);assert.match(filtered,/href="\/\?[^\"]*family=chatgpt/);
   assert.doesNotMatch(filtered,/<form[^>]*channel-form/);assert.equal((filtered.match(/<article[^>]*data-directory-product="claude-pro"/g)||[]).length,1);
-  const all=await(await fetch(base+'/')).text();assert.doesNotMatch(all,/<form[^>]*channel-form/);assert.equal((all.match(/data-category="(?:chatgpt|claude|gemini|grok|x|mail)"/g)||[]).length,6);
+  const all=await(await fetch(base+'/catalog')).text();assert.doesNotMatch(all,/<form[^>]*channel-form/);assert.equal((all.match(/data-category="(?:chatgpt|claude|gemini|grok|x|mail)"/g)||[]).length,2);
  }finally{if(app.listening)await new Promise(r=>app.close(r));db.close();}
 });
 test('提醒新到旧分页，保留当时价格',async()=>{
@@ -63,7 +65,7 @@ test('提醒新到旧分页，保留当时价格',async()=>{
 test('详情规格与筛选贯穿翻页，无匹配渠道不泄漏全部报价',async()=>{
  const db=openDb(':memory:'),app=createApp({db});
  try{
-  storeSnapshot(db,{source:'ldxp-goods',snapshotId:'state',products:[{productId:'claude-pro-month',name:'Claude Pro',platform:'Claude',currency:'CNY',offers:Array.from({length:12},(_,i)=>({offerId:String(i),title:'Claude Pro 代充 1个月',price:100+i,status:'in_stock',stockCount:1,url:'https://16688.com.cn/goods/'+i}))}]});
+  storeSnapshot(db,{source:'ldxp-goods',snapshotId:'state',products:[{productId:'claude-pro-month',name:'Claude Pro',platform:'Claude',currency:'CNY',offers:Array.from({length:12},(_,i)=>({offerId:String(i),title:'Claude Pro 代充 1个月 新开续费均可',price:100+i,status:'in_stock',stockCount:1,url:'https://16688.com.cn/goods/'+i}))}]});
   await new Promise(r=>app.listen(0,'127.0.0.1',r));const base='http://127.0.0.1:'+app.address().port;
   const home=await(await fetch(base+'/?family=claude&product=claude-pro')).text();
   const variantLink=[...home.matchAll(/href="(\/product\?[^\"]+)"/g)].map(m=>m[1].replaceAll('&amp;','&')).find(h=>h.includes('spec='));assert.ok(variantLink);
@@ -75,7 +77,7 @@ test('详情规格与筛选贯穿翻页，无匹配渠道不泄漏全部报价',
 test('首页直接列产品，一步展示全部规格店铺，旧详情仍可切换规格',async()=>{
  const db=openDb(':memory:'),app=createApp({db});
  try{
-  storeSnapshot(db,{source:'ldxp-goods',snapshotId:'directory-specs',products:[{productId:'chatgpt-plus-recharge',name:'ChatGPT Plus',platform:'ChatGPT',currency:'CNY',offers:[{offerId:'year',title:'ChatGPT Plus 代充 12个月',price:90,status:'in_stock',stockCount:1,url:'https://16688.com.cn/goods/year'},{offerId:'month',title:'ChatGPT Plus 代充 1个月',price:100,status:'in_stock',stockCount:1,url:'https://16688.com.cn/goods/month'}]}]});
+  storeSnapshot(db,{source:'ldxp-goods',snapshotId:'directory-specs',products:[{productId:'chatgpt-plus-recharge',name:'ChatGPT Plus',platform:'ChatGPT',currency:'CNY',offers:[{offerId:'year',title:'ChatGPT Plus 代充 12个月 新开续费均可',price:90,status:'in_stock',stockCount:1,url:'https://16688.com.cn/goods/year'},{offerId:'month',title:'ChatGPT Plus 代充 1个月 新开续费均可',price:100,status:'in_stock',stockCount:1,url:'https://16688.com.cn/goods/month'}]}]});
   await new Promise(r=>app.listen(0,'127.0.0.1',r));const base='http://127.0.0.1:'+app.address().port;
   const home=await(await fetch(base+'/')).text();assert.doesNotMatch(home,/<table|name="q"|quote-provenance">/);assert.equal((home.match(/<article[^>]*data-directory-product="chatgpt-plus"/g)||[]).length,1);assert.match(home,/<details class="category-more">/);assert.match(home,/data-family-filter="x"/);
   const category=await(await fetch(base+'/?family=chatgpt')).text();assert.equal((category.match(/<article[^>]*data-directory-product="chatgpt-plus"/g)||[]).length,1);assert.doesNotMatch(category,/>¥(?:100|90)</);
@@ -96,13 +98,13 @@ test('官方参考零价可从目录进入详情，不携带商店合成规格�
   }
   await new Promise(r=>app.listen(0,'127.0.0.1',r));const base='http://127.0.0.1:'+app.address().port;
   for(const [family,product,source,id,label] of [['claude','claude-pro','cardnav-official','claude-pro','官方参考']]){
-   const page=await(await fetch(base+'/?family='+family+'&product='+product)).text();assert.match(page,/>¥0</);assert.ok(page.includes(label));assert.match(page,/<p>1 条参考报价<\/p>/);assert.doesNotMatch(page,/0 家店|0 条店铺报价|每页 20 条|暂无可用报价，请调整/);
+   const page=await(await fetch(base+'/?family='+family+'&product='+product)).text();assert.match(page,/>¥0</);assert.ok(page.includes(label));assert.match(page,/<p>1 条参考报价<\/p>/);assert.doesNotMatch(page,/0 家店|0 条店铺报价|每页 \d+ 条|暂无可用报价，请调整/);
    const category=await(await fetch(base+'/?family='+family)).text();const row=category.match(new RegExp('<article[^>]*data-directory-product="'+product+'"[\\s\\S]*?<\\/article>'))[0];assert.match(row,/1 条参考报价/);assert.match(row,/查看参考/);assert.doesNotMatch(row,/0 家店|0 条报价|查看店铺/);
    if(source==='cardnav-official'){const reference=page.match(/<section class="directory-references">[\s\S]*?<\/section>/)[0];assert.match(reference,/仅作价格参考/);assert.doesNotMatch(reference,/href="\/go|data-store-risk/);}
    const link=[...page.matchAll(/href="(\/product\?[^\"]+)"/g)].map(m=>m[1].replaceAll('&amp;','&')).find(h=>new URL(h,base).searchParams.get('source')===source);assert.ok(link);assert.equal(new URL(link,base).searchParams.get('spec'),null);
    const detail=await(await fetch(base+link)).text();assert.match(detail,/data-label="人民币参考">¥0\.00</);assert.match(detail,/筛选后 1 条 \/ 共 1 条/);assert.match(detail,/data-official-page="1"/);assert.doesNotMatch(detail,/<a[^>]+data-store-risk/);
   }
   assert.equal((await fetch(base+'/?family=relay&product=relay-demo')).status,410);
-  const missing=await(await fetch(base+'/?family=claude&product=claude-max-5x')).text();assert.doesNotMatch(missing,/>¥0</);assert.match(missing,/暂无有效报价/);assert.match(missing,/暂无可用报价/);assert.match(missing,/查看 缺价套餐 的报价记录/);
+  const missing=await(await fetch(base+'/?family=claude&product=claude-max-5x')).text();assert.doesNotMatch(missing,/>¥0</);assert.match(missing,/暂无有效报价/);assert.match(missing,/data-official-baseline="claude-max-5x"/);assert.match(missing,/USD 100/);assert.doesNotMatch(missing,/data-directory-quote data-price=/);assert.match(missing,/查看 缺价套餐 的报价记录/);
  }finally{if(app.listening)await new Promise(r=>app.close(r));db.close();}
 });

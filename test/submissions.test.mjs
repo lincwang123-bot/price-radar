@@ -140,8 +140,8 @@ test("超过 48 小时的客户端摘要可按固定时钟清理", () => {
          (public_id, created_at, topic, details, client_hash, content_hash)
        VALUES (?, ?, ?, ?, ?, ?)`
     );
-    insert.run("FB-20260901-OLDHASH1", "2026-09-01T00:00:00.000Z", "other", "旧记录", "old-client", "old-content");
-    insert.run("FB-20260904-NEWHASH1", "2026-09-04T12:00:00.000Z", "other", "新记录", "new-client", "new-content");
+    insert.run("FB-00000000-EXAMPLE", "2026-09-01T00:00:00.000Z", "other", "旧记录", "old-client", "old-content");
+    insert.run("FB-00000000-EXAMPLE", "2026-09-04T12:00:00.000Z", "other", "新记录", "new-client", "new-content");
 
     assert.equal(purgeExpiredClientHashes(db, new Date("2026-09-05T00:00:00.000Z")), 1);
     const rows = db.prepare("SELECT public_id, client_hash FROM feedback_submissions ORDER BY id").all();
@@ -268,6 +268,27 @@ test("重复提交会被去重，短时间超量请求会被限制", async () =>
   });
 });
 
+test("供需表单明确面向稳定批量合作，并提供独立店铺申请入口", async () => {
+  await withServer(async ({ base }) => {
+    for (const role of ["supply", "demand"]) {
+      const response = await fetch(`${base}/submit?type=cooperation&role=${role}`);
+      assert.equal(response.status, 200);
+      const html = await response.text();
+      assert.match(html, /<div data-kind-panel="cooperation">/);
+      const notice = html.match(/<aside class="cooperation-guidance"[^>]*>([\s\S]*?)<\/aside>/)?.[1];
+      assert.ok(notice);
+      assert.match(notice, /稳定、批量供货能力/);
+      assert.match(notice, /长期、批量采购需求/);
+      assert.match(notice, /不要填在这里/);
+      assert.match(notice, /href="\/submit-shop">申请店铺/);
+      assert.match(html, role === "supply" ? /data-submission-description>适合有稳定、批量供货能力/ : /data-submission-description>适合有长期、批量采购需求/);
+      assert.ok(html.indexOf('class="cooperation-guidance"') < html.indexOf('>你的合作方向<'));
+    }
+    const feedback = await fetch(`${base}/submit?type=feedback`).then(r => r.text());
+    assert.match(feedback, /<div data-kind-panel="cooperation" hidden>/);
+  });
+});
+
 test("提交页提供两条原创流程，并可从产品页携带上下文进入反馈", async () => {
   await withServer(async ({ db, base }) => {
     const capturedAt = "2026-09-05T00:00:00.000Z";
@@ -313,6 +334,6 @@ test("提交页提供两条原创流程，并可从产品页携带上下文进�
 
     const product = await fetch(`${base}/product?source=direct-shops&id=chatgpt-pro-20x`).then((response) => response.text());
     assert.match(product, /反馈这页数据/);
-    assert.match(product, /\/submit\?type=feedback&amp;source=direct-shops&amp;product=chatgpt-pro-20x/);
+    assert.match(product, /\/submit\?type=feedback&amp;product=chatgpt-pro-20x/);
   });
 });

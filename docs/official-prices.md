@@ -23,3 +23,17 @@
 `test/official-prices.test.mjs` 覆盖时区、缺价与零价、源链接限制、筛选、过期排序、分页、canonical、结构化数据、HTTP 语义和内容转义。`npm run check` 包括语法检查与完整回归。
 
 不修改现有报价数据库。发布网页模块及适配器后，重启网页和采集服务；保留采集频率限制，下一次符合采集条件且产生新快照时写入新增元数据。没有新的源更新时间时，不强制重写历史快照。
+
+## 独立专页与引用（2026-11）
+
+已有地区报价的套餐使用 `/official-prices/{id}`，英文为 `/en/official-prices/{id}`。
+Pro 的 key 保留 `chatgpt-pro-5x` / `chatgpt-pro-20x`，公开名为 Pro 100 / Pro 200。
+旧 `/product?source=cardnav-official&id=`、`/official-prices?id=` 和英文查询串详情 301 到新专页；仅保留单值 period/region/currency/purchase/page。无数据的干净专页 404，不跳总页。
+分页无筛选时保留 `?page=` canonical；地区、币种、周期或购买渠道筛选 noindex 并 canonical 回专页。
+
+页首结论与 FAQ 使用未筛选 catalog：优先已知月付；没有月付则比较已知年付；未知周期不参与最低地区比较。人民币排序仅使用来源已有的 CNY 参考额，不计算汇率；没有可比人民币金额时写「本期未收录」。美区只使用同周期 US/美国记录。HTML、FAQ JSON-LD、Markdown 共用同一结论函数，保留零价。
+Dataset.dateModified 和官方专页 sitemap.lastmod 使用本站最近一次成功采集 `collectedAt`（snapshot.fetched_at 规范化为 ISO UTC），不是请求时间，也不表示官方刚调价。上游刷新时间另列，超过 72 小时或未知标待复核。动态渠道报价仍不提供无法解释的 lastmod。
+
+`/official-prices/{id}.md` 是公开 Markdown 副本，包含数据日期、限制、地区表与问答；`/llms-full.txt` 动态整合当期官方地区资料。不包含商家推荐榜或私有入口。IndexNow 仅提交 HTML canonical。
+
+渠道旧链在存在产品身份时迁往 `/prices/{key}`；保留购买筛选及 utm 归因，丢弃 source/id/page/next。报价 Product 的 AggregateOffer 仅计可见、有货、同币种的代充挂牌价，不含成品号、共享或未确认交付。样本仅限当前页，不声明覆盖全部店铺。所有干净产品页增加相同的买前问答。

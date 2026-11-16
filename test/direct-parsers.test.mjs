@@ -15,9 +15,23 @@ test("Kami JSON 只保留公开有效商品并规范金额库存", () => {
   ] }, { id: "aisou", name: "AI搜", origin: "https://aisou.pro" }, capturedAt);
   assert.equal(offers.length, 1);
   assert.equal(offers[0].offerId, "aisou:30");
-  assert.equal(offers[0].price, 125);
+  assert.equal(offers[0].price, 130);
+  assert.equal(offers[0].extra.publicUserPrice, 125);
   assert.equal(offers[0].stockCount, 12);
   assert.equal(offers[0].status, "in_stock");
+});
+
+test('Kami guest quotes never use a member price or fall back to a member-only amount', () => {
+  const data = [
+    {id: 1, name: 'Super Grok 月卡', price: 168, user_price: 178, stock: 4},
+    {id: 2, name: 'Gemini Pro 3个月成品', price: '43.20', user_price: '40.80', stock: 18},
+    {id: 3, name: 'ChatGPT Plus 月卡', user_price: 99, stock: 1},
+    {id: 4, name: 'ChatGPT Plus 月卡', price: 0, user_price: 99, stock: 1},
+  ];
+  const offers = parseKamiPage({data}, kamiTarget(), capturedAt);
+  assert.deepEqual(offers.map(o => o.price), [168, 43.2]);
+  assert.deepEqual(offers.map(o => o.listedPrice), [168, 43.2]);
+  assert.deepEqual(offers.map(o => o.extra.publicUserPrice), [178, 40.8]);
 });
 
 test("Kami 公开文字库存映射为可售状态", () => {

@@ -174,6 +174,57 @@ test('单规格的默认规格名称回退父商品，Plus 不漏收录且质保
   }
 });
 
+test('编码型 DEFAULT 占位（如 P22896-DEFAULT）单规格回退商品名，正常 SKU 名保留', () => {
+  const parent = {
+    id: 22896,
+    slug: 'gemini-first-login',
+    title: {'zh-CN': '谷歌AI Gemini｜质保当日首登'},
+    category: {name: {'zh-CN': 'Gemini'}},
+    fulfillment_type: 'auto',
+  };
+  for (const code of ['P22896-DEFAULT', 'P22896_DEFAULT', 'P22896 DEFAULT', '22896-default', 'DEFAULT']) {
+    const offers = parseDujiaoProducts({
+      data: [{
+        ...parent,
+        skus: [{
+          id: 1,
+          sku_code: code,
+          spec_values: {},
+          price_amount: 19.9,
+          auto_stock_available: 3,
+          is_active: true,
+        }],
+      }],
+    }, burstTarget, capturedAt);
+    assert.equal(offers[0].title, '谷歌AI Gemini｜质保当日首登', code);
+  }
+  const real = parseDujiaoProducts({
+    data: [{
+      ...parent,
+      skus: [{
+        id: 2,
+        sku_code: 'GEMINI-DAY1',
+        title: '当日首登月卡',
+        spec_values: {'zh-CN': '当日首登月卡'},
+        price_amount: 19.9,
+        auto_stock_available: 3,
+        is_active: true,
+      }],
+    }],
+  }, burstTarget, capturedAt);
+  assert.equal(real[0].title, 'Gemini 当日首登月卡');
+  const multiPlaceholder = parseDujiaoProducts({
+    data: [{
+      ...parent,
+      skus: [
+        {id: 1, sku_code: 'P22896-DEFAULT', spec_values: {}, price_amount: 19.9, auto_stock_available: 1, is_active: true},
+        {id: 2, sku_code: 'P22897-DEFAULT', spec_values: {}, price_amount: 29.9, auto_stock_available: 1, is_active: true},
+      ],
+    }],
+  }, burstTarget, capturedAt);
+  assert.deepEqual(multiPlaceholder, []);
+});
+
 test('默认名称不覆盖具体 SKU，多个默认规格也不能套用父商品套餐', () => {
   const parent = {id:1,title:{'zh-CN':'ChatGPT Plus / Pro 5x / Pro 20x'},fulfillment_type:'auto'};
   const sku = {id:1,sku_code:'DEFAULT',spec_values:{'zh-CN':'默认'},price_amount:113,auto_stock_available:1};

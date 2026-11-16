@@ -1,17 +1,25 @@
+import {verifyApplicationPhone} from './helpers/merchant-phone.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, readFileSync, statSync, writeFileSync, rmSync, realpathSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { openSubmissionsDb } from '../lib/submissions.mjs';
+import { queueMerchantPreflight } from '../lib/merchant-preflight-store.mjs';
 import { canonicalShopIdentity, createMerchantApplication, listMerchantApplications, getMerchantApplication,
   reviewMerchantApplication, approvedMerchantBadges, syncApprovedMerchantManifest, merchantBridgeDir, updateMerchantEmail,
-  migratePendingWzypMirrorIdentities } from '../lib/merchant-onboarding.mjs';
-import { reconcileAutomaticPreflights } from '../lib/merchant-preflight-store.mjs';
+  reconcileUnansweredMerchantApplications } from '../lib/merchant-onboarding.mjs';
+import { queueMerchantMail } from '../lib/merchant-mail.mjs';
 
 const payload = (over = {}) => ({ shopName: '测试商店', shopUrl: 'https://merchant-shop.com/', platform: 'auto', productAreas: ['chatgpt'], email:'owner@example.org', contact: 'owner@example.org', details: '公开商品目录', consent: true, ...over });
 const options = { now: new Date('2026-09-07T04:00:00Z'), clientAddress: '198.51.100.3', secret: 'x'.repeat(32) };
 const approval = (over = {}) => ({ action: 'approve', note: '已通过店铺公告核实所有权和公开目录采集许可', ownershipConfirmed: true, permissionConfirmed: true, actor: 'reviewer', expectedVersion: 1, ...over });
+function addReadySample(db,id,dir,version=1,now=options.now){
+  verifyApplicationPhone(db,id);
+  const request=queueMerchantPreflight(db,id,{actor:'reviewer',expectedVersion:version},{bridgeDir:dir,resultsDir:dir,now});
+  const app=getMerchantApplication(db,id);
+  writeFileSync(path.join(dir,request.id+'.json'),JSON.stringify({schemaVersion:1,id:request.id,applicationId:id,applicationVersion:version,identity:app.identity,startedAt:request.requestedAt,checkedAt:request.requestedAt,status:'ready',rawCount:1,validCount:1,samples:[{title:'月付商品',price:20,currency:'USD',url:app.shopUrl+'item/1'}],message:'有效商品样例'}));
+}
 function fixture(t) {
   const db = openSubmissionsDb(':memory:');
   const dir = mkdtempSync(path.join(os.tmpdir(), 'merchant-intake-'));
@@ -24,7 +32,8 @@ test('operator can update email and approve without queuing unrequested notices 
   const {id}=createMerchantApplication(db,payload(),options);
   const before=db.prepare('SELECT COUNT(*) n FROM merchant_mail_outbox').get().n;
   updateMerchantEmail(db,id,'confirmed@example.org',{expectedVersion:1,confirmed:true,notify:false});
-  const result=reviewMerchantApplication(db,id,approval(),{bridgeDir:dir,notify:false});
+  addReadySample(db,id,dir,1,options.now);
+  const result=reviewMerchantApplication(db,id,approval({expectedVersion:1}),{bridgeDir:dir,resultsDir:dir,notify:false,now:options.now});
   assert.equal(result.status,'approved');
   assert.equal(result.email,'confirmed@example.org');
   assert.equal(result.actions.at(-1).action,'approve');
@@ -38,15 +47,11 @@ test('shop identity keeps shared merchants separate and independent www hosts ex
   assert.equal(canonicalShopIdentity('https://16688.com.cn/shop/S124/'), 'shop:16688:S124');
   assert.equal(canonicalShopIdentity('https://wzyp.cn/shop/AbC123'), 'shop:wzyp:AbC123');
   assert.equal(canonicalShopIdentity('https://wzyp.cn/AbC123'), 'shop:wzyp:AbC123');
-  assert.equal(canonicalShopIdentity('https://catfk.com/shop/Token_1'), 'shop:wzyp:Token_1');
-  assert.equal(canonicalShopIdentity('https://www.catfk.com/Token_1/'), 'shop:wzyp:Token_1');
-  assert.equal(canonicalShopIdentity('https://catfk.com/shop/Token_1'), canonicalShopIdentity('https://wzyp.cn/shop/Token_1'));
   assert.equal(canonicalShopIdentity('https://www.merchant-shop.com/item/2'), 'domain:www.merchant-shop.com');
   assert.notEqual(canonicalShopIdentity('https://merchant-shop.com/'), canonicalShopIdentity('https://www.merchant-shop.com/'));
   for (const url of ['http://merchant-shop.com/', 'https://user:pass@merchant-shop.com/', 'https://127.0.0.1/', 'https://[::1]/', 'https://2130706433/',
     'https://metadata.google.internal/', 'https://localhost/', 'https://com/', 'https://shop.local/', 'https://shop.com:8443/', 'https://shop.com/?token=abc',
-    'https://16688.com.cn/', 'https://16688.com.cn/goods/G123', 'https://wzyp.cn/item/123', 'https://wzyp.cn/goods', 'https://relaywatch.online/',
-    'https://catfk.com/', 'https://catfk.com/item/1', 'https://www.catfk.com/goods']) {
+    'https://16688.com.cn/', 'https://16688.com.cn/goods/G123', 'https://wzyp.cn/item/123', 'https://wzyp.cn/goods', 'https://relaywatch.online/']) {
     assert.throws(() => canonicalShopIdentity(url), { status: 422 }, url);
   }
   assert.throws(() => canonicalShopIdentity('https://merchant-shop.com/' + '中'.repeat(450)), { status: 422 });
@@ -100,11 +105,47 @@ test('rate limits and retention retain no raw client address', t => {
   assert.equal(db.prepare('SELECT COUNT(*) n FROM merchant_applications WHERE client_hash IS NULL').get().n, 3);
 });
 
-test('approval publishes sanitized manifest; pause removes badge; optimistic versions and append-only audit', t => {
+test('only four accepted unanswered info reminders move an application out of pending; uncertain outcomes do not count',t=>{
+  const {db,dir}=fixture(t),{id}=createMerchantApplication(db,payload(),options);
+  const sentAt=new Date(+options.now+1000).toISOString();
+  for(let n=1;n<=4;n++)queueMerchantMail(db,{id,email:'owner@example.org',stage:'need_info',eventKey:`${id}:reminder:${n}`,now:new Date(+options.now+n*1000)});
+  db.prepare("UPDATE merchant_mail_outbox SET status='accepted',attempts=1,accepted_at=? WHERE stage='need_info' AND id IN (SELECT id FROM merchant_mail_outbox WHERE stage='need_info' ORDER BY id LIMIT 2)").run(sentAt);
+  db.prepare("UPDATE merchant_mail_outbox SET status='uncertain',attempts=1 WHERE stage='need_info' AND id=(SELECT id FROM merchant_mail_outbox WHERE stage='need_info' ORDER BY id LIMIT 1 OFFSET 2)").run();
+  db.prepare("UPDATE merchant_mail_outbox SET status='failed',attempts=1 WHERE stage='need_info' AND id=(SELECT MAX(id) FROM merchant_mail_outbox)").run();
+  assert.deepEqual(reconcileUnansweredMerchantApplications(db,{bridgeDir:dir,resultsDir:dir,now:new Date(+options.now+10000)}),[]);
+  db.prepare("UPDATE merchant_mail_outbox SET status='accepted',accepted_at=? WHERE stage='need_info' AND status='failed'").run(sentAt);
+  assert.deepEqual(reconcileUnansweredMerchantApplications(db,{bridgeDir:dir,resultsDir:dir,now:new Date(+options.now+10500)}),[]);
+  db.prepare("UPDATE merchant_mail_outbox SET status='accepted',accepted_at=? WHERE stage='need_info' AND status='uncertain'").run(sentAt);
+  const staged=reconcileUnansweredMerchantApplications(db,{bridgeDir:dir,resultsDir:dir,now:new Date(+options.now+11000)});
+  assert.deepEqual(staged,[id]);
+  assert.equal(getMerchantApplication(db,id).status,'paused');
+  assert.equal(getMerchantApplication(db,id).actions.at(-1).actor,'system:no-reply-reminders');
+  assert.equal(listMerchantApplications(db,{status:'pending'}).total,0);
+  assert.equal(listMerchantApplications(db,{status:'paused'}).total,1);
+});
+
+test('unanswered info follow-up is queued once per seven days and only for an attempted prior reminder',t=>{
+  const {db,dir}=fixture(t),{id}=createMerchantApplication(db,payload(),options);
+  queueMerchantMail(db,{id,email:'owner@example.org',stage:'need_info',eventKey:`${id}:initial-info`,publicReply:'公开商品列表',now:options.now});
+  const sentAt=new Date(+options.now+1000).toISOString();
+  db.prepare("UPDATE merchant_mail_outbox SET status='accepted',attempts=1,accepted_at=? WHERE stage='need_info'").run(sentAt);
+  const early=new Date(+options.now+7*24*3600000-1000);
+  reconcileUnansweredMerchantApplications(db,{bridgeDir:dir,resultsDir:dir,now:early});
+  assert.equal(db.prepare("SELECT COUNT(*) n FROM merchant_mail_outbox WHERE event_key LIKE '%:no-reply-followup:%'").get().n,0);
+  const due=new Date(+options.now+7*24*3600000+2000);
+  reconcileUnansweredMerchantApplications(db,{bridgeDir:dir,resultsDir:dir,now:due});
+  reconcileUnansweredMerchantApplications(db,{bridgeDir:dir,resultsDir:dir,now:new Date(+due+1000)});
+  const followup=db.prepare("SELECT * FROM merchant_mail_outbox WHERE event_key LIKE '%:no-reply-followup:%'").get();
+  assert.ok(followup);assert.equal(followup.status,'queued');assert.equal(followup.stage,'need_info');
+  assert.match(followup.public_reply,/温馨提醒/);assert.match(followup.public_reply,new RegExp(id));
+  assert.equal(getMerchantApplication(db,id).status,'pending');
+});
+
+test('a current valid product sample is the approval gate; approval does not assert identity verification', t => {
   const { db, dir } = fixture(t);
   const { id } = createMerchantApplication(db, payload(), options);
-  for (const change of [{ ownershipConfirmed: false }, { permissionConfirmed: false }]) assert.throws(() => reviewMerchantApplication(db, id, approval(change), { bridgeDir: dir }), { status: 422 });
-  const approved = reviewMerchantApplication(db, id, approval(), { bridgeDir: dir, now: options.now });
+  addReadySample(db,id,dir);
+  const approved = reviewMerchantApplication(db, id, approval({ ownershipConfirmed: false, permissionConfirmed: false, sampleReviewed: false }), { bridgeDir: dir, now: options.now, resultsDir:dir });
   assert.equal(approved.status, 'approved');
   assert.equal(approved.version, 2);
   const manifest = JSON.parse(readFileSync(path.join(dir, 'approved.json'), 'utf8'));
@@ -112,26 +153,36 @@ test('approval publishes sanitized manifest; pause removes badge; optimistic ver
   assert.equal(manifest.merchants.length, 1);
   assert.equal(manifest.merchants[0].identity, 'domain:merchant-shop.com');
   assert.match(manifest.merchants[0].id, /^merchant-[a-f0-9]{16}$/);
-  assert.equal(manifest.merchants[0].identityVerifiedAt, options.now.toISOString());
+  assert.equal(manifest.merchants[0].identityVerifiedAt, null);
   assert.doesNotMatch(JSON.stringify(manifest), /owner@example|公开商品目录|reviewer|contact|client_hash|consent/);
   assert.equal(statSync(path.join(dir, 'approved.json')).mode & 0o777, 0o600);
-  assert.throws(() => reviewMerchantApplication(db, id, approval(), { bridgeDir: dir }), { status: 409 });
+  assert.throws(() => reviewMerchantApplication(db, id, approval(), { bridgeDir: dir,resultsDir:dir }), { status: 409 });
   const paused = reviewMerchantApplication(db, id, approval({ action: 'pause', note: '店铺维护，暂停公开收录', expectedVersion: 2 }), { bridgeDir: dir });
   assert.equal(paused.identityVerifiedAt, null);
   assert.deepEqual(approvedMerchantBadges(db), []);
   assert.deepEqual(JSON.parse(readFileSync(path.join(dir, 'approved.json'))).merchants, []);
-  const again = reviewMerchantApplication(db, id, approval({ expectedVersion: 3 }), { bridgeDir: dir });
-  assert.equal(again.version, 4);
-  assert.equal(again.actions.length, 3);
+  const restored=reviewMerchantApplication(db,id,{action:'restore',actor:'reviewer',expectedVersion:3},{bridgeDir:dir,now:new Date(+options.now+120000)});
+  addReadySample(db,id,dir,restored.version,new Date(+options.now+180000));
+  const again = reviewMerchantApplication(db, id, approval({ expectedVersion: restored.version }), { bridgeDir: dir, resultsDir:dir, now:new Date(+options.now+180000) });
+  assert.equal(again.version, 5);
+  assert.equal(again.actions.length, 4);
   assert.throws(() => db.exec('DELETE FROM merchant_application_actions'), /append-only/);
   assert.throws(() => db.exec("UPDATE merchant_application_actions SET note='changed'"), /append-only/);
+});
+
+test('approval still requires a fresh validated product sample', t => {
+  const {db,dir}=fixture(t);
+  const {id}=createMerchantApplication(db,payload(),options);
+  assert.throws(()=>reviewMerchantApplication(db,id,approval({ownershipConfirmed:false,permissionConfirmed:false,sampleReviewed:false}),{bridgeDir:dir,resultsDir:dir,now:options.now}),{status:422});
+  assert.equal(getMerchantApplication(db,id).status,'pending');
 });
 
 test('review notes are optional for all decisions; audit persists and only allowed decisions notify', t => {
   for (const action of ['approve','reject','pause','request_info']) {
     for (const note of [undefined,'','  \n ','好']) {
       const {db,dir}=fixture(t), {id}=createMerchantApplication(db,payload(),options);
-      const result=reviewMerchantApplication(db,id,approval({action,note}),{bridgeDir:dir,now:options.now});
+      if(action==='approve')addReadySample(db,id,dir);
+      const result=reviewMerchantApplication(db,id,approval({action,note}),{bridgeDir:dir,resultsDir:dir,now:options.now});
       assert.equal(result.version,2);
       assert.equal(result.actions[0].note,note?.trim()||'');
       assert.equal(result.actions[0].action,action);
@@ -141,7 +192,7 @@ test('review notes are optional for all decisions; audit persists and only allow
   }
   const {db,dir}=fixture(t), {id}=createMerchantApplication(db,payload(),options);
   for (const note of ['字'.repeat(1501),'password=private-secret']) {
-    assert.throws(()=>reviewMerchantApplication(db,id,approval({note}),{bridgeDir:dir}),{status:422});
+    assert.throws(()=>reviewMerchantApplication(db,id,approval({note}),{bridgeDir:dir,resultsDir:dir}),{status:422});
   }
   assert.equal(getMerchantApplication(db,id).status,'pending');
 });
@@ -149,14 +200,15 @@ test('review notes are optional for all decisions; audit persists and only allow
 test('manifest write or audit insertion failures roll back approval', t => {
   const { db, dir } = fixture(t);
   const { id } = createMerchantApplication(db, payload(), options);
+  addReadySample(db,id,dir);
   const blockedDir = path.join(dir, 'is-file'); writeFileSync(blockedDir, 'occupied');
-  assert.throws(() => reviewMerchantApplication(db, id, approval(), { bridgeDir: blockedDir }));
+  assert.throws(() => reviewMerchantApplication(db, id, approval(), { bridgeDir: blockedDir,resultsDir:dir,now:options.now }));
   assert.equal(getMerchantApplication(db, id).status, 'pending');
   assert.equal(getMerchantApplication(db, id).actions.length, 0);
   syncApprovedMerchantManifest(db, dir);
   const before = readFileSync(path.join(dir, 'approved.json'), 'utf8');
   db.exec("CREATE TRIGGER reject_audit BEFORE INSERT ON merchant_application_actions BEGIN SELECT RAISE(ABORT,'audit unavailable'); END");
-  assert.throws(() => reviewMerchantApplication(db, id, approval(), { bridgeDir: dir }), /audit unavailable/);
+  assert.throws(() => reviewMerchantApplication(db, id, approval(), { bridgeDir: dir,resultsDir:dir,now:options.now }), /audit unavailable/);
   assert.equal(readFileSync(path.join(dir, 'approved.json'), 'utf8'), before);
   assert.equal(getMerchantApplication(db, id).status, 'pending');
 });
@@ -164,13 +216,14 @@ test('manifest write or audit insertion failures roll back approval', t => {
 test('COMMIT failure restores previous manifest and DB status; startup recovers manifest from DB', t => {
   const { db, dir } = fixture(t);
   const { id } = createMerchantApplication(db, payload(), options);
+  addReadySample(db,id,dir);
   syncApprovedMerchantManifest(db, dir);
   const before = readFileSync(path.join(dir, 'approved.json'), 'utf8');
   db.exec(`PRAGMA foreign_keys=ON;
     CREATE TABLE parent_test(id INTEGER PRIMARY KEY);
     CREATE TABLE child_test(parent_id INTEGER REFERENCES parent_test(id) DEFERRABLE INITIALLY DEFERRED);
     CREATE TRIGGER fail_commit AFTER INSERT ON merchant_application_actions BEGIN INSERT INTO child_test VALUES(999); END;`);
-  assert.throws(() => reviewMerchantApplication(db, id, approval(), { bridgeDir: dir }), /FOREIGN KEY/);
+  assert.throws(() => reviewMerchantApplication(db, id, approval(), { bridgeDir: dir,resultsDir:dir,now:options.now }), /FOREIGN KEY/);
   assert.equal(getMerchantApplication(db, id).status, 'pending');
   assert.equal(getMerchantApplication(db, id).actions.length, 0);
   assert.equal(readFileSync(path.join(dir, 'approved.json'), 'utf8'), before);
@@ -179,50 +232,22 @@ test('COMMIT failure restores previous manifest and DB status; startup recovers 
   assert.deepEqual(JSON.parse(readFileSync(path.join(dir, 'approved.json'))).merchants, []);
 });
 
-test('approval cannot overflow the collector manifest limit and invalidate existing merchants', t => {
-  const { db } = fixture(t);
+test('approval and manifest sync allow more than 100 approved merchants while enforcing the byte limit', t => {
+  const { db, dir } = fixture(t);
   const { id } = createMerchantApplication(db, payload(), options);
+  addReadySample(db, id, dir);
   const insert = db.prepare(`INSERT INTO merchant_applications(public_id,created_at,updated_at,shop_name,shop_url,identity,platform,product_areas,contact,consent_at,status,version,identity_verified_at,approved_at)
     VALUES(?,?,?,?,?,?,?,?,?,?,'approved',2,?,?)`);
   const timestamp = options.now.toISOString();
   for (let i = 0; i < 100; i++) insert.run(`MA-FIXTURE-${i}`, timestamp, timestamp, '已核验商家', `https://merchant-${i}.com/`, `domain:merchant-${i}.com`, 'independent', '["chatgpt"]', 'private-contact', timestamp, timestamp, timestamp);
-  assert.throws(() => reviewMerchantApplication(db, id, approval(), { bridgeDir: null }), { status: 422 });
-  assert.equal(getMerchantApplication(db, id).status, 'pending');
-  assert.equal(getMerchantApplication(db, id).actions.length, 0);
-  assert.equal(syncApprovedMerchantManifest(db, null).merchants.length, 100);
-});
-
-test('stale pending catfk domain identity is repaired to wzyp without approval, mail, or URL changes', t => {
-  const { db, dir } = fixture(t);
-  const { id } = createMerchantApplication(db, payload({ shopUrl: 'https://catfk.com/shop/Token_1', email: 'mirror@example.org', contact: 'mirror@example.org' }), options);
-  assert.equal(db.prepare('SELECT identity,platform FROM merchant_applications WHERE public_id=?').get(id).identity, 'shop:wzyp:Token_1');
-  db.prepare("UPDATE merchant_applications SET identity='domain:catfk.com', platform='independent' WHERE public_id=?").run(id);
-  const before = db.prepare('SELECT * FROM merchant_mail_outbox').all();
-  assert.deepEqual(migratePendingWzypMirrorIdentities(db, { now: options.now }), [id]);
-  const row = db.prepare('SELECT identity,platform,status,version,shop_url,identity_verified_at FROM merchant_applications WHERE public_id=?').get(id);
-  assert.equal(row.identity, 'shop:wzyp:Token_1');
-  assert.equal(row.platform, 'ldxp');
-  assert.equal(row.status, 'pending');
-  assert.equal(row.version, 1);
-  assert.equal(row.shop_url, 'https://catfk.com/shop/Token_1');
-  assert.equal(row.identity_verified_at, null);
-  assert.deepEqual(db.prepare('SELECT * FROM merchant_mail_outbox').all(), before);
-  assert.match(db.prepare('SELECT note FROM merchant_application_actions').get().note, /未批准、未发送邮件/);
-  assert.deepEqual(migratePendingWzypMirrorIdentities(db, { now: options.now }), []);
-  db.prepare("UPDATE merchant_applications SET identity='domain:catfk.com', platform='independent', status='approved' WHERE public_id=?").run(id);
-  assert.deepEqual(migratePendingWzypMirrorIdentities(db, { now: options.now }), []);
-  assert.equal(db.prepare('SELECT identity FROM merchant_applications WHERE public_id=?').get(id).identity, 'domain:catfk.com');
-  db.prepare("UPDATE merchant_applications SET status='pending' WHERE public_id=?").run(id);
-  const { id: taken } = createMerchantApplication(db, payload({ shopUrl: 'https://wzyp.cn/shop/Token_1', email: 'taken@example.org', contact: 'taken@example.org' }), { ...options, clientAddress: '198.51.100.9' });
-  assert.equal(db.prepare('SELECT identity FROM merchant_applications WHERE public_id=?').get(taken).identity, 'shop:wzyp:Token_1');
-  assert.deepEqual(migratePendingWzypMirrorIdentities(db, { now: options.now }), []);
-  assert.equal(db.prepare('SELECT identity FROM merchant_applications WHERE public_id=?').get(id).identity, 'domain:catfk.com');
-  db.prepare('DELETE FROM merchant_applications WHERE public_id=?').run(taken);
-  reconcileAutomaticPreflights(db, { bridgeDir: dir, resultsDir: path.join(dir, 'results'), now: options.now });
-  assert.equal(db.prepare('SELECT identity,platform,status FROM merchant_applications WHERE public_id=?').get(id).identity, 'shop:wzyp:Token_1');
-  const request = db.prepare('SELECT identity,platform FROM merchant_preflight_requests WHERE application_id=?').get(id);
-  assert.equal(request.identity, 'shop:wzyp:Token_1');
-  assert.equal(request.platform, 'ldxp');
-  assert.equal(db.prepare("SELECT COUNT(*) n FROM merchant_mail_outbox WHERE stage='need_info'").get().n, 0);
-  assert.equal(db.prepare('SELECT status FROM merchant_applications WHERE public_id=?').get(id).status, 'pending');
+  const result = reviewMerchantApplication(db, id, approval(), { bridgeDir: dir, resultsDir: dir, now: options.now, notify: false });
+  assert.equal(result.status, 'approved');
+  assert.equal(result.actions.at(-1).action, 'approve');
+  assert.equal(syncApprovedMerchantManifest(db, dir).merchants.length, 101);
+  const before = readFileSync(path.join(dir, 'approved.json'), 'utf8');
+  assert.equal(JSON.parse(before).merchants.length, 101);
+  assert.ok(Buffer.byteLength(before) < 256 * 1024);
+  db.prepare("UPDATE merchant_applications SET shop_name=? WHERE status='approved'").run('商'.repeat(1000));
+  assert.throws(() => syncApprovedMerchantManifest(db, dir), { status: 422, message: '批准清单过大，超过 256 KiB 字节限制' });
+  assert.equal(readFileSync(path.join(dir, 'approved.json'), 'utf8'), before);
 });

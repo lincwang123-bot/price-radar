@@ -31,7 +31,7 @@ test('试采只产出有界结果，不写市场快照或已批准缓存；已�
   assert.equal(result.samples[0].price, 100); assert.equal(result.applicationVersion, 1);
   assert.equal(existsSync(path.join(f.dataDir, 'radar.sqlite')), false);
   assert.equal(existsSync(path.join(f.dataDir, 'direct-shops-cache')), false);
-  assert.equal((await processMerchantPreflights(ctx)).processed, 0); assert.equal(calls, 2);
+  assert.equal((await processMerchantPreflights(ctx)).processed, 0); assert.equal(calls, 3);
 });
 
 test('零库存、无质保、不能分类的商品不能算有效接入', async t => {
@@ -67,7 +67,7 @@ test('失败原因按可信状态和错误代码分类，HTTP 200 安全校验�
     [() => new Response('secret response', { status: 429 }), 'rate_limited', 429],
     [() => new Response('secret response', { status: 401 }), 'login_required', 401],
     [() => new Response('secret response', { status: 403 }), 'access_denied', 403],
-    [() => new Response('<title>Just a moment</title>secret response', { headers: { 'content-type': 'text/html' } }), 'access_denied', 200],
+    [() => new Response('<title>Just a moment</title>secret response', { headers: { 'content-type': 'text/html' } }), 'security_challenge', 200],
     [() => new Response('secret response', { status: 503 }), 'server_error', 503],
     [() => { throw Object.assign(new Error('secret https://host/?key=private'), { code: 'ACCESS_DENIED', status: 200 }); }, 'access_denied', 200],
     [() => { throw Object.assign(new Error('secret'), { code: 'ENOTFOUND' }); }, 'dns_error'],
@@ -78,7 +78,7 @@ test('失败原因按可信状态和错误代码分类，HTTP 200 安全校验�
     [() => { throw new Error('公开目录请求达到上限'); }, 'collector_limit'],
     [() => { throw new Error('公开目录响应超过限制'); }, 'collector_limit'],
     [() => { throw new Error('公开目录不允许重定向'); }, 'redirect_disallowed'],
-    [() => json({ code: 401, msg: 'secret' }), 'login_required', undefined, 2],
+    [() => json({ code: 401, msg: 'secret' }), 'login_required', undefined, 3],
     [() => { throw new Error('merchant text says captcha DNS timeout https://secret'); }, 'unknown'],
   ];
   for (const [respond, reasonCode, httpStatus, expectedCalls] of variants) {
@@ -122,7 +122,7 @@ test('试采中被撤销的请求也占每轮最多两项预算', async t => {
   await processMerchantPreflights({ ...f, merchantFetchFactory: origin => async () => {
     calls++; requests = requests.filter(r => new URL(r.shopUrl).origin !== origin); f.save(requests); return json(payload());
   } });
-  assert.equal(calls, 4);
+  assert.equal(calls, 6);
 });
 
 test('预览沿用网站公开过滤及去重，只输出允许字段', () => {
@@ -142,7 +142,7 @@ test('恢复旧锁后与第二个worker互斥，完成后清理自己持有的�
   const ctx = { ...f, merchantFetchFactory: () => async () => { calls++; entered(); await waiting; return json(payload()); } };
   const first = processMerchantPreflights(ctx); await started;
   assert.equal((await processMerchantPreflights(ctx)).processed, 0);
-  release(); assert.equal((await first).processed, 1); assert.equal(calls, 2);
+  release(); assert.equal((await first).processed, 1); assert.equal(calls, 3);
   assert.equal(existsSync(lock), false); assert.equal(existsSync(path.join(dir, '.worker-recovery')), false);
 });
 

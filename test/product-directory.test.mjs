@@ -5,6 +5,18 @@ import { buildProductDirectory, directoryQuotes } from '../lib/product-directory
 const quote = (title, patch = {}) => ({ title, offer_id: title, price: 100, currency: 'CNY', status: 'in_stock', stock_count: 2, quote_stale: false, comparison_known: true, comparison_key: 'month:recharge:CNY', url: 'https://16688.com.cn/goods/1', ...patch });
 const list = (source, product_id, offers, name = product_id) => ({ source, stale: false, products: [{ product_id, name, currency: 'CNY', offers }] });
 const category = (lists, key) => buildProductDirectory(lists).find(row => row.key === key);
+test('reuse of public quote preparation does not retain filters or private ranking and cannot cross products',()=>{
+ const product=category([list('ldxp-goods','chatgpt-plus',[
+  quote('ChatGPT Plus iOS 代充 1个月',{url:'https://one.example/buy/1',price:130}),
+  quote('ChatGPT Plus 网页代充 1个月',{url:'https://two.example/buy/1',price:120}),
+  quote('ChatGPT Plus 成品号 1个月',{url:'https://three.example/buy/1',price:30}),
+ ])],'chatgpt').products[0];
+ const baseResult=directoryQuotes(product,{delivery:'account',currency:'USD'});
+ for(const options of [{},{delivery:'recharge',recharge:'ios'},{delivery:'account'}, {sort:'price_desc'}, {sort:'comprehensive',xProfiles:[{identity:'domain:one.example'}]}, {sort:'comprehensive',merchantBadges:[{identity:'domain:two.example',identityVerifiedAt:'2026-09-01'}]}]){
+  assert.deepEqual(directoryQuotes(product,{...options,baseResult}),directoryQuotes(product,options));
+ }
+ assert.equal(directoryQuotes({quoteEntries:[]},{baseResult}).total,0);
+});
 
 test('explicit classified G Plus and Codex offers survive the bare-tier fallback guard', () => {
   const cases = [
@@ -27,7 +39,7 @@ test('classified alias titles still reject mixed subscription bundles and untrus
     assert.equal(directory.flatMap(row => row.products.flatMap(product => directoryQuotes(product).entries)).length, 0, source);
   }
   const search = buildProductDirectory([list('ldxp-goods', 'chatgpt-plus-recharge', [quote('Plus 月卡')])]);
-  assert.equal(search.flatMap(row => row.products.flatMap(product => directoryQuotes(product).entries)).length, 0);
+  assert.equal(search.flatMap(row => row.products.flatMap(product => directoryQuotes(product).entries)).length, 1);
 });
 
 test('16688 exact product URLs deduplicate changed titles/specs across sources, preferring direct', () => {
@@ -67,7 +79,7 @@ test('16688 deduplication does not collapse meaningful query variants, other hos
 
 test('six primary categories plus more retain known extra products', () => {
   const directory = buildProductDirectory([list('direct-shops', 'suno-pro-1m', [quote('Suno Pro 1个月')])]);
-  assert.deepEqual(directory.filter(row => row.primary).map(row => row.label), ['ChatGPT', 'Claude', 'Gemini', 'Grok', 'X', '邮箱']);
+  assert.deepEqual(directory.filter(row => row.primary).map(row => row.label), ['ChatGPT', 'Claude', 'Gemini', 'Grok', 'X', 'X 融合订阅', '邮箱']);
   assert.equal(directory.find(row => row.key === 'suno').products[0].name, 'Suno Pro');
   assert.equal(directory.find(row => row.key === 'other').products.length, 0);
 });
@@ -182,7 +194,15 @@ test('deduplication retains different shops and products while preferring origin
   assert.equal(result.shopCount, 1);
   assert.equal(result.unresolvedQuoteCount, 2);
   assert.equal(result.entries.some(entry => entry.offer.offer_id === 'mirror'), false);
-  assert.equal(result.entries.find(entry => entry.offer.offer_id === 'direct').offer, canonical);
+  const direct = result.entries.find(entry => entry.offer.offer_id === 'direct').offer;
+  assert.equal(direct.offer_id, canonical.offer_id);
+  assert.equal(direct.price, canonical.price);
+  assert.equal(direct.title, canonical.title);
+  assert.equal(direct.url, canonical.url);
+  assert.equal(direct.listed_price, 120);
+  assert.equal(direct.price_basis, 'listed');
+  assert.equal(direct.checkout_quote, null);
+  assert.equal(direct.checkout_status, 'unknown');
 });
 
 test('complete quotes exclude unsafe destinations, no warranty, stale and unavailable offers', () => {
