@@ -10,7 +10,7 @@ import {createApp} from '../lib/web.mjs';
 import {hashAdminPassword} from '../lib/admin.mjs';
 import {addWeeklySponsor,buildWeeklyReport,isoWeek,isoWeekBounds,saveWeeklyNote,weeklySponsorStats,xPostUrl} from '../lib/weekly-report.mjs';
 
-const secret= 'example-fixture-secret';
+const secret= 'example-fixture-sk-00000000000000000000000000000000';
 const week1=new Date('2026-10-26T04:00:00Z');
 const week2=new Date('2026-11-02T04:00:00Z');
 const offer=(id,title,price,host,store)=>({offerId:id,title,price,currency:'CNY',status:'in_stock',stockCount:2,url:`https://${host}/${id}`,storeName:store});

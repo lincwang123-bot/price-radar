@@ -51,8 +51,8 @@ test('the authenticated submission API awaits alias resolution, rejects duplicat
  try{
   const store=createRetentionStore(privateDb,{secret:'fixture-alias-secret'.repeat(3)}),auth=createAccountAuth(store);
   const challenge=auth.requestCode(body.email,'fixture','register'),code=JSON.parse(privateDb.prepare('SELECT payload FROM retention_mail WHERE event_key=?').get('code:'+challenge.requestId).payload).code;
-  const user=await auth.register({...challenge,code,password:'fixture merchant password 73',phone:'10000000000',contactType:'wechat',contactValue:'fixture_owner'});
-  privateDb.prepare('INSERT INTO reader_phone_verifications(account_id,phone,verified_at) VALUES(?,?,?)').run(user.account.id,'10000000000',new Date().toISOString());
+  const user=await auth.register({...challenge,code,password:'fixture merchant password 73',phone:'13800138000',contactType:'wechat',contactValue:'fixture_owner'});
+  privateDb.prepare('INSERT INTO reader_phone_verifications(account_id,phone,verified_at) VALUES(?,?,?)').run(user.account.id,'+8613800138000',new Date().toISOString());
   const page=await fetch(base+'/submit-shop',{headers:{cookie:'airadar_reader='+user.token}}),html=await page.text();const csrf=html.match(/name="csrf-token" content="([^"]+)"/)[1];
   const csrfCookie=page.headers.getSetCookie().map(v=>v.split(';')[0]).join('; ');const headers={origin:base,'content-type':'application/json','x-csrf-token':csrf,cookie:csrfCookie+'; airadar_reader='+user.token};
   const send=(payload,extra={})=>fetch(base+'/api/merchant-applications',{method:'POST',headers:{...headers,...extra},body:JSON.stringify(payload)});

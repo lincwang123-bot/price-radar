@@ -140,8 +140,8 @@ test("超过 48 小时的客户端摘要可按固定时钟清理", () => {
          (public_id, created_at, topic, details, client_hash, content_hash)
        VALUES (?, ?, ?, ?, ?, ?)`
     );
-    insert.run("FB-00000000-EXAMPLE", "2026-09-01T00:00:00.000Z", "other", "旧记录", "old-client", "old-content");
-    insert.run("FB-00000000-EXAMPLE", "2026-09-04T12:00:00.000Z", "other", "新记录", "new-client", "new-content");
+    insert.run("FB-00000000-1acc6fd3b943a23e-EXAMPLE", "2026-09-01T00:00:00.000Z", "other", "旧记录", "old-client", "old-content");
+    insert.run("FB-00000000-ebe024d8cf747333-EXAMPLE", "2026-09-04T12:00:00.000Z", "other", "新记录", "new-client", "new-content");
 
     assert.equal(purgeExpiredClientHashes(db, new Date("2026-09-05T00:00:00.000Z")), 1);
     const rows = db.prepare("SELECT public_id, client_hash FROM feedback_submissions ORDER BY id").all();

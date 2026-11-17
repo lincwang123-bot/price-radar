@@ -93,3 +93,13 @@ test('real missing database stays missing, and actual workers exit on timeout an
   finally{await traffic.close();}
  }
 });
+test('optional engaged metrics never invalidate official snapshot',async()=>{
+ for(const extra of [{},{engagedPv:-1,engagedUv:0},{engagedPv:4,engagedUv:5},{engagedPv:9,engagedUv:1},{engagedPv:2.5,engagedUv:1},{engagedPv:2,engagedUv:1,engagedMode:'off'},{engagedPv:2,engagedUv:1,engagedHistoricalPv:3,engagedMode:'filter'}]){
+ const t=createPublicTraffic({analytics:{report:()=>({...good(),historicalPv:8,pv:6,uv:3,...extra})},now:()=>NOW,scheduler:scheduling()});try{const snapshot=await t.ready;assert.equal(snapshot.monthPv,6);assert.equal(snapshot.totalPv,8);if(extra.engagedMode==='filter'){assert.equal(snapshot.engagedMonthPv,2);assert.equal(snapshot.engagedMonthUv,1);assert.equal(snapshot.engagedTotalPv,3);}else assert.equal(snapshot.engagedMonthPv,undefined);}finally{await t.close();}}
+});
+test('real read-only worker publishes engaged aggregates and respects off',async()=>{
+ const dir=mkdtempSync(path.join(tmpdir(),'engaged-worker-'));const a=openAnalytics(path.join(dir,'stats.sqlite'),'fixture-secret-with-at-least-32-characters',{now:new Date(NOW)});
+ try{const r={method:'GET',url:'/',headers:{'user-agent':'Mozilla/5.0 Chrome/1','cf-connecting-ip':'203.0.113.8'},socket:{remoteAddress:'127.0.0.1'}};a.record(r,200,new Date(NOW));a.recordEngaged(r,new Date(NOW));
+ for(const mode of ['report','off']){const t=createPublicTraffic({analytics:{publicTrafficDatabasePath:a.publicTrafficDatabasePath,engagedMode:mode},now:()=>NOW});try{const s=await t.ready;assert.equal(s.monthPv,1);assert.equal(s.engagedMonthPv,mode==='off'?undefined:1);assert.doesNotMatch(JSON.stringify(s),/Mozilla|203\.0\.113|visitor|path|secret/);}finally{await t.close();}}
+ }finally{a.close();rmSync(dir,{recursive:true,force:true});}
+});

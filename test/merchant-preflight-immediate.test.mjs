@@ -93,7 +93,7 @@ test('private socket enforces request ID only, bounded concurrency and explicit 
 
 test('authenticated manual POST starts immediate IPC; status polling is read-only and keeps review gates', async t => {
   const f=await fixture(t), app=f.app(1), origin='https://airadar.test';
-  const password= 'example-fixture-secret';
+  const password= 'example-fixture-sk-00000000000000000000000000000000';
   let dispatchCalls=0;
   const admin=createAdmin({submissionsDb:f.db,merchantBridgeDir:f.bridgeDir,merchantPreflightResultsDir:f.resultsDir,origin,username:'test',passwordHash:await hashAdminPassword(password),
     immediatePreflight:async id=>{dispatchCalls++;return f.run(id);}});

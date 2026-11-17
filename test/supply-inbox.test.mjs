@@ -8,7 +8,7 @@ import { importSupplyIntakes } from '../lib/merchant-intake.mjs';
 
 test('transferred supplies leave the inbox and its counts while originals remain reachable', async () => {
   const db=openDb(':memory:'),submissionsDb=openSubmissionsDb(':memory:');
-  const origin='https://airadar.test',password= 'example-fixture-secret';
+  const origin='https://airadar.test',password= 'example-fixture-sk-00000000000000000000000000000000';
   const id=n=>`CO-20260908-${String(n).padStart(12,'0')}`;
   const stamp=new Date().toISOString();
   for(let n=1;n<=31;n++)submissionsDb.prepare(`INSERT INTO cooperation_submissions

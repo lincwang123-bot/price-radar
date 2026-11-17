@@ -14,7 +14,7 @@ export async function reviewApp(){
  let time=new Date();const now=()=>time;
  const offer={offerId:'review-one',title:'ChatGPT Plus 官方代充 1个月',price:138,currency:'CNY',status:'in_stock',storeName:'演示店铺 · 星河 AI',url:'https://review.example/product/1',extra:{shopUrl:'https://review.example/'}};
  storeSnapshot(db,{source:'direct-shops',snapshotId:'synthetic-reviews',products:[{productId:'chatgpt-plus-recharge',name:'ChatGPT Plus',currency:'CNY',offers:[offer]}]});
- const shop=shopDescriptorForOffer({...offer,source:'direct-shops'}),origin='https://airadar.test',password= 'example-fixture-secret';
+ const shop=shopDescriptorForOffer({...offer,source:'direct-shops'}),origin='https://airadar.test',password= 'example-fixture-sk-00000000000000000000000000000000';
  const app=createApp({db,submissionsDb:privateDb,retentionOptions:{now,env:{},secret:'test-only-review-secret-'.repeat(4)},adminOptions:{origin,username:'test-admin',passwordHash:await hashAdminPassword(password),now:()=>+time,merchantBridgeDir:bridge,merchantPreflightResultsDir:bridge},merchantXOptions:{now}});
  await new Promise(r=>app.listen(0,'127.0.0.1',r));const base='http://127.0.0.1:'+app.address().port;
  const get=(url,cookie='')=>fetch(base+url,{headers:{cookie},redirect:'manual'});

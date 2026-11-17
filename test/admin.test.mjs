@@ -10,7 +10,7 @@ import { ADMIN_COPY_SCRIPT, ADMIN_COPY_HASH } from '../lib/admin-copy.mjs';
 const origin="https://airadar.test";
 test("后台默认拒绝，认证/过期/退出/CSRF/审计/转义完整边界",async()=>{
   const db=openDb(":memory:"), submissionsDb=openSubmissionsDb(":memory:"),analytics=openAnalytics(":memory:","fixture-analytics-secret-32-characters");let time=Date.now();
-  const password= 'example-fixture-secret',passwordHash=await hashAdminPassword(password);
+  const password= 'example-fixture-sk-00000000000000000000000000000000',passwordHash=await hashAdminPassword(password);
   const record=createSubmission(submissionsDb,{kind:"feedback",topic:"suggestion",subject:"<script>alert(1)</script>",details:"private fixture detail",contact:"private-merchant@example.com"});
   let app=createApp({db,submissionsDb});await new Promise(r=>app.listen(0,"127.0.0.1",r));
   const addr=()=>`http://127.0.0.1:${app.address().port}`;

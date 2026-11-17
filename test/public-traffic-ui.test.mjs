@@ -82,3 +82,9 @@ test('home displays cached traffic in both languages without querying analytics 
   for(const path of ['/catalog','/?shop_q=missing'])assert.doesNotMatch(await(await fetch(origin+path)).text(),/class="public-traffic"|src="\/assets\/public-traffic\.js/);
  }finally{app.closeAllConnections();await new Promise(r=>app.close(r));db.close();}
 });
+test('engaged report/filter copy in both languages with legacy fallback',()=>{
+ const base={totalPv:8,monthPv:6,monthUv:3,startedAt:'2026-10-01T00:00:00Z',updatedAt:'2026-10-11T00:00:00Z'};
+ for(const locale of ['zh','en'])for(const mode of ['report','filter']){const html=publicTrafficHtml({...base,engagedMonthPv:2,engagedMonthUv:1,engagedMode:mode},locale);assert.match(html,locale==='en'?/suspected automated/:/疑似自动化/);assert.match(html,locale==='en'?/Engaged pageviews/:/有效浏览量/);if(mode==='filter')assert.ok(html.indexOf(locale==='en'?'Engaged pageviews':'有效浏览量')<html.indexOf(locale==='en'?'Raw ·':'原始 ·'));}
+ assert.doesNotMatch(publicTrafficHtml({...base,engagedMode:'off',engagedMonthPv:2,engagedMonthUv:1}),/有效浏览/);
+ assert.equal(publicTrafficHtml({...base,engagedMode:'filter'}),publicTrafficHtml(base));
+});

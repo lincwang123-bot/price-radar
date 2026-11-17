@@ -28,8 +28,8 @@ test('public merchant intake stays private; approval keeps comprehensive results
     const store=createRetentionStore(submissionsDb,{secret:'fixture-merchant-reader-'.repeat(3)}),auth=createAccountAuth(store);
     const challenge=auth.requestCode('owner@example.org','fixture','register');
     const code=JSON.parse(submissionsDb.prepare('SELECT payload FROM retention_mail WHERE event_key=?').get('code:'+challenge.requestId).payload).code;
-    const registered=await auth.register({...challenge,code,password:'fixture merchant password 73',phone:'10000000000',contactType:'wechat',contactValue:'private_contact'});
-    submissionsDb.prepare('INSERT INTO reader_phone_verifications(account_id,phone,verified_at) VALUES(?,?,?)').run(registered.account.id,'10000000000',new Date().toISOString());
+    const registered=await auth.register({...challenge,code,password:'fixture merchant password 73',phone:'13800138000',contactType:'wechat',contactValue:'private_contact'});
+    submissionsDb.prepare('INSERT INTO reader_phone_verifications(account_id,phone,verified_at) VALUES(?,?,?)').run(registered.account.id,'+8613800138000',new Date().toISOString());
     const readerCookie='airadar_reader='+registered.token;
     const form=await fetch(base+'/submit-shop',{headers:{cookie:readerCookie}}),html=await form.text();
     assert.equal(form.status,200);

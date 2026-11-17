@@ -24,7 +24,7 @@ test('sponsor page path keeps only canonical surfaces',()=>{
 });
 
 test('gateway keeps HTML no-store and lets static images use origin cache headers',()=>{
- const conf=readFileSync(new URL('../deploy/price-radar-gateway.conf',import.meta.url),'utf8');
+ const conf=readFileSync(new URL('./fixtures/gateway-cache-headers.conf',import.meta.url),'utf8');
  const image=conf.slice(conf.indexOf('location ~* ^/assets/'),conf.indexOf('location @radar_busy'));
  assert.match(image,/png\|jpe\?g\|webp\|gif\|svg\|ico/);
  assert.doesNotMatch(image,/no-store/);

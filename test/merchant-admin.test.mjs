@@ -13,7 +13,7 @@ import { createMerchantApplication, getMerchantApplication, approvedMerchantBadg
 test('merchant admin protects private intake and requires tested samples before approval', async () => {
   const db = openDb(':memory:'), submissionsDb = openSubmissionsDb(':memory:');
   const bridgeDir = mkdtempSync(path.join(os.tmpdir(), 'merchant-admin-'));
-  const origin = 'https://airadar.test', password = 'example-fixture-secret';
+  const origin = 'https://airadar.test', password = 'example-fixture-sk-00000000000000000000000000000000';
   let clock = Date.now();
   const admin = createAdmin({ db, submissionsDb, merchantBridgeDir: bridgeDir, merchantPreflightResultsDir: bridgeDir, origin, username: 'owner', passwordHash: await hashAdminPassword(password), now: () => clock });
   const server = createServer(async (req, res) => {

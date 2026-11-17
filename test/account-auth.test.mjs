@@ -9,7 +9,7 @@ import {openSubmissionsDb} from '../lib/submissions.mjs';
 import {retentionMessage,drainRetentionMail} from '../lib/retention-mail.mjs';
 
 const password='a private test passphrase 73';
-const profile={phone:'10000000000',contactType:'telegram',contactValue:'fixture_owner'};
+const profile={phone:'13800138000',contactType:'telegram',contactValue:'fixture_owner'};
 function setup(){
  const db=new DatabaseSync(':memory:');let time=new Date('2026-09-08T10:00:00Z');
  const store=createRetentionStore(db,{secret:'test-secret-'.repeat(8),now:()=>time});

@@ -112,3 +112,11 @@ test('pagehide cancels timers, disconnects observation and removes every active 
  assert.ok(f.counters.every(counter=>counter.classes.size===0));
  f.emit(f.counters[1]);f.click();f.flush();assert.equal(f.timers.size,0);
 });
+test('public engagement dwell and scroll race sends only one beacon, independent of edge cache',async()=>{
+ const {visitorCookieScript}=await import('../lib/scrape-guard.mjs');
+ const old=process.env.AIRADAR_ANALYTICS_ENGAGED;delete process.env.AIRADAR_ANALYTICS_ENGAGED;
+ try{const html=visitorCookieScript();const script=html.match(/<script>([\s\S]*?)<\/script>/)[1];
+ for(const scrollFirst of [true,false]){let timer,scroll;const calls=[];vm.runInNewContext(script,{location:{pathname:'/'},navigator:{sendBeacon:(...args)=>calls.push(args)},Blob,setTimeout:(cb,delay)=>{timer=cb;assert.equal(delay,4000);},window:{addEventListener:(name,cb)=>{assert.equal(name,'scroll');scroll=cb;}}});if(scrollFirst){scroll();timer();}else{timer();scroll();}assert.equal(calls.length,1);assert.equal(calls[0][0],'/api/public-engaged');}
+ process.env.AIRADAR_ANALYTICS_ENGAGED='off';assert.doesNotMatch(visitorCookieScript(),/public-engaged/);
+ }finally{if(old===undefined)delete process.env.AIRADAR_ANALYTICS_ENGAGED;else process.env.AIRADAR_ANALYTICS_ENGAGED=old;}
+});

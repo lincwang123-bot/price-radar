@@ -123,7 +123,7 @@ test('fresh checks after restore and supply conversion remain approvable with ol
 });
 test('admin queue actions enforce session, origin, CSRF and version, update filters and preserve notes',async t=>{
   const {db,options}=fixture(t),id=supply(db,1),ma=createMerchantApplication(db,payload(1),options);
-  const origin='https://airadar.test',password= 'example-fixture-secret';
+  const origin='https://airadar.test',password= 'example-fixture-sk-00000000000000000000000000000000';
   const admin=createAdmin({submissionsDb:db,merchantBridgeDir:options.bridgeDir,merchantPreflightResultsDir:options.resultsDir,origin,username:'owner',passwordHash:await hashAdminPassword(password)});
   const server=createServer(async(req,res)=>{try{await admin(req,res,new URL(req.url,origin));}catch(error){res.statusCode=500;res.end(error.message);}});
   await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));

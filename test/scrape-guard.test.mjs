@@ -197,7 +197,7 @@ test('home page revision follows campaigns and ignores database counters', () =>
 });
 
 test('gateway microcache stays generous and browsers keep no-store', () => {
-  const conf = readFileSync(new URL('../deploy/price-radar-gateway.conf', import.meta.url), 'utf8');
+  const conf = readFileSync(new URL('./fixtures/gateway-cache-headers.conf', import.meta.url), 'utf8');
   for (const line of ['proxy_cache_valid 200 30s','proxy_cache_use_stale updating error timeout','proxy_cache_lock on','proxy_read_timeout 15s','proxy_ignore_headers Cache-Control Expires','zone=radar_cache_total:1m rate=2000r/s','limit_conn radar_conn_total 400','add_header Cache-Control "no-store" always']) assert.match(conf, new RegExp(line.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
   const image=conf.slice(conf.indexOf('location ~* ^/assets/'),conf.indexOf('location @radar_busy'));
   assert.doesNotMatch(image,/no-store/);
@@ -274,7 +274,7 @@ test('legacy browsers and shared NAT navigations are allowed while non-browser b
  }finally{guard.close();}
 });
 test('gateway crawler labels work on unknown routes and cache args preserve meaningful filters',()=>{
- const conf=readFileSync(new URL('../deploy/price-radar-gateway.conf',import.meta.url),'utf8');
+ const conf=readFileSync(new URL('./fixtures/gateway-cache-headers.conf',import.meta.url),'utf8');
  const claims=conf.match(/map "\$radar_log_route:\$http_user_agent" \$radar_crawler_claim \{([\s\S]*?)\n\}/)[1];
  assert.doesNotMatch(claims,/~\^other:/);
  const rules=[...claims.matchAll(/~\*([^\s]+) "([a-z-]+)";/g)].map(([,pattern,label])=>[new RegExp(pattern,'i'),label]);

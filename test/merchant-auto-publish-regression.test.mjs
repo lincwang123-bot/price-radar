@@ -31,10 +31,10 @@ test('approval requires current account and saved phone even when submission ver
   if(mode===undefined)delete process.env.AIRADAR_MERCHANT_PHONE_VERIFICATION;else process.env.AIRADAR_MERCHANT_PHONE_VERIFICATION=mode;
   for(const mutation of [
    "DELETE FROM reader_phone_verifications",
-   "UPDATE reader_phone_verifications SET phone='10000000000'",
+   "UPDATE reader_phone_verifications SET phone='13800138000'",
    "UPDATE merchant_applications SET applicant_account_id='different-account'",
-   "UPDATE merchant_applications SET phone='10000000000'",
-   "UPDATE reader_profiles SET phone='10000000000'"
+   "UPDATE merchant_applications SET phone='13800138000'",
+   "UPDATE reader_profiles SET phone='13800138000'"
   ]){
    verifyApplicationPhone(x.db,x.id);x.db.exec(mutation);
    reconcileAutomaticPreflights(x.db,x.options);
@@ -49,7 +49,7 @@ test('approval requires current account and saved phone even when submission ver
 test('public badge data follows current SMS proof while legacy approval remains listed',t=>{
  const x=f(t),r=queueAutomaticPreflight(x.db,x.id,x.options);ready(x,r);reconcileAutomaticPreflights(x.db,x.options);
  assert.ok(approvedMerchantBadges(x.db)[0].phoneVerifiedAt);
- x.db.exec("UPDATE reader_profiles SET phone='10000000000'");
+ x.db.exec("UPDATE reader_profiles SET phone='13800138000'");
  reconcileAutomaticPreflights(x.db,x.options);
  const badge=approvedMerchantBadges(x.db)[0];
  assert.equal(badge.phoneVerifiedAt,null);assert.ok(badge.approvedAt);

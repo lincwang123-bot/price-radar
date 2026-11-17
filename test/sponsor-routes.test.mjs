@@ -10,7 +10,7 @@ import {sponsorDirectory,sponsorEntries,sponsorOfferKey,saveAdminSponsor} from '
 
 async function fixture(run){
  const db=openDb(':memory:'),submissionsDb=openSubmissionsDb(':memory:'),analytics=openAnalytics(':memory:','sponsor-route-fixture-secret-over-32-characters');
- const password= 'example-fixture-secret',origin='https://airadar.test';
+ const password= 'example-fixture-sk-00000000000000000000000000000000',origin='https://airadar.test';
  storeSnapshot(db,{source:'direct-shops',snapshotId:'sponsor-fixture',products:[{productId:'chatgpt-plus-recharge',name:'ChatGPT Plus',platform:'ChatGPT',currency:'CNY',offers:Array.from({length:15},(_,i)=>89+i*10).map((price,i)=>({offerId:'merchant'+i,title:'ChatGPT Plus 代充 1个月 新开续费均可',storeName:'虚构店铺 '+i,price,currency:'CNY',status:'in_stock',stockCount:1,url:'https://sponsor'+i+'.test/product/1'}))}]});
  const app=createApp({db,submissionsDb,analytics,adminOptions:{username:'owner',passwordHash:await hashAdminPassword(password),origin}});
  try{

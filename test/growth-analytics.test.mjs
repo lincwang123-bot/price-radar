@@ -2,7 +2,7 @@ import test from 'node:test';import assert from 'node:assert/strict';
 import {openAnalytics} from '../lib/analytics.mjs';
 import {growthSource} from '../lib/growth-analytics.mjs';
 import {analyticsContent} from '../lib/admin-analytics.mjs';
-const secret= 'example-fixture-secret',now=new Date('2026-09-13T06:00:00Z');
+const secret= 'example-fixture-sk-00000000000000000000000000000000',now=new Date('2026-09-13T06:00:00Z');
 const req=(patch={})=>({method:'GET',url:'/prices/chatgpt-plus?private=do-not-save',socket:{remoteAddress:'127.0.0.1'},headers:{'user-agent':'Mozilla/5.0 Chrome/150','cf-connecting-ip':'203.0.113.9','sec-fetch-dest':'document',referer:'https://www.google.com/search?q=private'},...patch});
 test('growth stages deduplicate independently and never persist URLs, IPs or search terms',()=>{
  const a=openAnalytics(':memory:',secret,{now});

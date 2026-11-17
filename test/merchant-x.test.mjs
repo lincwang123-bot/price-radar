@@ -70,7 +70,7 @@ test('claims require publication consent, bound drafts expire and requests are t
 });
 
 test('HTTP claim flow requires same-origin CSRF and admin review; approved X displays beside quotes and in a shareable shop page',async()=>{
- const f=fixture(),bridge=mkdtempSync(path.join(os.tmpdir(),'airadar-x-test-'));const adminOrigin='https://airadar.test',password= 'example-fixture-secret';
+ const f=fixture(),bridge=mkdtempSync(path.join(os.tmpdir(),'airadar-x-test-'));const adminOrigin='https://airadar.test',password= 'example-fixture-sk-00000000000000000000000000000000';
  const app=createApp({db:f.quotes,submissionsDb:f.db,adminOptions:{origin:adminOrigin,username:'owner',passwordHash:await hashAdminPassword(password),merchantBridgeDir:bridge,merchantPreflightResultsDir:bridge}});
  await new Promise(r=>app.listen(0,'127.0.0.1',r));const base='http://127.0.0.1:'+app.address().port;
  const get=(url,cookie='')=>fetch(base+url,{headers:{cookie},redirect:'manual'});

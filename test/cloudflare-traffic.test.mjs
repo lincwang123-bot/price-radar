@@ -6,7 +6,7 @@ import path from 'node:path';
 import {createCloudflareTraffic} from '../lib/cloudflare-traffic.mjs';
 
 const NOW=Date.parse('2026-10-11T09:27:31.000Z');
-const token= 'example-fixture-secret',zoneId='a'.repeat(32);
+const token= 'example-fixture-sk-00000000000000000000000000000000',zoneId='a'.repeat(32);
 const tick=()=>new Promise(resolve=>setImmediate(resolve));
 function scheduling(){
  const intervals=new Set(),timeouts=new Set();
@@ -20,7 +20,7 @@ const create=options=>createCloudflareTraffic({token,zoneId,now:()=>NOW,schedule
 
 test('Cloudflare sends scoped aggregate query and exposes only immutable safe metrics',async()=>{
  let calls=0,request;const scheduler=scheduling();
- const traffic=create({scheduler,fetchImpl:async(url,options)=>{calls++;request={url,options};const body=payload();body.private=token;body.data.viewer.zones[0].secret= 'example-fixture-secret';return response(body);}});
+ const traffic=create({scheduler,fetchImpl:async(url,options)=>{calls++;request={url,options};const body=payload();body.private=token;body.data.viewer.zones[0].secret= 'example-fixture-sk-00000000000000000000000000000000';return response(body);}});
  assert.equal(traffic.get(),null);await traffic.ready;
  assert.equal(request.url,'https://api.cloudflare.com/client/v4/graphql');assert.equal(request.options.method,'POST');
  assert.equal(request.options.headers.Authorization,`Bearer ${token}`);assert.equal(request.options.redirect,'error');
